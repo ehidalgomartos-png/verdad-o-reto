@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Verdad o Reto - Foto Prueba</title>
+  <style>
+    body {
+      margin: 0; padding: 0; background-color: #121212; color: #FFF;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex; justify-content: center; align-items: center; min-height: 100vh;
+    }
+    .oculto { display: none !important; }
+    
+    .pantalla {
+      background-color: #1A1A1A; padding: 30px; border-radius: 20px;
+      width: 90%; max-width: 400px; box-shadow: 0 0 20px rgba(255, 0, 92, 0.2);
+      border: 1px solid #333; box-sizing: border-box; text-align: center;
+    }
+    h1 { color: #FFF; margin-bottom: 5px; font-weight: 900; }
+    p.subtitulo { color: #00C2FF; margin-bottom: 25px; font-weight: bold; }
+    
+    input[type="text"] {
+      width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #444;
+      background-color: #222; color: #FFF; font-size: 16px; margin-bottom: 20px; box-sizing: border-box;
+    }
+    input:focus { outline: none; border-color: #FF005C; }
+
+    button.btn-principal {
+      width: 100%; background-color: #FF005C; color: white; border: none;
+      padding: 15px; font-size: 16px; font-weight: 900; border-radius: 30px;
+      cursor: pointer; text-transform: uppercase;
+    }
+
+    /* Estilos Mesa de Juego */
+    .tarjeta-reto {
+      background-color: #251018; border: 2px solid #FF005C;
+      padding: 20px; border-radius: 15px; margin-bottom: 25px; min-height: 80px;
+      display: flex; align-items: center; justify-content: center; flex-direction: column;
+    }
+    .tarjeta-reto p { color: #FFF; font-size: 18px; font-weight: bold; margin: 0; }
+    
+    .botones-juego { display: flex; gap: 10px; margin-bottom: 20px; }
+    .btn-verdad { flex: 1; background-color: #00C2FF; color: #000; border: none; padding: 15px; font-weight: 900; border-radius: 15px; cursor: pointer; font-size: 16px; }
+    .btn-reto { flex: 1; background-color: #FF005C; color: #FFF; border: none; padding: 15px; font-weight: 900; border-radius: 15px; cursor: pointer; font-size: 16px; }
+
+    /* Botón para subir/hacer foto */
+    .foto-upload {
+      background-color: #222; border: 2px dashed #00C2FF; padding: 20px; text-align: center;
+      border-radius: 10px; cursor: pointer; color: #00C2FF; font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ================= PANTALLA 1: PERFIL ================= -->
+  <div id="pantallaPerfil" class="pantalla">
+    <h1>CREA TU PERFIL</h1>
+    <p class="subtitulo">Prepara tus mejores secretos</p>
+    <form id="formularioPerfil">
+      <input type="text" id="nombreUsuario" placeholder="Escribe tu apodo aquí..." required>
+      <button type="submit" class="btn-principal">Entrar a Descubrir</button>
+    </form>
+  </div>
+
+  <!-- ================= PANTALLA 2: DESCUBRIR ================= -->
+  <div id="pantallaDescubrir" class="pantalla oculto">
+    <h1>🔥 DESCUBRIR</h1>
+    <p class="subtitulo" id="saludoUsuario">Elige a quién retar</p>
+
+    <!-- Perfil de ejemplo -->
+    <div style="background: #222; border-radius: 15px; padding: 15px; margin-bottom: 15px; text-align: left; border: 1px solid #444;">
+      <h3 style="margin: 0 0 5px 0;">Lucía, 22</h3>
+      <p style="margin: 0; color: #888; font-size: 14px; margin-bottom: 15px;">Busca partida rápida.</p>
+      <button class="btn-principal" onclick="entrarSala()">Retar a Partida</button>
+    </div>
+  </div>
+
+  <!-- ================= PANTALLA 3: SALA DE JUEGO ================= -->
+  <div id="pantallaJuego" class="pantalla oculto">
+    <h1>⚔️ SALA DE JUEGO</h1>
+    <p class="subtitulo">¡Es tu turno!</p>
+
+    <div class="tarjeta-reto" id="cajaCarta">
+      <p id="textoCarta">Selecciona Verdad o Reto para empezar.</p>
+      <img id="imagenPrueba" src="" style="max-width: 100%; border-radius: 10px; margin-top: 15px; display: none;">
+    </div>
+
+    <div class="botones-juego">
+      <button class="btn-verdad" onclick="elegirAccion('verdad')">VERDAD</button>
+      <button class="btn-reto" onclick="elegirAccion('reto')">RETO</button>
+    </div>
+
+    <!-- El botón mágico para hacer la foto (Oculto por defecto) -->
+    <div id="seccionPrueba" class="oculto">
+      <div class="foto-upload" onclick="document.getElementById('inputPrueba').click()">
+        📸 Abrir cámara y demostrar reto
+      </div>
+      <!-- capture="environment" abre la cámara trasera del móvil -->
+      <input type="file" id="inputPrueba" accept="image/*" capture="environment" style="display: none;" onchange="subirFoto(this)">
+    </div>
+  </div>
+
+  <!-- Carga automática de Socket.io desde el servidor -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    // Referencias a las pantallas
+    const pantallaPerfil = document.getElementById('pantallaPerfil');
+    const pantallaDescubrir = document.getElementById('pantallaDescubrir');
+    const pantallaJuego = document.getElementById('pantallaJuego');
+    
+    // Referencias a los elementos del juego
+    const textoCarta = document.getElementById('textoCarta');
+    const seccionPrueba = document.getElementById('seccionPrueba');
+    const imagenPrueba = document.getElementById('imagenPrueba');
+
+    // 1. De Perfil a Descubrir
+    document.getElementById('formularioPerfil').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const nombre = document.getElementById('nombreUsuario').value || "Anónimo";
+      document.getElementById('saludoUsuario').innerText = `¡Hola, ${nombre}!`;
+      pantallaPerfil.classList.add('oculto');
+      pantallaDescubrir.classList.remove('oculto');
+    });
+
+    // 2. De Descubrir a la Mesa de Juego
+    function entrarSala() {
+      pantallaDescubrir.classList.add('oculto');
+      pantallaJuego.classList.remove('oculto');
+    }
+
+    // 3. Mecánica del Juego (Elegir botón)
+    function elegirAccion(tipo) {
+      socket.emit('accion_juego', tipo);
+      imagenPrueba.style.display = 'none'; // Oculta fotos anteriores
+
+      if (tipo === 'verdad') {
+        textoCarta.innerText = "Has elegido VERDAD.\nResponde con sinceridad en voz alta o por el chat.";
+        seccionPrueba.classList.add('oculto');
+      } else {
+        textoCarta.innerText = "Has elegido RETO.\n¡Cumple tu castigo y saca una foto para demostrarlo!";
+        seccionPrueba.classList.remove('oculto'); // Muestra el botón de abrir cámara
+      }
+    }
+
+    // 4. Recepción del turno del Oponente
+    socket.on('actualizar_mesa', (tipo) => {
+      imagenPrueba.style.display = 'none';
+      if (tipo === 'verdad') {
+        textoCarta.innerText = "¡Tu oponente eligió VERDAD!\nEstá preparando su confesión.";
+        seccionPrueba.classList.add('oculto');
+      } else {
+        textoCarta.innerText = "¡Tu oponente eligió RETO!\nEsperando a que envíe su foto de prueba...";
+        seccionPrueba.classList.add('oculto');
+      }
+    });
+
+    // 5. Enviar la Foto-Prueba
+    function subirFoto(input) {
+      if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          const fotoBase64 = e.target.result;
+          socket.emit('enviar_foto', fotoBase64); // Se envía al oponente
+          
+          textoCarta.innerText = "¡Prueba enviada con éxito!";
+          seccionPrueba.classList.add('oculto');
+        };
+        // Convierte la imagen a texto (Base64) para enviarla rápido por WebSockets
+        reader.readAsDataURL(input.files[0]);
+      }
+    }
+
+    // 6. Recibir la Foto-Prueba del Oponente
+    socket.on('recibir_foto', (fotoBase64) => {
+      textoCarta.innerText = "¡El oponente ha demostrado su reto!";
+      imagenPrueba.src = fotoBase64;
+      imagenPrueba.style.display = 'block';
+    });
+  </script>
+
+</body>
+</html>
