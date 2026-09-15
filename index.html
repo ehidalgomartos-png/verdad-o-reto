@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>V/R - Verdad o Reto con UGC</title>
+  <title>V/R - Verdad o Reto</title>
   <style>
     body { margin: 0; background-color: #0d0d0d; color: #FFF; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
     .oculto { display: none !important; }
@@ -16,6 +16,7 @@
     input:focus, select:focus { outline: none; border-color: #FF005C; }
     label { display: block; text-align: left; font-size: 13px; color: #888; margin-bottom: 5px; font-weight: bold; }
 
+    /* Selección de Mazos */
     .grid-mazos { display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px; text-align: left; }
     .mazo { background-color: #1a1a1a; border-radius: 16px; padding: 15px; border: 2px solid #333; cursor: pointer; transition: 0.2s; }
     .mazo:hover { border-color: #00C2FF; }
@@ -264,6 +265,7 @@
         miTurno = true;
       } else {
         document.getElementById('textoCarta').innerText = "¡Te han retado! El oponente está eligiendo...";
+        document.getElementById('controlesJuego').classList.add('oculto');
         miTurno = false;
       }
     });
@@ -289,17 +291,14 @@
       miTurno = true;
     });
 
-    // Lógica para pedir carta al servidor (que ya incluye el aprendizaje del mazo)
     function jugarCarta(tipo) {
       if (!miTurno) return;
       document.getElementById('imagenPrueba').style.display = 'none';
       document.getElementById('controlesJuego').classList.add('oculto');
 
-      // Pedimos al servidor que elija una carta al azar del mazo actual (incluyendo las creadas por usuarios)
       socket.emit('pedir_carta', { sala: miSala, tipo: tipo, mazo: mazoElegido });
     }
 
-    // El servidor responde con la carta seleccionada para ambos
     socket.on('servidor_envia_carta', (datos) => {
       ultimaCartaJugada = datos.textoCarta;
 
@@ -319,7 +318,6 @@
         }
       }
 
-      // Sincronizar estado de la mesa con el oponente
       socket.emit('accion_juego_sinc', { sala: miSala, tipo: datos.tipo, textoCarta: datos.textoCarta });
     });
 
@@ -366,7 +364,6 @@
       miTurno = true;
     });
 
-    // Funciones del Modal UGC
     function abrirModalCrear() {
       document.getElementById('modalCrear').classList.remove('oculto');
     }
@@ -381,7 +378,6 @@
 
       if (!texto.trim()) return;
 
-      // Enviamos la pregunta al servidor asociada al mazo actual
       socket.emit('crear_pregunta_usuario', { mazo: mazoElegido, tipo: tipo, texto: texto });
       
       alert("¡Pregunta guardada con éxito en el mazo! Ahora formará parte del juego para todos.");
