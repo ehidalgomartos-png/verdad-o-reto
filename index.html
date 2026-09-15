@@ -64,7 +64,7 @@
     .foto-upload { background-color: #1a1a1a; border: 2px dashed #00C2FF; padding: 15px; border-radius: 12px; cursor: pointer; color: #00C2FF; font-weight: bold; margin-bottom: 10px; transition: 0.2s; }
     .foto-upload:hover { background-color: #222; }
 
-    /* NUEVO: ESTILOS DE JUGABILIDAD (TEMPORIZADOR, ESCRIBIENDO, REACCIONES) */
+    /* ESTILOS DE JUGABILIDAD */
     .temporizador { background: #FF005C; color: #FFF; padding: 5px 15px; border-radius: 20px; font-weight: 900; font-size: 16px; margin: 0 auto 15px auto; width: fit-content; box-shadow: 0 0 10px rgba(255,0,92,0.5); }
     .temporizador.urgente { background: transparent; color: #FF005C; border: 2px solid #FF005C; animation: latido 0.5s infinite alternate; }
     @keyframes latido { 0% { transform: scale(1); } 100% { transform: scale(1.1); box-shadow: 0 0 20px rgba(255,0,92,0.8); } }
@@ -154,7 +154,6 @@
   <div id="pantallaJuego" class="pantalla oculto">
     <div class="app-header"><span onclick="abandonarPartida()" style="cursor:pointer; color:#FF005C;">🚪 Abandonar</span><span id="nombreMazoActivo">SALA</span><span></span></div>
     
-    <!-- NUEVO: TEMPORIZADOR -->
     <div id="cajaTemporizador" class="temporizador oculto">⏱ <span id="textoTemporizador">60</span>s</div>
 
     <div id="zonaInvitacion" class="oculto" style="margin-bottom: 15px;">
@@ -164,12 +163,11 @@
     <div id="contenedorTarjetaJuego" class="tarjeta-reto">
       <p id="textoCarta">Esperando oponente...</p>
       
-      <!-- NUEVO: INDICADOR ESCRIBIENDO -->
       <div id="indicadorEscribiendo" class="escribiendo-texto oculto">El oponente está escribiendo... 💬</div>
       
       <img id="imagenPrueba" src="" style="max-width: 100%; border-radius: 12px; margin-top: 10px; display: none;">
       
-      <!-- NUEVO: BARRA DE REACCIONES -->
+      <!-- BARRA DE REACCIONES (DISPONIBLE SIEMPRE QUE RECIBES RESPUESTA O FOTO) -->
       <div id="barraReacciones" class="barra-reacciones oculto">
         <button onclick="enviarReaccion('🔥')">🔥</button>
         <button onclick="enviarReaccion('😱')">😱</button>
@@ -202,7 +200,6 @@
     let nombreJugador = '';
     let ultimaCartaJugada = '';
 
-    // Variables Temporizador y Escribiendo
     let intervaloTimer;
     let tiempoRestante = 60;
     let timeoutEscribiendo;
@@ -234,7 +231,6 @@
     
     if (mazoInvitacion) { mazoElegido = mazoInvitacion; }
 
-    // ====== LÓGICA DEL TEMPORIZADOR ======
     function iniciarTemporizador() {
       clearInterval(intervaloTimer);
       tiempoRestante = 60;
@@ -252,7 +248,6 @@
         if (tiempoRestante <= 0) {
           detenerTemporizador();
           alert("¡TIEMPO AGOTADO! ⏰ Te has quedado sin tiempo para responder o cumplir el reto.");
-          // Aquí podríamos forzar saltar turno en el futuro
         }
       }, 1000);
     }
@@ -262,13 +257,12 @@
       document.getElementById('cajaTemporizador').classList.add('oculto');
     }
 
-    // ====== LÓGICA DEL INDICADOR "ESCRIBIENDO..." ======
     document.getElementById('inputRespuesta').addEventListener('input', () => {
       socket.emit('escribiendo', miSala);
       clearTimeout(timeoutEscribiendo);
       timeoutEscribiendo = setTimeout(() => {
         socket.emit('parar_escribir', miSala);
-      }, 1500); // Si deja de teclear 1.5s, se oculta
+      }, 1500);
     });
 
     socket.on('mostrar_escribiendo', () => {
@@ -279,7 +273,6 @@
       document.getElementById('indicadorEscribiendo').classList.add('oculto');
     });
 
-    // ====== LÓGICA DE REACCIONES ======
     function enviarReaccion(emoji) {
       socket.emit('enviar_reaccion', { sala: miSala, emoji: emoji });
       document.getElementById('barraReacciones').classList.add('oculto');
@@ -296,20 +289,17 @@
       divReaccion.className = 'reaccion-flotante';
       divReaccion.innerText = emoji;
       
-      // Posición aleatoria dentro de la tarjeta
       const leftAleatorio = Math.floor(Math.random() * 60) + 20; 
       divReaccion.style.left = leftAleatorio + '%';
       divReaccion.style.bottom = '20px';
 
       contenedor.appendChild(divReaccion);
 
-      // Eliminar el div después de la animación para no saturar
       setTimeout(() => {
         divReaccion.remove();
       }, 1500);
     }
 
-    // ====== FLUJO DEL JUEGO NORMAL ======
     document.getElementById('formularioPerfil').addEventListener('submit', (e) => {
       e.preventDefault();
       nombreJugador = document.getElementById('nombreUsuario').value;
@@ -435,11 +425,11 @@
       if (tipo === 'verdad') {
         document.getElementById('textoCarta').innerText = `Te ha tocado VERDAD:\n\n"${carta}"\n\n(Responde abajo)`;
         document.getElementById('seccionRespuesta').classList.remove('oculto');
-        iniciarTemporizador(); // ¡Arranca el temporizador para responder!
+        iniciarTemporizador();
       } else {
         document.getElementById('textoCarta').innerText = `Te ha tocado RETO:\n\n"${carta}"\n\n(Sube tu foto de prueba)`;
         document.getElementById('seccionPrueba').classList.remove('oculto');
-        iniciarTemporizador(); // ¡Arranca el temporizador para la foto!
+        iniciarTemporizador();
       }
 
       socket.emit('accion_juego', { sala: miSala, tipo: tipo, textoCarta: carta });
@@ -466,7 +456,7 @@
       const respuesta = document.getElementById('inputRespuesta').value;
       if (!respuesta) return;
 
-      detenerTemporizador(); // Detenemos el temporizador al enviar
+      detenerTemporizador();
       socket.emit('parar_escribir', miSala);
 
       document.getElementById('textoCarta').innerText = `Tu respuesta: "${respuesta}"\n\n¡Enviado! Esperando al oponente...`;
@@ -477,8 +467,13 @@
       socket.emit('enviar_respuesta', { sala: miSala, respuesta: respuesta, pregunta: ultimaCartaJugada });
     }
 
+    // AHORA TAMBIÉN MOSTRAMOS LA BARRA DE REACCIONES AL RECIBIR LA RESPUESTA DE TEXTO
     socket.on('recibir_respuesta', (data) => {
       document.getElementById('textoCarta').innerText = `Pregunta:\n"${data.pregunta}"\n\nRespuesta del oponente:\n"${data.respuesta}"\n\n¡Te toca jugar a ti!`;
+      
+      // Mostrar la barra de reacciones para que puedas reaccionar a su respuesta
+      document.getElementById('barraReacciones').classList.remove('oculto');
+      
       document.getElementById('controlesJuego').classList.remove('oculto');
       miTurno = true;
     });
@@ -487,7 +482,7 @@
       if (input.files && input.files[0]) {
         const reader = new FileReader();
         reader.onload = function (e) {
-          detenerTemporizador(); // Detenemos el temporizador al subir la foto
+          detenerTemporizador();
 
           const fotoBase64 = e.target.result;
           document.getElementById('imagenPrueba').src = fotoBase64;
@@ -507,7 +502,6 @@
       document.getElementById('imagenPrueba').src = fotoBase64;
       document.getElementById('imagenPrueba').style.display = 'block';
       
-      // Mostrar barra de reacciones para que el jugador reaccione a la foto
       document.getElementById('barraReacciones').classList.remove('oculto');
       
       document.getElementById('controlesJuego').classList.remove('oculto');
