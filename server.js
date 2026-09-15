@@ -1,5 +1,5 @@
 const express = require('express');
-const http = http = require('http'); // Asegúrate de dejarlo como require('http') limpio
+const http = require('http');
 const { Server } = require('socket.io');
 
 const app = express();
@@ -14,7 +14,6 @@ app.get('/', (req, res) => {
 
 let jugadoresBuscando = [];
 
-// Base de datos global ampliada en el servidor que acumulará las preguntas de los usuarios
 const baseDeDatosServidor = {
   rompehielos: {
     verdades: [
@@ -89,23 +88,19 @@ io.on('connection', (socket) => {
     }
   });
 
-  // NUEVO: El usuario añade una pregunta al mazo global
   socket.on('crear_pregunta_usuario', (data) => {
     const { mazo, tipo, texto } = data;
     if (baseDeDatosServidor[mazo] && baseDeDatosServidor[mazo][tipo] && texto) {
-      // Guardamos la pregunta para que alimente el juego permanentemente en esta sesión del servidor
       baseDeDatosServidor[mazo][tipo].push(texto);
       console.log(`Nueva pregunta añadida al mazo [${mazo}] (${tipo}): "${texto}"`);
     }
   });
 
-  // NUEVO: Pedir una carta aleatoria al servidor que ya incluye las creadas por la comunidad
   socket.on('pedir_carta', (data) => {
     const { sala, tipo, mazo } = data;
     const lista = baseDeDatosServidor[mazo] ? baseDeDatosServidor[mazo][tipo] : baseDeDatosServidor.rompehielos[tipo];
     const cartaAleatoria = lista[Math.floor(Math.random() * lista.length)];
     
-    // Enviamos la carta generada a todos los miembros de la sala
     io.to(sala).emit('servidor_envia_carta', { tipo, textoCarta: cartaAleatoria });
   });
 
@@ -113,6 +108,10 @@ io.on('connection', (socket) => {
     socket.join(salaID);
     socket.room = salaID;
     socket.to(salaID).emit('oponente_unido');
+  });
+
+  socket.on('accion_juego_sinc', (datos) => {
+    socket.to(datos.sala).emit('actualizar_mesa', datos);
   });
 
   socket.on('enviar_respuesta', (datos) => {
