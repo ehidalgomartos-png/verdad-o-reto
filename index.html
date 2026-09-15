@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>V/R - Verdad o Reto</title>
   <style>
-    /* FONDO MEJORADO CON LUCES SUTILES */
     body { 
       margin: 0; 
       background-color: #0b0b0b; 
@@ -18,14 +17,12 @@
       overflow-x: hidden;
     }
     
-    /* DECORACIONES ARRIBA Y ABAJO */
     .adorno-top { position: absolute; top: 5vh; text-align: center; width: 100%; z-index: -1; animation: pulseGlow 4s infinite alternate; }
     .adorno-top h2 { margin: 0; font-size: 26px; font-weight: 900; letter-spacing: 10px; background: linear-gradient(90deg, #FF005C, #00C2FF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-transform: uppercase; opacity: 0.9; }
     .adorno-bottom { position: absolute; bottom: 4vh; text-align: center; width: 100%; font-size: 11px; color: #555; letter-spacing: 3px; text-transform: uppercase; z-index: -1; font-weight: bold; }
     .adorno-bottom span { color: #FF005C; font-size: 14px; }
     @keyframes pulseGlow { 0% { filter: drop-shadow(0 0 5px rgba(255,0,92,0.2)); } 100% { filter: drop-shadow(0 0 15px rgba(0,194,255,0.5)); } }
 
-    /* ESTILOS DE LA APP */
     .oculto { display: none !important; }
     .pantalla { background-color: #121212; padding: 25px; border-radius: 24px; width: 90%; max-width: 400px; box-shadow: 0 0 40px rgba(0,0,0,0.9); border: 1px solid #222; box-sizing: border-box; text-align: center; }
     .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; font-weight: bold; font-size: 18px; color: #fff; }
@@ -55,29 +52,12 @@
     button.btn-principal, a.btn-whatsapp { display: block; width: 100%; background-color: #FF005C; color: white; border: none; padding: 15px; font-size: 16px; font-weight: 900; border-radius: 30px; cursor: pointer; text-transform: uppercase; margin-top: 10px; text-decoration: none; box-sizing: border-box; text-align: center; }
     a.btn-whatsapp { background-color: #25D366; }
 
-    /* TARJETA DE JUEGO Y ANIMACIÓN 3D FLIP */
     .tarjeta-reto { 
-      background-color: #1a1a1a; 
-      border: 2px solid #FF005C; 
-      padding: 20px; 
-      border-radius: 16px; 
-      margin-bottom: 15px; 
-      min-height: 90px; 
-      display: flex; 
-      align-items: center; 
-      justify-content: center; 
-      flex-direction: column; 
-      position: relative;
-      transform-style: preserve-3d;
-      transition: transform 0.4s ease-in-out, opacity 0.4s ease-in-out;
+      background-color: #1a1a1a; border: 2px solid #FF005C; padding: 20px; border-radius: 16px; margin-bottom: 15px; min-height: 90px; display: flex; align-items: center; justify-content: center; flex-direction: column; position: relative;
+      transform-style: preserve-3d; transition: transform 0.4s ease-in-out, opacity 0.4s ease-in-out;
     }
     .tarjeta-reto p { font-size: 16px; font-weight: bold; margin: 0; line-height: 1.4; text-align: center; white-space: pre-wrap; }
-    
-    /* Clase que ejecuta el giro 3D de la carta */
-    .animar-flip {
-      transform: rotateY(90deg) scale(0.9);
-      opacity: 0.2;
-    }
+    .animar-flip { transform: rotateY(90deg) scale(0.9); opacity: 0.2; }
 
     .botones-juego { display: flex; gap: 10px; margin-bottom: 15px; }
     .btn-verdad { flex: 1; background-color: #00C2FF; color: #000; border: none; padding: 15px; font-weight: 900; border-radius: 14px; cursor: pointer; font-size: 15px; text-transform: uppercase; }
@@ -85,7 +65,6 @@
     .foto-upload { background-color: #1a1a1a; border: 2px dashed #00C2FF; padding: 15px; border-radius: 12px; cursor: pointer; color: #00C2FF; font-weight: bold; margin-bottom: 10px; transition: 0.2s; }
     .foto-upload:hover { background-color: #222; }
 
-    /* ESTILOS DE JUGABILIDAD */
     .temporizador { background: #FF005C; color: #FFF; padding: 5px 15px; border-radius: 20px; font-weight: 900; font-size: 16px; margin: 0 auto 15px auto; width: fit-content; box-shadow: 0 0 10px rgba(255,0,92,0.5); }
     .temporizador.urgente { background: transparent; color: #FF005C; border: 2px solid #FF005C; animation: latido 0.5s infinite alternate; }
     @keyframes latido { 0% { transform: scale(1); } 100% { transform: scale(1.1); box-shadow: 0 0 20px rgba(255,0,92,0.8); } }
@@ -99,17 +78,17 @@
     
     .reaccion-flotante { position: absolute; font-size: 60px; z-index: 10; animation: flotarArriba 1.5s ease-out forwards; pointer-events: none; text-shadow: 0 0 20px rgba(0,0,0,0.8); }
     @keyframes flotarArriba { 0% { transform: translateY(0) scale(1); opacity: 1; } 100% { transform: translateY(-120px) scale(1.5); opacity: 0; } }
+
+    /* ESTILOS DE LA TARJETA WRAPPED / RESUMEN */
+    .wrapped-card { background: linear-gradient(135deg, #1a1a1a 0%, #121212 100%); border: 2px solid #00C2FF; border-radius: 20px; padding: 20px; margin-bottom: 20px; text-align: left; box-shadow: 0 0 25px rgba(0,194,255,0.2); }
+    .wrapped-stat { display: flex; justify-content: space-between; margin: 12px 0; font-size: 15px; border-bottom: 1px solid #222; padding-bottom: 8px; }
+    .wrapped-stat span:last-child { font-weight: 900; color: #FF005C; }
   </style>
 </head>
 <body>
 
-  <!-- ELEMENTOS DECORATIVOS DE FONDO -->
-  <div class="adorno-top">
-    <h2>VERDAD O RETO</h2>
-  </div>
-  <div class="adorno-bottom">
-    V 1.0 • Juega bajo tu propio riesgo <span>🔥</span>
-  </div>
+  <div class="adorno-top"><h2>VERDAD O RETO</h2></div>
+  <div class="adorno-bottom">V 1.0 • Juega bajo tu propio riesgo <span>🔥</span></div>
 
   <!-- 1. PERFIL -->
   <div id="pantallaPerfil" class="pantalla">
@@ -173,7 +152,7 @@
 
   <!-- 5. MESA DE JUEGO -->
   <div id="pantallaJuego" class="pantalla oculto">
-    <div class="app-header"><span onclick="abandonarPartida()" style="cursor:pointer; color:#FF005C;">🚪 Abandonar</span><span id="nombreMazoActivo">SALA</span><span></span></div>
+    <div class="app-header"><span onclick="irAResumen()" style="cursor:pointer; color:#FF005C;">📊 Resumen</span><span id="nombreMazoActivo">SALA</span><span></span></div>
     
     <div id="cajaTemporizador" class="temporizador oculto">⏱ <span id="textoTemporizador">60</span>s</div>
 
@@ -211,6 +190,22 @@
     </div>
   </div>
 
+  <!-- 6. PANTALLA RESUMEN EPICO (WRAPPED) -->
+  <div id="pantallaResumen" class="pantalla oculto">
+    <div class="app-header"><span></span><span>WRAPPED</span><span>✨</span></div>
+    <h1>Resumen Épico</h1>
+    <p class="subtitulo" id="tituloVibra">Vuestra sesión en datos</p>
+    
+    <div class="wrapped-card">
+      <div class="wrapped-stat"><span>💬 Verdades respondidas:</span> <span id="statVerdades">0</span></div>
+      <div class="wrapped-stat"><span>⚡ Retos elegidos:</span> <span id="statRetos">0</span></div>
+      <div class="wrapped-stat"><span>📸 Fotos de prueba:</span> <span id="statFotos">0</span></div>
+      <div class="wrapped-stat"><span>🔥 Reacciones enviadas:</span> <span id="statReacciones">0</span></div>
+    </div>
+
+    <button class="btn-principal" onclick="volverMenu()">Jugar otra vez</button>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
@@ -224,13 +219,21 @@
     let tiempoRestante = 60;
     let timeoutEscribiendo;
 
+    // OBJETO DE ESTADÍSTICAS (WRAPPED)
+    let statsPartida = {
+      verdades: 0,
+      retos: 0,
+      fotos: 0,
+      reacciones: 0
+    };
+
     const baseDeDatos = {
       rompehielos: {
         verdades: [ "¿Cuál es tu talento más inútil?", "¿Qué es lo más vergonzoso que has buscado en Google este mes?", "¿Alguna vez has fingido una llamada para escapar de una conversación aburrida?", "Si pudieras cambiar tu nombre, ¿cuál elegirías?", "¿Cuál ha sido la peor mentira que has contado a tus padres?", "¿Qué dibujo animado de tu infancia te gustaba en secreto?", "¿Cuál es el hábito más raro que tienes cuando estás solo en casa?", "Si fueras un mueble de tu casa, ¿cuál serías y por qué?", "¿Qué es lo más ridículo que te ha pasado en público?", "¿Alguna vez te has quedado dormido en el baño del trabajo o de clase?" ],
         retos: [ "Ponte un calcetín en la oreja y hazte un selfie.", "Saca una foto imitando tu emoji favorito.", "Manda una foto haciendo una mueca exagerada con la cara.", "Hazte una foto sosteniendo un objeto extraño como si fuera un trofeo.", "Saca una foto haciendo equilibrio con un bolígrafo en la punta de la nariz." ]
       },
       parejas: {
-        verdades: [ "¿Qué fue exactamente lo primero que pensaste la primera vez que me viste?", "¿Cuál ha sido nuestro mejor momento juntos hasta ahora?", "¿Qué manía mía te parece más tierna aunque no lo digas?", "¿Cuál erá tu recuerdo favorito de los dos?", "Si pudieras elegir un lugar del mundo para una escapada romántica secreta, ¿cuál sería?", "¿Qué canción te recuerda inmediatamente a mí?", "¿Qué detalle pequeño que hago por ti te hace más feliz?", "¿Cuál fue tu primera impresión sobre mi forma de vestir?", "Si tuvieras que definir nuestra relación en tres palabras, ¿cuáles serían?", "¿Qué te hizo darte cuenta de que sentías algo especial por mí?" ],
+        verdades: [ "¿Qué fue exactamente lo primero que pensaste la primera vez que me viste?", "¿Cuál ha sido nuestro mejor momento juntos hasta ahora?", "¿Qué manía mía te parece más tierna aunque no lo digas?", "¿Cuál era tu recuerdo favorito de los dos?", "Si pudieras elegir un lugar del mundo para una escapada romántica secreta, ¿cuál sería?", "¿Qué canción te recuerda inmediatamente a mí?", "¿Qué detalle pequeño que hago por ti te hace más feliz?", "¿Cuál fue tu primera impresión sobre mi forma de vestir?", "Si tuvieras que definir nuestra relación en tres palabras, ¿cuáles serían?", "¿Qué te hizo darte cuenta de que sentías algo especial por mí?" ],
         retos: [ "Manda una foto soplando un beso de la manera más romántica posible.", "Hazte una foto haciendo forma de corazón con las manos cerca de tu cara.", "Saca una foto guiñando un ojo de forma muy tierna.", "Manda una foto sonriendo con los ojos cerrados pensando en un buen momento.", "Hazte una foto haciendo un gesto de 'te quiero' con los dedos." ]
       },
       seccionXX: {
@@ -251,18 +254,11 @@
     
     if (mazoInvitacion) { mazoElegido = mazoInvitacion; }
 
-    // ====== FUNCIÓN DE ANIMACIÓN 3D PARA LAS CARTAS ======
     function actualizarCartaAnimada(nuevoTexto) {
       const tarjeta = document.querySelector('.tarjeta-reto');
       tarjeta.classList.add('animar-flip');
-      
-      setTimeout(() => {
-        document.getElementById('textoCarta').innerText = nuevoTexto;
-      }, 200); // Cambia el texto justo a mitad del giro
-
-      setTimeout(() => {
-        tarjeta.classList.remove('animar-flip');
-      }, 400); // Termina la animación
+      setTimeout(() => { document.getElementById('textoCarta').innerText = nuevoTexto; }, 200);
+      setTimeout(() => { tarjeta.classList.remove('animar-flip'); }, 400);
     }
 
     function iniciarTemporizador() {
@@ -274,14 +270,10 @@
       intervaloTimer = setInterval(() => {
         tiempoRestante--;
         document.getElementById('textoTemporizador').innerText = tiempoRestante;
-        
-        if (tiempoRestante <= 10) {
-          document.getElementById('cajaTemporizador').classList.add('urgente');
-        }
-        
+        if (tiempoRestante <= 10) { document.getElementById('cajaTemporizador').classList.add('urgente'); }
         if (tiempoRestante <= 0) {
           detenerTemporizador();
-          alert("¡TIEMPO AGOTADO! ⏰ Te has quedado sin tiempo para responder o cumplir el reto.");
+          alert("¡TIEMPO AGOTADO! ⏰ Te has quedado sin tiempo.");
         }
       }, 1000);
     }
@@ -294,44 +286,31 @@
     document.getElementById('inputRespuesta').addEventListener('input', () => {
       socket.emit('escribiendo', miSala);
       clearTimeout(timeoutEscribiendo);
-      timeoutEscribiendo = setTimeout(() => {
-        socket.emit('parar_escribir', miSala);
-      }, 1500);
+      timeoutEscribiendo = setTimeout(() => { socket.emit('parar_escribir', miSala); }, 1500);
     });
 
-    socket.on('mostrar_escribiendo', () => {
-      document.getElementById('indicadorEscribiendo').classList.remove('oculto');
-    });
-
-    socket.on('ocultar_escribiendo', () => {
-      document.getElementById('indicadorEscribiendo').classList.add('oculto');
-    });
+    socket.on('mostrar_escribiendo', () => { document.getElementById('indicadorEscribiendo').classList.remove('oculto'); });
+    socket.on('ocultar_escribiendo', () => { document.getElementById('indicadorEscribiendo').classList.add('oculto'); });
 
     function enviarReaccion(emoji) {
+      statsPartida.reacciones++;
       socket.emit('enviar_reaccion', { sala: miSala, emoji: emoji });
       document.getElementById('barraReacciones').classList.add('oculto');
       mostrarEmojiAnimado(emoji);
     }
 
-    socket.on('recibir_reaccion', (emoji) => {
-      mostrarEmojiAnimado(emoji);
-    });
+    socket.on('recibir_reaccion', (emoji) => { mostrarEmojiAnimado(emoji); });
 
     function mostrarEmojiAnimado(emoji) {
       const contenedor = document.getElementById('contenedorTarjetaJuego');
       const divReaccion = document.createElement('div');
       divReaccion.className = 'reaccion-flotante';
       divReaccion.innerText = emoji;
-      
       const leftAleatorio = Math.floor(Math.random() * 60) + 20; 
       divReaccion.style.left = leftAleatorio + '%';
       divReaccion.style.bottom = '20px';
-
       contenedor.appendChild(divReaccion);
-
-      setTimeout(() => {
-        divReaccion.remove();
-      }, 1500);
+      setTimeout(() => { divReaccion.remove(); }, 1500);
     }
 
     document.getElementById('formularioPerfil').addEventListener('submit', (e) => {
@@ -356,11 +335,31 @@
     function irAMazos() { document.getElementById('pantallaMenu').classList.add('oculto'); document.getElementById('pantallaMazos').classList.remove('oculto'); }
     function irAMenu() { document.getElementById('pantallaLobby').classList.add('oculto'); document.getElementById('pantallaMenu').classList.remove('oculto'); }
     function seleccionarMazo(mazo) { mazoElegido = mazo; document.getElementById('pantallaMazos').classList.add('oculto'); document.getElementById('pantallaMenu').classList.remove('oculto'); }
-    function abandonarPartida() { if (miSala) { socket.emit('abandonar_partida', miSala); } location.href = window.location.pathname; }
+    
+    // IR A PANTALLA RESUMEN WRAPPED
+    function irAResumen() {
+      detenerTemporizador();
+      if (miSala) { socket.emit('abandonar_partida', miSala); }
+      
+      document.getElementById('pantallaJuego').classList.add('oculto');
+      document.getElementById('pantallaResumen').classList.remove('oculto');
+      
+      // Rellenar estadísticas
+      document.getElementById('statVerdades').innerText = statsPartida.verdades;
+      document.getElementById('statRetos').innerText = statsPartida.retos;
+      document.getElementById('statFotos').innerText = statsPartida.fotos;
+      document.getElementById('statReacciones').innerText = statsPartida.reacciones;
+
+      // Dinámica de título según mazo y uso
+      let vibeText = "¡Partida legendaria!";
+      if (mazoElegido === 'seccionXX') vibeText = "🔥 Nivel de picardía: Extremo";
+      else if (mazoElegido === 'parejas') vibeText = "❤️ Conexión profunda";
+      document.getElementById('tituloVibra').innerText = vibeText;
+    }
 
     socket.on('oponente_abandono', () => {
       alert("⚠️ Tu oponente ha abandonado el juego.");
-      location.href = window.location.pathname;
+      irAResumen();
     });
 
     function entrarLobbyDescubrir() {
@@ -375,7 +374,7 @@
       const otrosJugadores = lista.filter(j => j.id !== socket.id);
 
       if (otrosJugadores.length === 0) {
-        contenedor.innerHTML = '<p style="color: #666; font-size: 14px;">No hay nadie esperando con este mazo ahora mismo. ¡Vuelve atrás y rétalos per WhatsApp!</p>';
+        contenedor.innerHTML = '<p style="color: #666; font-size: 14px;">No hay nadie esperando con este mazo ahora mismo. ¡Vuelve atrás y rétalos por WhatsApp!</p>';
         return;
       }
 
@@ -452,6 +451,10 @@
       document.getElementById('imagenPrueba').style.display = 'none';
       document.getElementById('barraReacciones').classList.add('oculto');
       
+      // SUMAR ESTADÍSTICA LOCAL
+      if (tipo === 'verdad') statsPartida.verdades++;
+      else statsPartida.retos++;
+
       const carta = obtenerCartaSinRepetir(tipo);
       ultimaCartaJugada = carta;
       document.getElementById('controlesJuego').classList.add('oculto');
@@ -513,6 +516,7 @@
         const reader = new FileReader();
         reader.onload = function (e) {
           detenerTemporizador();
+          statsPartida.fotos++; // SUMAR CONTADOR DE FOTOS
 
           const fotoBase64 = e.target.result;
           document.getElementById('imagenPrueba').src = fotoBase64;
