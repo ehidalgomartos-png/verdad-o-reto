@@ -1,5 +1,5 @@
 const express = require('express');
-const http = http = require('http'); // o simplemente require('http');
+const http = require('http');
 const { Server } = require('socket.io');
 
 const app = express();
@@ -19,7 +19,6 @@ io.on('connection', (socket) => {
 
   socket.on('entrar_lobby', (nombre) => {
     socket.nombre = nombre || 'Anónimo';
-    jugadoresBuscando = jugadorasBuscandoFiltro(jugadoresBuscando, socket.id); // o la línea limpia de abajo
     jugadoresBuscando = jugadoresBuscando.filter(j => j.id !== socket.id);
     jugadoresBuscando.push({ id: socket.id, nombre: socket.nombre });
     io.emit('actualizar_lista_espera', jugadoresBuscando);
@@ -34,7 +33,7 @@ io.on('connection', (socket) => {
     io.emit('actualizar_lista_espera', jugadoresBuscando);
 
     socket.join(salaID);
-    socket.room = salaID; // Guardamos la sala actual en el socket
+    socket.room = salaID;
     
     const oponenteSocket = io.sockets.sockets.get(ofertadoID);
     if (oponenteSocket) {
@@ -66,7 +65,6 @@ io.on('connection', (socket) => {
     socket.to(datos.sala).emit('recibir_foto', datos.fotoBase64);
   });
 
-  // NUEVO: Manejar el abandono voluntario o por desconexión
   socket.on('abandonar_partida', (salaID) => {
     if (salaID) {
       socket.to(salaID).emit('oponente_abandono');
