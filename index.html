@@ -2,91 +2,189 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Verdad o Reto - Multijugador Pro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>V/R - Verdad o Reto</title>
   <style>
-    body { margin: 0; background-color: #0d0d0d; color: #FFF; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    body {
+      margin: 0; background-color: #0d0d0d; color: #FFF;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex; justify-content: center; align-items: center; min-height: 100vh;
+    }
     .oculto { display: none !important; }
-    .pantalla { background-color: #161616; padding: 30px; border-radius: 20px; width: 90%; max-width: 450px; box-shadow: 0 0 30px rgba(0, 194, 255, 0.1); border: 1px solid #333; box-sizing: border-box; text-align: center; }
-    h1 { color: #FFF; margin-bottom: 5px; font-weight: 900; text-transform: uppercase; }
-    p.subtitulo { color: #00C2FF; margin-bottom: 25px; font-weight: bold; }
-    input[type="text"] { width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #444; background-color: #222; color: #FFF; font-size: 16px; margin-bottom: 15px; box-sizing: border-box; }
+    
+    .pantalla {
+      background-color: #121212; padding: 25px; border-radius: 24px;
+      width: 90%; max-width: 400px; box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+      border: 1px solid #222; box-sizing: border-box; text-align: center;
+    }
+    
+    /* Cabecera estilo App */
+    .app-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 25px; font-weight: bold; font-size: 18px; color: #fff;
+    }
+
+    h1 { color: #FFF; margin-bottom: 5px; font-weight: 900; font-size: 24px; text-transform: uppercase; }
+    p.subtitulo { color: #00C2FF; margin-bottom: 20px; font-weight: bold; font-size: 14px; }
+    
+    input[type="text"], input[type="number"] {
+      width: 100%; padding: 14px; border-radius: 12px; border: 1px solid #333;
+      background-color: #1a1a1a; color: #FFF; font-size: 16px; margin-bottom: 15px; box-sizing: border-box;
+    }
     input:focus { outline: none; border-color: #FF005C; }
+
+    label { display: block; text-align: left; font-size: 13px; color: #888; margin-bottom: 5px; font-weight: bold; }
+
+    /* Tarjetas del Menú Principal (Estilo Captura) */
+    .menu-tarjeta {
+      border-radius: 20px; padding: 25px 20px; text-align: left; cursor: pointer;
+      margin-bottom: 15px; transition: transform 0.2s; border: none; width: 100%;
+      box-sizing: border-box; position: relative;
+    }
+    .menu-tarjeta:active { transform: scale(0.98); }
     
-    button.btn-principal, a.btn-whatsapp { display: block; width: 100%; background-color: #00C2FF; color: #000; border: none; padding: 15px; font-size: 16px; font-weight: 900; border-radius: 30px; cursor: pointer; text-transform: uppercase; margin-bottom: 10px; text-decoration: none; box-sizing: border-box; }
-    a.btn-whatsapp { background-color: #25D366; color: #FFF; }
+    .tarjeta-descubrir {
+      background: linear-gradient(135deg, #FF005C 0%, #cc0046 100%);
+      color: white; box-shadow: 0 8px 20px rgba(255, 0, 92, 0.3);
+    }
+    .tarjeta-retar {
+      background: linear-gradient(135deg, #0051ff 0%, #0033cc 100%);
+      color: white; box-shadow: 0 8px 20px rgba(0, 81, 255, 0.3);
+    }
+
+    .menu-tarjeta h2 { margin: 0 0 5px 0; font-size: 22px; font-weight: 900; }
+    .menu-tarjeta p { margin: 0; font-size: 13px; opacity: 0.9; }
+
+    /* Tienda de Mazos */
+    .seccion-titulo { text-align: left; font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 10px 0; font-weight: bold; }
     
-    .grid-mazos { display: flex; flex-direction: column; gap: 12px; }
-    .mazo { background-color: #1a1a1a; border-radius: 15px; padding: 15px; text-align: left; border: 2px solid #333; cursor: pointer; transition: 0.2s; }
-    .mazo:hover { border-color: #00C2FF; }
-    .mazo-parejas { border-color: #0055ff; }
-    .mazo-parejas:hover { border-color: #00C2FF; box-shadow: 0 0 15px rgba(0,194,255,0.4); }
-    .mazo-xx { border-color: #550020; }
-    .mazo-xx:hover { border-color: #FF005C; box-shadow: 0 0 15px rgba(255,0,92,0.4); }
+    .mazo-tienda {
+      background-color: #1a1a1a; border-radius: 16px; padding: 15px; text-align: left;
+      border: 1px solid #333; margin-bottom: 12px; position: relative;
+    }
+    .mazo-destacado { border: 1px solid #FF005C; background: linear-gradient(180deg, #1f1218 0%, #161616 100%); }
     
-    .tarjeta-reto { background-color: #251018; border: 2px solid #FF005C; padding: 20px; border-radius: 15px; margin-bottom: 20px; min-height: 90px; display: flex; align-items: center; justify-content: center; flex-direction: column; }
-    .tarjeta-reto p { font-size: 17px; font-weight: bold; margin: 0; line-height: 1.4; }
+    .btn-comprar {
+      display: block; width: 100%; background-color: #FF005C; color: white; border: none;
+      padding: 12px; font-size: 14px; font-weight: 900; border-radius: 12px;
+      cursor: pointer; text-transform: uppercase; margin-top: 12px; box-sizing: border-box;
+    }
+    .btn-gratis { background-color: #00C2FF; color: #000; }
+
+    /* Botones generales */
+    button.btn-principal {
+      width: 100%; background-color: #FF005C; color: white; border: none;
+      padding: 15px; font-size: 16px; font-weight: 900; border-radius: 30px;
+      cursor: pointer; text-transform: uppercase; margin-top: 10px;
+    }
+    a.btn-whatsapp { display: block; width: 100%; background-color: #25D366; color: #FFF; border: none; padding: 15px; font-size: 16px; font-weight: 900; border-radius: 30px; cursor: pointer; text-transform: uppercase; text-decoration: none; box-sizing: border-box; margin-bottom: 15px; text-align: center; }
+
+    /* Mesa de Juego */
+    .tarjeta-reto {
+      background-color: #1a1a1a; border: 2px solid #FF005C;
+      padding: 20px; border-radius: 16px; margin-bottom: 20px; min-height: 90px;
+      display: flex; align-items: center; justify-content: center; flex-direction: column;
+    }
+    .tarjeta-reto p { font-size: 16px; font-weight: bold; margin: 0; line-height: 1.4; }
     
     .botones-juego { display: flex; gap: 10px; margin-bottom: 15px; }
-    .btn-verdad { flex: 1; background-color: #00C2FF; color: #000; border: none; padding: 15px; font-weight: 900; border-radius: 15px; cursor: pointer; font-size: 16px; }
-    .btn-reto { flex: 1; background-color: #FF005C; color: #FFF; border: none; padding: 15px; font-weight: 900; border-radius: 15px; cursor: pointer; font-size: 16px; }
+    .btn-verdad { flex: 1; background-color: #00C2FF; color: #000; border: none; padding: 15px; font-weight: 900; border-radius: 14px; cursor: pointer; font-size: 15px; }
+    .btn-reto { flex: 1; background-color: #FF005C; color: #FFF; border: none; padding: 15px; font-weight: 900; border-radius: 14px; cursor: pointer; font-size: 15px; }
     
-    .foto-upload { background-color: #222; border: 2px dashed #00C2FF; padding: 15px; border-radius: 10px; cursor: pointer; color: #00C2FF; font-weight: bold; margin-bottom: 10px; }
+    .foto-upload { background-color: #1a1a1a; border: 2px dashed #00C2FF; padding: 15px; border-radius: 12px; cursor: pointer; color: #00C2FF; font-weight: bold; margin-bottom: 10px; }
   </style>
 </head>
 <body>
 
-  <!-- PANTALLA PERFIL -->
+  <!-- ================= 1. PERFIL ================= -->
   <div id="pantallaPerfil" class="pantalla">
-    <h1 id="tituloPerfil">CREA TU PERFIL</h1>
-    <p class="subtitulo">Prepara tus secretos</p>
+    <div class="app-header"><span></span><span>V / R</span><span>🔔</span></div>
+    <h1>Crea tu Perfil</h1>
+    <p class="subtitulo">Prepara tus mejores secretos</p>
+    
     <form id="formularioPerfil">
-      <input type="text" id="nombreUsuario" placeholder="Tu Apodo..." required>
-      <button type="submit" class="btn-principal" id="btnPerfil">Continuar</button>
+      <label>Nombre o Apodo</label>
+      <input type="text" id="nombreUsuario" placeholder="Ej: Alex" required>
+      
+      <label>Edad (Necesario para mazos +18)</label>
+      <input type="number" id="edadUsuario" placeholder="18" min="13" max="99" required>
+      
+      <button type="submit" class="btn-principal">Entrar a Jugar</button>
     </form>
   </div>
 
-  <!-- PANTALLA MAZOS -->
+  <!-- ================= 2. MENÚ PRINCIPAL (ESTILO CAPTURA) ================= -->
+  <div id="pantallaMenu" class="pantalla oculto">
+    <div class="app-header"><span id="saludoHeader">Hola</span><span>V / R</span><span>🔔</span></div>
+    
+    <!-- Tarjeta Descubrir -->
+    <button class="menu-tarjeta tarjeta-descubrir" onclick="irATienda()">
+      <h2>🔥 Descubrir</h2>
+      <p>Elige un mazo y reta a un amigo</p>
+    </button>
+
+    <!-- Tarjeta Retar Amigos -->
+    <button class="menu-tarjeta tarjeta-retar" onclick="crearSalaDirecta()">
+      <h2>👥 Retar Amigos</h2>
+      <p>Crea sala privada y comparte enlace 🟢</p>
+    </button>
+  </div>
+
+  <!-- ================= 3. TIENDA DE MAZOS ================= -->
   <div id="pantallaMazos" class="pantalla oculto">
-    <h1>🔥 ELIGE TU VIBRA</h1>
-    <p class="subtitulo">Selecciona el mazo</p>
-    <div class="grid-mazos">
-      <div class="mazo" onclick="crearSala('rompehielos')">
-        <h3 style="color:#00C2FF; margin:0;">🧊 Rompehielos</h3>
-        <p style="color:#aaa; font-size:13px; margin:5px 0 0 0;">Suave y divertido para empezar.</p>
+    <div class="app-header"><span onclick="volverMenu()" style="cursor:pointer;">⬅ Volver</span><span>TIENDA</span><span></span></div>
+    <h1 style="font-size: 20px;">Tienda de Mazos</h1>
+    <p class="subtitulo">Sube la temperatura de tus partidas</p>
+
+    <!-- Destacado XX -->
+    <div class="mazo-tienda mazo-destacado">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="margin:0; color:#FF005C;">Sección XX</h3>
+        <span style="background:#FF005C; color:white; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold;">+18</span>
       </div>
-      <div class="mazo mazo-parejas" onclick="crearSala('parejas')">
-        <h3 style="color:#0088ff; margin:0;">❤️ Modo Parejas</h3>
-        <p style="color:#aaa; font-size:13px; margin:5px 0 0 0;">Íntimo, romántico y para conocerse a fondo.</p>
-      </div>
-      <div class="mazo mazo-xx" onclick="crearSala('seccionXX')">
-        <h3 style="color:#FF005C; margin:0;">🔥 SECCIÓN XX (+18)</h3>
-        <p style="color:#aaa; font-size:13px; margin:5px 0 0 0;">Cero censura, muy subido de tono.</p>
-      </div>
+      <p style="font-size:12px; color:#aaa; margin:8px 0;">Fantasías, retos físicos y confesiones íntimas sin censura.</p>
+      <button class="btn-comprar" onclick="seleccionarMazo('seccionXX')">Desbloquear por 2,99€</button>
+    </div>
+
+    <div class="seccion-titulo">Catálogo</div>
+
+    <!-- Rompehielos -->
+    <div class="mazo-tienda">
+      <h3 style="margin:0; color:#00C2FF;">🧊 Rompehielos</h3>
+      <p style="font-size:12px; color:#aaa; margin:8px 0;">Preguntas suaves y coqueteo para empezar sin presión.</p>
+      <button class="btn-comprar btn-gratis" onclick="seleccionarMazo('rompehielos')">Jugar Gratis</button>
+    </div>
+
+    <!-- Modo Parejas -->
+    <div class="mazo-tienda">
+      <h3 style="margin:0; color:#0088ff;">❤️ Modo Parejas</h3>
+      <p style="font-size:12px; color:#aaa; margin:8px 0;">Íntimo, romántico y para conocerse a fondo.</p>
+      <button class="btn-comprar" style="background:#0051ff;" onclick="seleccionarMazo('parejas')">Comprar por 1,99€</button>
     </div>
   </div>
 
-  <!-- MESA DE JUEGO -->
+  <!-- ================= 4. MESA DE JUEGO ================= -->
   <div id="pantallaJuego" class="pantalla oculto">
-    <h1 id="tituloSala">⚔️ SALA SECRETA</h1>
+    <div class="app-header"><span onclick="volverMenu()" style="cursor:pointer;">❌ Salir</span><span id="nombreMazoActivo">SALA</span><span></span></div>
     
-    <div id="zonaInvitacion" class="oculto" style="margin-bottom: 20px;">
+    <div id="zonaInvitacion" class="oculto" style="margin-bottom: 15px;">
       <a href="#" id="btnWhatsApp" class="btn-whatsapp" target="_blank">📱 Invitar por WhatsApp</a>
     </div>
 
     <div class="tarjeta-reto">
       <p id="textoCarta">Esperando oponente...</p>
-      <img id="imagenPrueba" src="" style="max-width: 100%; border-radius: 10px; margin-top: 15px; display: none;">
+      <img id="imagenPrueba" src="" style="max-width: 100%; border-radius: 12px; margin-top: 10px; display: none;">
     </div>
 
     <!-- Caja para responder a la Verdad -->
     <div id="seccionRespuesta" class="oculto">
-      <input type="text" id="inputRespuesta" placeholder="Escribe tu respuesta aquí...">
+      <input type="text" id="inputRespuesta" placeholder="Escribe tu respuesta...">
       <button class="btn-principal" onclick="enviarRespuestaTexto()">Enviar Respuesta</button>
     </div>
 
     <!-- Botón para abrir la cámara si es un Reto -->
     <div id="seccionPrueba" class="oculto">
-      <div class="foto-upload" onclick="document.getElementById('inputPrueba').click()">📸 Hacer foto de prueba del reto</div>
+      <div class="foto-upload" onclick="document.getElementById('inputPrueba').click()">📸 Subir foto prueba del reto</div>
       <input type="file" id="inputPrueba" accept="image/*" capture="environment" style="display: none;" onchange="subirFoto(this)">
     </div>
 
@@ -103,83 +201,64 @@
     let miSala = '';
     let mazoElegido = 'rompehielos';
     let miTurno = false;
+    let nombreJugador = '';
 
-    // ================= BASE DE DATOS AMPLIADA Y SUBIDA DE TONO =================
     const baseDeDatos = {
       rompehielos: {
-        verdades: [
-          "¿Cuál es tu talento más inútil?",
-          "¿Qué es lo más vergonzoso que has buscado en Google recientemente?",
-          "¿Alguna vez has fingido una llamada para escapar de una cita?",
-          "¿Cuál es tu peor hábito cuando estás a solas?",
-          "Si pudieras cambiar tu nombre por un alimento, ¿cuál elegirías?"
-        ],
-        retos: [
-          "Ponte un calcetín en la oreja y hazte un selfie.",
-          "Saca una foto imitando exactamente tu emoji favorito.",
-          "Haz una foto de lo más raro que tengas a tu alcance."
-        ]
+        verdades: ["¿Cuál es tu talento más inútil?", "¿Qué es lo más vergonzoso que has buscado en Google?", "¿Alguna vez has fingido una llamada para escapar de una cita?"],
+        retos: ["Ponte un calcetín en la oreja y hazte un selfie.", "Saca una foto imitando tu emoji favorito."]
       },
       parejas: {
-        verdades: [
-          "¿Qué fue lo primero que pensaste la primera vez que me viste?",
-          "¿Cuál ha sido nuestro mejor momento juntos hasta ahora?",
-          "¿Qué manía mía te parece adorable aunque digas lo contrario?",
-          "Si pudieras cambiar algo de nuestra primera cita, ¿qué sería?",
-          "¿En qué momento exacto supo que te gustaba?"
-        ],
-        retos: [
-          "Manda una foto soplando un beso a la cámara de la manera más romántica posible.",
-          "Hazte una foto haciendo forma de corazón con las manos.",
-          "Sácate un selfie guiñando un ojo pensando en mí."
-        ]
+        verdades: ["¿Qué fue lo primero que pensaste la primera vez que me viste?", "¿Cuál ha sido nuestro mejor momento juntos?"],
+        retos: ["Manda una foto soplando un beso de la manera más romántica.", "Hazte una foto haciendo forma de corazón con las manos."]
       },
       seccionXX: {
-        verdades: [
-          "¿Cuál es tu fantasía sexual más oscura y prohibida que jamás has contado?",
-          "¿En qué lugar más loco, público o peligroso has tenido relaciones o te ha gustaría tenerlas?",
-          "¿Qué prenda de ropa interior llevas puesta ahora mismo y qué tan atrevida es?",
-          "¿Cuál es la parte de tu cuerpo que más te excita que te toquen y cómo?",
-          "Si tuvieras que cumplir una fantasía inmediata conmigo esta noche, ¿cuál sería sin censura?",
-          "¿Alguna vez has tenido pensamientos íntimos con alguien totalmente inesperado de tu entorno?"
-        ],
-        retos: [
-          "Sácate una foto mostrando tus labios mordidos de forma muy sugerente y explícita.",
-          "Hazte una foto levantando ligeramente tu camiseta o marcando tu zona favorita.",
-          "Saca una foto en la que simules una postura totalmente explícita y provocativa.",
-          "Fotografía tu piel de cerca en un lugar sensible donde te gustaría que te besen."
-        ]
+        verdades: ["¿Cuál es tu fantasía sexual más oscura y prohibida?", "¿En qué lugar más loco o público has tenido relaciones?"],
+        retos: ["Sácate una foto mostrando tus labios mordidos de forma sugerente.", "Hazte una foto levantando ligeramente tu camiseta o marcando tu zona favorita."]
       }
     };
 
     const urlParams = new URLSearchParams(window.location.search);
     const salaInvitacion = urlParams.get('sala');
 
-    if (salaInvitacion) {
-      document.getElementById('tituloPerfil').innerText = "TE HAN RETADO";
-      document.getElementById('btnPerfil').innerText = "Entrar a la Partida";
-    }
-
+    // 1. Registro de Perfil
     document.getElementById('formularioPerfil').addEventListener('submit', (e) => {
       e.preventDefault();
-      document.getElementById('pantallaPerfil').classList.add('oculto');
+      nombreJugador = document.getElementById('nombreUsuario').value;
+      document.getElementById('saludoHeader').innerText = `Hola, ${nombreJugador}`;
       
+      document.getElementById('pantallaPerfil').classList.add('oculto');
+
       if (salaInvitacion) {
         miSala = salaInvitacion;
         socket.emit('unirse_sala', miSala);
         document.getElementById('pantallaJuego').classList.remove('oculto');
-        document.getElementById('textoCarta').innerText = "¡Te uniste! Esperando que el creador mueva ficha...";
+        document.getElementById('textoCarta').innerText = "¡Te uniste a la sala! Esperando al creador...";
         miTurno = false;
       } else {
-        document.getElementById('pantallaMazos').classList.remove('oculto');
+        document.getElementById('pantallaMenu').classList.remove('oculto');
       }
     });
 
-    function crearSala(mazo) {
+    function irATienda() {
+      document.getElementById('pantallaMenu').classList.add('oculto');
+      document.getElementById('pantallaMazos').classList.remove('oculto');
+    }
+
+    function volverMenu() {
+      location.href = window.location.pathname; // Recarga limpia para salir de la sala
+    }
+
+    function seleccionarMazo(mazo) {
       mazoElegido = mazo;
+      crearSalaDirecta();
+    }
+
+    function crearSalaDirecta() {
       miSala = Math.random().toString(36).substring(2, 9);
       socket.emit('unirse_sala', miSala);
       
+      document.getElementById('pantallaMenu').classList.add('oculto');
       document.getElementById('pantallaMazos').classList.add('oculto');
       document.getElementById('pantallaJuego').classList.remove('oculto');
       
@@ -187,13 +266,14 @@
       document.getElementById('zonaInvitacion').classList.remove('oculto');
       document.getElementById('btnWhatsApp').href = `https://api.whatsapp.com/send?text=¡Te reto a Verdad o Reto! Entra aquí: ${encodeURIComponent(enlace)}`;
       
-      document.getElementById('textoCarta').innerText = "Mándale el enlace de WhatsApp a tu amigo y espera a que entre.";
+      document.getElementById('nombreMazoActivo').innerText = mazoElegido.toUpperCase();
+      document.getElementById('textoCarta').innerText = "Mándale el WhatsApp a tu amigo y espera a que entre.";
       miTurno = false;
     }
 
     socket.on('oponente_unido', () => {
       document.getElementById('zonaInvitacion').classList.add('oculto');
-      document.getElementById('textoCarta').innerText = "¡Tu amigo se ha conectado! Te toca empezar. Elige Verdad o Reto:";
+      document.getElementById('textoCarta').innerText = "¡Tu amigo se ha conectado! Te toca empezar:";
       document.getElementById('controlesJuego').classList.remove('oculto');
       miTurno = true;
     });
@@ -225,7 +305,7 @@
       miTurno = false;
 
       if (datos.tipo === 'verdad') {
-        document.getElementById('textoCarta').innerText = `Tu amigo eligió VERDAD:\n\n"${datos.textoCarta}"\n\n(Esperando su respuesta escrita...)`;
+        document.getElementById('textoCarta').innerText = `Tu amigo eligió VERDAD:\n\n"${datos.textoCarta}"\n\n(Esperando su respuesta...)`;
       } else {
         document.getElementById('textoCarta').innerText = `Tu amigo eligió RETO:\n\n"${datos.textoCarta}"\n\n(Esperando su foto de prueba...)`;
       }
@@ -244,7 +324,7 @@
     }
 
     socket.on('recibir_respuesta', (respuesta) => {
-      document.getElementById('textoCarta').innerText = `El oponente respondió:\n\n"${respuesta}"\n\n¡Te toca jugar a ti! Elige Verdad o Reto:`;
+      document.getElementById('textoCarta').innerText = `El oponente respondió:\n\n"${respuesta}"\n\n¡Te toca jugar a ti!`;
       document.getElementById('controlesJuego').classList.remove('oculto');
       miTurno = true;
     });
@@ -257,7 +337,7 @@
           
           document.getElementById('imagenPrueba').src = fotoBase64;
           document.getElementById('imagenPrueba').style.display = 'block';
-          document.getElementById('textoCarta').innerText = "¡Foto de prueba enviada con éxito! Esperando al oponente...";
+          document.getElementById('textoCarta').innerText = "¡Foto enviada! Esperando al oponente...";
           document.getElementById('seccionPrueba').classList.add('oculto');
           miTurno = false;
 
@@ -268,7 +348,7 @@
     }
 
     socket.on('recibir_foto', (fotoBase64) => {
-      document.getElementById('textoCarta').innerText = "¡El oponente ha enviado la foto de prueba del reto! Te toca jugar a ti:";
+      document.getElementById('textoCarta').innerText = "¡El oponente ha enviado la foto de prueba! Te toca jugar a ti:";
       document.getElementById('imagenPrueba').src = fotoBase64;
       document.getElementById('imagenPrueba').style.display = 'block';
       document.getElementById('controlesJuego').classList.remove('oculto');
