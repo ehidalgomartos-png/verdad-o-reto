@@ -5,9 +5,65 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>V/R - Verdad o Reto</title>
   <style>
-    body { margin: 0; background-color: #0d0d0d; color: #FFF; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    /* 1. FONDO MEJORADO CON LUCES SUTILES */
+    body { 
+      margin: 0; 
+      background-color: #0b0b0b; 
+      background-image: 
+        radial-gradient(circle at top center, rgba(255, 0, 92, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at bottom center, rgba(0, 194, 255, 0.1) 0%, transparent 50%);
+      color: #FFF; 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+      display: flex; justify-content: center; align-items: center; min-height: 100vh; 
+      overflow-x: hidden;
+    }
+    
+    /* 2. DECORACIONES ARRIBA Y ABAJO */
+    .adorno-top {
+      position: absolute;
+      top: 5vh;
+      text-align: center;
+      width: 100%;
+      z-index: -1;
+      animation: pulseGlow 4s infinite alternate;
+    }
+    .adorno-top h2 {
+      margin: 0;
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 10px;
+      background: linear-gradient(90deg, #FF005C, #00C2FF);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-transform: uppercase;
+      opacity: 0.9;
+    }
+
+    .adorno-bottom {
+      position: absolute;
+      bottom: 4vh;
+      text-align: center;
+      width: 100%;
+      font-size: 11px;
+      color: #555;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      z-index: -1;
+      font-weight: bold;
+    }
+    .adorno-bottom span {
+      color: #FF005C;
+      font-size: 14px;
+    }
+
+    @keyframes pulseGlow {
+      0% { filter: drop-shadow(0 0 5px rgba(255,0,92,0.2)); }
+      100% { filter: drop-shadow(0 0 15px rgba(0,194,255,0.5)); }
+    }
+
+    /* 3. ESTILOS DE LA APP (TUS TARJETAS) */
     .oculto { display: none !important; }
-    .pantalla { background-color: #121212; padding: 25px; border-radius: 24px; width: 90%; max-width: 400px; box-shadow: 0 0 30px rgba(0,0,0,0.8); border: 1px solid #222; box-sizing: border-box; text-align: center; }
+    .pantalla { background-color: #121212; padding: 25px; border-radius: 24px; width: 90%; max-width: 400px; box-shadow: 0 0 40px rgba(0,0,0,0.9); border: 1px solid #222; box-sizing: border-box; text-align: center; }
     .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; font-weight: bold; font-size: 18px; color: #fff; }
     h1 { color: #FFF; margin-bottom: 5px; font-weight: 900; font-size: 24px; text-transform: uppercase; }
     p.subtitulo { color: #00C2FF; margin-bottom: 20px; font-weight: bold; font-size: 14px; }
@@ -16,7 +72,6 @@
     input:focus, select:focus { outline: none; border-color: #FF005C; }
     label { display: block; text-align: left; font-size: 13px; color: #888; margin-bottom: 5px; font-weight: bold; }
 
-    /* Selección de Mazos */
     .grid-mazos { display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px; text-align: left; }
     .mazo { background-color: #1a1a1a; border-radius: 16px; padding: 15px; border: 2px solid #333; cursor: pointer; transition: 0.2s; }
     .mazo:hover { border-color: #00C2FF; }
@@ -40,12 +95,20 @@
     .tarjeta-reto p { font-size: 16px; font-weight: bold; margin: 0; line-height: 1.4; text-align: center; white-space: pre-wrap; }
     
     .botones-juego { display: flex; gap: 10px; margin-bottom: 15px; }
-    .btn-verdad { flex: 1; background-color: #00C2FF; color: #000; border: none; padding: 15px; font-weight: 900; border-radius: 14px; cursor: pointer; font-size: 15px; }
-    .btn-reto { flex: 1; background-color: #FF005C; color: #FFF; border: none; padding: 15px; font-weight: 900; border-radius: 14px; cursor: pointer; font-size: 15px; }
+    .btn-verdad { flex: 1; background-color: #00C2FF; color: #000; border: none; padding: 15px; font-weight: 900; border-radius: 14px; cursor: pointer; font-size: 15px; text-transform: uppercase; }
+    .btn-reto { flex: 1; background-color: #FF005C; color: #FFF; border: none; padding: 15px; font-weight: 900; border-radius: 14px; cursor: pointer; font-size: 15px; text-transform: uppercase;}
     .foto-upload { background-color: #1a1a1a; border: 2px dashed #00C2FF; padding: 15px; border-radius: 12px; cursor: pointer; color: #00C2FF; font-weight: bold; margin-bottom: 10px; }
   </style>
 </head>
 <body>
+
+  <!-- ELEMENTOS DECORATIVOS DE FONDO -->
+  <div class="adorno-top">
+    <h2>VERDAD O RETO</h2>
+  </div>
+  <div class="adorno-bottom">
+    V 1.0 • Juega bajo tu propio riesgo <span>🔥</span>
+  </div>
 
   <!-- 1. PERFIL -->
   <div id="pantallaPerfil" class="pantalla">
@@ -220,9 +283,8 @@
 
     const urlParams = new URLSearchParams(window.location.search);
     const salaInvitacion = urlParams.get('sala');
-    const mazoInvitacion = urlParams.get('mazo'); // <-- LEE EL MAZO DE LA URL
+    const mazoInvitacion = urlParams.get('mazo');
     
-    // Si entró por enlace y trae mazo, lo configuramos automáticamente
     if (mazoInvitacion) {
       mazoElegido = mazoInvitacion;
     }
@@ -237,7 +299,7 @@
         miSala = salaInvitacion;
         socket.emit('unirse_sala', miSala);
         document.getElementById('pantallaJuego').classList.remove('oculto');
-        document.getElementById('nombreMazoActivo').innerText = mazoElegido.toUpperCase(); // Actualiza el título
+        document.getElementById('nombreMazoActivo').innerText = mazoElegido.toUpperCase();
         document.getElementById('textoCarta').innerText = "¡Te uniste al reto! Esperando al creador...";
         miTurno = false;
       } else {
@@ -337,7 +399,6 @@
       document.getElementById('pantallaJuego').classList.remove('oculto');
       document.getElementById('nombreMazoActivo').innerText = mazoElegido.toUpperCase();
       
-      // EL ENLACE AHORA LLEVA EL MAZO INCORPORADO
       const enlace = `${window.location.origin}/?sala=${miSala}&mazo=${mazoElegido}`;
       document.getElementById('zonaInvitacion').classList.remove('oculto');
       document.getElementById('btnWhatsApp').href = `https://api.whatsapp.com/send?text=¡Te reto a Verdad o Reto (${mazoElegido.toUpperCase()})! Entra aquí: ${encodeURIComponent(enlace)}`;
