@@ -88,6 +88,7 @@
     const socket = io();
     let miSala = '';
     let mazoElegido = 'rompehielos';
+    let miTurno = false; // Control estricto de turnos
 
     const baseDeDatos = {
       rompehielos: {
@@ -117,6 +118,7 @@
         socket.emit('unirse_sala', miSala);
         document.getElementById('pantallaJuego').classList.remove('oculto');
         document.getElementById('textoCarta').innerText = "¡Te uniste! Esperando que el creador mueva ficha...";
+        miTurno = false;
       } else {
         document.getElementById('pantallaMazos').classList.remove('oculto');
       }
@@ -135,16 +137,19 @@
       document.getElementById('btnWhatsApp').href = `https://api.whatsapp.com/send?text=¡Te reto a Verdad o Reto! Entra aquí: ${encodeURIComponent(enlace)}`;
       
       document.getElementById('textoCarta').innerText = "Mándale el enlace de WhatsApp a tu amigo y espera a que entre.";
+      miTurno = false;
     }
 
     socket.on('oponente_unido', () => {
       document.getElementById('zonaInvitacion').classList.add('oculto');
-      document.getElementById('textoCarta').innerText = "¡Tu amigo se ha conectado! Elige Verdad o Reto para empezar:";
+      document.getElementById('textoCarta').innerText = "¡Tu amigo se ha conectado! Te toca empezar. Elige Verdad o Reto:";
       document.getElementById('controlesJuego').classList.remove('oculto');
+      miTurno = true;
     });
 
     // 1. Elegir Verdad o Reto
     function jugarCarta(tipo) {
+      if (!miTurno) return;
       document.getElementById('imagenPrueba').style.display = 'none';
       const cartas = baseDeDatos[mazoElegido][tipo === 'verdad' ? 'verdades' : 'retos'];
       const carta = cartas[Math.floor(Math.random() * cartas.length)];
@@ -162,10 +167,13 @@
       socket.emit('accion_juego', { sala: miSala, tipo: tipo, textoCarta: carta });
     }
 
-    // 2. El oponente recibe la carta y ahora ES SU TURNO de responder
+    // 2. El oponente recibe la carta que sacaste
     socket.on('actualizar_mesa', (datos) => {
       document.getElementById('imagenPrueba').style.display = 'none';
       document.getElementById('controlesJuego').classList.add('oculto');
+      document.getElementById('seccionRespuesta').classList.add('oculto');
+      document.getElementById('seccionPrueba').classList.add('oculto');
+      miTurno = false; // El oponente juega, nosotros esperamos
 
       if (datos.tipo === 'verdad') {
         document.getElementById('textoCarta').innerText = `Tu amigo eligió VERDAD:\n\n"${datos.textoCarta}"\n\n(Esperando su respuesta escrita...)`;
@@ -179,21 +187,18 @@
       const respuesta = document.getElementById('inputRespuesta').value;
       if (!respuesta) return;
 
-      document.getElementById('textoCarta').innerText = `Tu respuesta: "${respuesta}"\n\n¡Bien! Ahora le toca jugar al oponente.`;
+      document.getElementById('textoCarta').innerText = `Tu respuesta: "${respuesta}"\n\n¡Enviado! Esperando al oponente...`;
       document.getElementById('seccionRespuesta').classList.add('oculto');
       document.getElementById('inputRespuesta').value = '';
+      miTurno = false; // Fin de nuestro turno
 
       socket.emit('enviar_respuesta', { sala: miSala, respuesta: respuesta });
-
-      setTimeout(() => {
-        document.getElementById('textoCarta').innerText = "Tu turno: Elige Verdad o Reto";
-        document.getElementById('controlesJuego').classList.remove('oculto');
-      }, 3000);
     }
 
     socket.on('recibir_respuesta', (respuesta) => {
-      document.getElementById('textoCarta').innerText = `El oponente respondió:\n\n"${respuesta}"\n\n¡Te toca jugar a ti!`;
+      document.getElementById('textoCarta').innerText = `El oponente respondió:\n\n"${respuesta}"\n\n¡Te toca jugar a ti! Elige Verdad o Reto:`;
       document.getElementById('controlesJuego').classList.remove('oculto');
+      miTurno = true; // Ahora es nuestro turno
     });
 
     // 4. Subir foto de prueba del Reto
@@ -205,29 +210,22 @@
           
           document.getElementById('imagenPrueba').src = fotoBase64;
           document.getElementById('imagenPrueba').style.display = 'block';
-          document.getElementById('textoCarta').innerText = "¡Foto de prueba enviada con éxito!";
+          document.getElementById('textoCarta').innerText = "¡Foto de prueba enviada con éxito! Esperando al oponente...";
           document.getElementById('seccionPrueba').classList.add('oculto');
+          miTurno = false; // Fin de nuestro turno
 
           socket.emit('enviar_foto', { sala: miSala, fotoBase64: fotoBase64 });
-          
-          setTimeout(() => {
-            document.getElementById('textoCarta').innerText = "Tu turno: Elige Verdad o Reto";
-            document.getElementById('controlesJuego').classList.remove('oculto');
-          }, 3000);
         };
         reader.readAsDataURL(input.files[0]);
       }
     }
 
     socket.on('recibir_foto', (fotoBase64) => {
-      document.getElementById('textoCarta').innerText = "¡El oponente ha enviado la foto de prueba del reto!";
+      document.getElementById('textoCarta').innerText = "¡El oponente ha enviado la foto de prueba del reto! Te toca jugar a ti:";
       document.getElementById('imagenPrueba').src = fotoBase64;
       document.getElementById('imagenPrueba').style.display = 'block';
-
-      setTimeout(() => {
-        document.getElementById('textoCarta').innerText = "¡Te toca jugar a ti! Elige Verdad o Reto:";
-        document.getElementById('controlesJuego').classList.remove('oculto');
-      }, 3000);
+      document.getElementById('controlesJuego').classList.remove('oculto');
+      miTurno = true; // Ahora es nuestro turno
     });
   </script>
 </body>
