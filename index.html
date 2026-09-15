@@ -55,9 +55,30 @@
     button.btn-principal, a.btn-whatsapp { display: block; width: 100%; background-color: #FF005C; color: white; border: none; padding: 15px; font-size: 16px; font-weight: 900; border-radius: 30px; cursor: pointer; text-transform: uppercase; margin-top: 10px; text-decoration: none; box-sizing: border-box; text-align: center; }
     a.btn-whatsapp { background-color: #25D366; }
 
-    .tarjeta-reto { background-color: #1a1a1a; border: 2px solid #FF005C; padding: 20px; border-radius: 16px; margin-bottom: 15px; min-height: 90px; display: flex; align-items: center; justify-content: center; flex-direction: column; position: relative; }
+    /* TARJETA DE JUEGO Y ANIMACIÓN 3D FLIP */
+    .tarjeta-reto { 
+      background-color: #1a1a1a; 
+      border: 2px solid #FF005C; 
+      padding: 20px; 
+      border-radius: 16px; 
+      margin-bottom: 15px; 
+      min-height: 90px; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      flex-direction: column; 
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.4s ease-in-out, opacity 0.4s ease-in-out;
+    }
     .tarjeta-reto p { font-size: 16px; font-weight: bold; margin: 0; line-height: 1.4; text-align: center; white-space: pre-wrap; }
     
+    /* Clase que ejecuta el giro 3D de la carta */
+    .animar-flip {
+      transform: rotateY(90deg) scale(0.9);
+      opacity: 0.2;
+    }
+
     .botones-juego { display: flex; gap: 10px; margin-bottom: 15px; }
     .btn-verdad { flex: 1; background-color: #00C2FF; color: #000; border: none; padding: 15px; font-weight: 900; border-radius: 14px; cursor: pointer; font-size: 15px; text-transform: uppercase; }
     .btn-reto { flex: 1; background-color: #FF005C; color: #FFF; border: none; padding: 15px; font-weight: 900; border-radius: 14px; cursor: pointer; font-size: 15px; text-transform: uppercase;}
@@ -167,7 +188,6 @@
       
       <img id="imagenPrueba" src="" style="max-width: 100%; border-radius: 12px; margin-top: 10px; display: none;">
       
-      <!-- BARRA DE REACCIONES (DISPONIBLE SIEMPRE QUE RECIBES RESPUESTA O FOTO) -->
       <div id="barraReacciones" class="barra-reacciones oculto">
         <button onclick="enviarReaccion('🔥')">🔥</button>
         <button onclick="enviarReaccion('😱')">😱</button>
@@ -210,7 +230,7 @@
         retos: [ "Ponte un calcetín en la oreja y hazte un selfie.", "Saca una foto imitando tu emoji favorito.", "Manda una foto haciendo una mueca exagerada con la cara.", "Hazte una foto sosteniendo un objeto extraño como si fuera un trofeo.", "Saca una foto haciendo equilibrio con un bolígrafo en la punta de la nariz." ]
       },
       parejas: {
-        verdades: [ "¿Qué fue exactamente lo primero que pensaste la primera vez que me viste?", "¿Cuál ha sido nuestro mejor momento juntos hasta ahora?", "¿Qué manía mía te parece más tierna aunque no lo digas?", "¿Cuál es tu recuerdo favorito de los dos?", "Si pudieras elegir un lugar del mundo para una escapada romántica secreta, ¿cuál sería?", "¿Qué canción te recuerda inmediatamente a mí?", "¿Qué detalle pequeño que hago por ti te hace más feliz?", "¿Cuál fue tu primera impresión sobre mi forma de vestir?", "Si tuvieras que definir nuestra relación en tres palabras, ¿cuáles serían?", "¿Qué te hizo darte cuenta de que sentías algo especial por mí?" ],
+        verdades: [ "¿Qué fue exactamente lo primero que pensaste la primera vez que me viste?", "¿Cuál ha sido nuestro mejor momento juntos hasta ahora?", "¿Qué manía mía te parece más tierna aunque no lo digas?", "¿Cuál erá tu recuerdo favorito de los dos?", "Si pudieras elegir un lugar del mundo para una escapada romántica secreta, ¿cuál sería?", "¿Qué canción te recuerda inmediatamente a mí?", "¿Qué detalle pequeño que hago por ti te hace más feliz?", "¿Cuál fue tu primera impresión sobre mi forma de vestir?", "Si tuvieras que definir nuestra relación en tres palabras, ¿cuáles serían?", "¿Qué te hizo darte cuenta de que sentías algo especial por mí?" ],
         retos: [ "Manda una foto soplando un beso de la manera más romántica posible.", "Hazte una foto haciendo forma de corazón con las manos cerca de tu cara.", "Saca una foto guiñando un ojo de forma muy tierna.", "Manda una foto sonriendo con los ojos cerrados pensando en un buen momento.", "Hazte una foto haciendo un gesto de 'te quiero' con los dedos." ]
       },
       seccionXX: {
@@ -230,6 +250,20 @@
     const mazoInvitacion = urlParams.get('mazo');
     
     if (mazoInvitacion) { mazoElegido = mazoInvitacion; }
+
+    // ====== FUNCIÓN DE ANIMACIÓN 3D PARA LAS CARTAS ======
+    function actualizarCartaAnimada(nuevoTexto) {
+      const tarjeta = document.querySelector('.tarjeta-reto');
+      tarjeta.classList.add('animar-flip');
+      
+      setTimeout(() => {
+        document.getElementById('textoCarta').innerText = nuevoTexto;
+      }, 200); // Cambia el texto justo a mitad del giro
+
+      setTimeout(() => {
+        tarjeta.classList.remove('animar-flip');
+      }, 400); // Termina la animación
+    }
 
     function iniciarTemporizador() {
       clearInterval(intervaloTimer);
@@ -311,7 +345,7 @@
         socket.emit('unirse_sala', miSala);
         document.getElementById('pantallaJuego').classList.remove('oculto');
         document.getElementById('nombreMazoActivo').innerText = mazoElegido.toUpperCase();
-        document.getElementById('textoCarta').innerText = "¡Te uniste al reto! Esperando al creador...";
+        actualizarCartaAnimada("¡Te uniste al reto! Esperando al creador...");
         miTurno = false;
       } else {
         document.getElementById('pantallaMazos').classList.remove('oculto');
@@ -341,7 +375,7 @@
       const otrosJugadores = lista.filter(j => j.id !== socket.id);
 
       if (otrosJugadores.length === 0) {
-        contenedor.innerHTML = '<p style="color: #666; font-size: 14px;">No hay nadie esperando con este mazo ahora mismo. ¡Vuelve atrás y rétalos por WhatsApp!</p>';
+        contenedor.innerHTML = '<p style="color: #666; font-size: 14px;">No hay nadie esperando con este mazo ahora mismo. ¡Vuelve atrás y rétalos per WhatsApp!</p>';
         return;
       }
 
@@ -372,11 +406,11 @@
       document.getElementById('nombreMazoActivo').innerText = mazoElegido.toUpperCase();
 
       if (datos.creadorID === socket.id) {
-        document.getElementById('textoCarta').innerText = "¡Match encontrado! Te toca empezar:";
+        actualizarCartaAnimada("¡Match encontrado! Te toca empezar:");
         document.getElementById('controlesJuego').classList.remove('oculto'); 
         miTurno = true;
       } else {
-        document.getElementById('textoCarta').innerText = "¡Te han retado! El oponente está eligiendo...";
+        actualizarCartaAnimada("¡Te han retado! El oponente está eligiendo...");
         document.getElementById('controlesJuego').classList.add('oculto');
         miTurno = false;
       }
@@ -392,13 +426,13 @@
       const enlace = `${window.location.origin}/?sala=${miSala}&mazo=${mazoElegido}`;
       document.getElementById('zonaInvitacion').classList.remove('oculto');
       document.getElementById('btnWhatsApp').href = `https://api.whatsapp.com/send?text=¡Te reto a Verdad o Reto (${mazoElegido.toUpperCase()})! Entra aquí: ${encodeURIComponent(enlace)}`;
-      document.getElementById('textoCarta').innerText = "Mándale el WhatsApp a tu amigo y espera a que entre.";
+      actualizarCartaAnimada("Mándale el WhatsApp a tu amigo y espera a que entre.");
       miTurno = false;
     }
 
     socket.on('oponente_unido', () => {
       document.getElementById('zonaInvitacion').classList.add('oculto');
-      document.getElementById('textoCarta').innerText = "¡Tu amigo se ha conectado! Te toca empezar:";
+      actualizarCartaAnimada("¡Tu amigo se ha conectado! Te toca empezar:");
       document.getElementById('controlesJuego').classList.remove('oculto'); 
       miTurno = true;
     });
@@ -423,11 +457,11 @@
       document.getElementById('controlesJuego').classList.add('oculto');
 
       if (tipo === 'verdad') {
-        document.getElementById('textoCarta').innerText = `Te ha tocado VERDAD:\n\n"${carta}"\n\n(Responde abajo)`;
+        actualizarCartaAnimada(`Te ha tocado VERDAD:\n\n"${carta}"\n\n(Responde abajo)`);
         document.getElementById('seccionRespuesta').classList.remove('oculto');
         iniciarTemporizador();
       } else {
-        document.getElementById('textoCarta').innerText = `Te ha tocado RETO:\n\n"${carta}"\n\n(Sube tu foto de prueba)`;
+        actualizarCartaAnimada(`Te ha tocado RETO:\n\n"${carta}"\n\n(Sube tu foto de prueba)`);
         document.getElementById('seccionPrueba').classList.remove('oculto');
         iniciarTemporizador();
       }
@@ -446,9 +480,9 @@
       miTurno = false;
 
       if (datos.tipo === 'verdad') {
-        document.getElementById('textoCarta').innerText = `Tu oponente eligió VERDAD:\n\n"${datos.textoCarta}"\n\n(Esperando su respuesta...)`;
+        actualizarCartaAnimada(`Tu oponente eligió VERDAD:\n\n"${datos.textoCarta}"\n\n(Esperando su respuesta...)`);
       } else {
-        document.getElementById('textoCarta').innerText = `Tu oponente eligió RETO:\n\n"${datos.textoCarta}"\n\n(Esperando su foto de prueba...)`;
+        actualizarCartaAnimada(`Tu oponente eligió RETO:\n\n"${datos.textoCarta}"\n\n(Esperando su foto de prueba...)`);
       }
     });
 
@@ -459,7 +493,7 @@
       detenerTemporizador();
       socket.emit('parar_escribir', miSala);
 
-      document.getElementById('textoCarta').innerText = `Tu respuesta: "${respuesta}"\n\n¡Enviado! Esperando al oponente...`;
+      actualizarCartaAnimada(`Tu respuesta: "${respuesta}"\n\n¡Enviado! Esperando al oponente...`);
       document.getElementById('seccionRespuesta').classList.add('oculto');
       document.getElementById('inputRespuesta').value = '';
       miTurno = false;
@@ -467,13 +501,9 @@
       socket.emit('enviar_respuesta', { sala: miSala, respuesta: respuesta, pregunta: ultimaCartaJugada });
     }
 
-    // AHORA TAMBIÉN MOSTRAMOS LA BARRA DE REACCIONES AL RECIBIR LA RESPUESTA DE TEXTO
     socket.on('recibir_respuesta', (data) => {
-      document.getElementById('textoCarta').innerText = `Pregunta:\n"${data.pregunta}"\n\nRespuesta del oponente:\n"${data.respuesta}"\n\n¡Te toca jugar a ti!`;
-      
-      // Mostrar la barra de reacciones para que puedas reaccionar a su respuesta
+      actualizarCartaAnimada(`Pregunta:\n"${data.pregunta}"\n\nRespuesta del oponente:\n"${data.respuesta}"\n\n¡Te toca jugar a ti!`);
       document.getElementById('barraReacciones').classList.remove('oculto');
-      
       document.getElementById('controlesJuego').classList.remove('oculto');
       miTurno = true;
     });
@@ -487,7 +517,7 @@
           const fotoBase64 = e.target.result;
           document.getElementById('imagenPrueba').src = fotoBase64;
           document.getElementById('imagenPrueba').style.display = 'block';
-          document.getElementById('textoCarta').innerText = "¡Foto enviada! Esperando al oponente...";
+          actualizarCartaAnimada("¡Foto enviada! Esperando al oponente...");
           document.getElementById('seccionPrueba').classList.add('oculto');
           miTurno = false;
 
@@ -498,12 +528,10 @@
     }
 
     socket.on('recibir_foto', (fotoBase64) => {
-      document.getElementById('textoCarta').innerText = "¡El oponente ha enviado la foto de prueba!\n\n¡Te toca jugar a ti!";
+      actualizarCartaAnimada("¡El oponente ha enviado la foto de prueba!\n\n¡Te toca jugar a ti!");
       document.getElementById('imagenPrueba').src = fotoBase64;
       document.getElementById('imagenPrueba').style.display = 'block';
-      
       document.getElementById('barraReacciones').classList.remove('oculto');
-      
       document.getElementById('controlesJuego').classList.remove('oculto');
       miTurno = true;
     });
