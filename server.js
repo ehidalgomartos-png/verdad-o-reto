@@ -24,7 +24,6 @@ io.on('connection', (socket) => {
     jugadoresBuscando = jugadoresBuscando.filter(j => j.id !== socket.id);
     jugadoresBuscando.push({ id: socket.id, nombre: socket.nombre, mazo: socket.mazo });
     
-    // Solo mostramos en el lobby a los que tengan el mismo mazo seleccionado
     actualizarLobbyGlobal();
   });
 
@@ -62,7 +61,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('enviar_respuesta', (datos) => {
-    socket.to(datos.sala).emit('recibir_respuesta', datos.respuesta);
+    socket.to(datos.sala).emit('recibir_respuesta', { respuesta: datos.respuesta, pregunta: datos.pregunta });
   });
 
   socket.on('enviar_foto', (datos) => {
