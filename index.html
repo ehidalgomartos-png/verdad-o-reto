@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>V/R - Verdad o Reto</title>
   <style>
+    /* FONDO MEJORADO CON LUCES SUTILES */
     body { 
       margin: 0; 
       background-color: #0b0b0b; 
@@ -17,12 +18,14 @@
       overflow-x: hidden;
     }
     
+    /* DECORACIONES ARRIBA Y ABAJO */
     .adorno-top { position: absolute; top: 5vh; text-align: center; width: 100%; z-index: -1; animation: pulseGlow 4s infinite alternate; }
     .adorno-top h2 { margin: 0; font-size: 26px; font-weight: 900; letter-spacing: 10px; background: linear-gradient(90deg, #FF005C, #00C2FF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-transform: uppercase; opacity: 0.9; }
     .adorno-bottom { position: absolute; bottom: 4vh; text-align: center; width: 100%; font-size: 11px; color: #555; letter-spacing: 3px; text-transform: uppercase; z-index: -1; font-weight: bold; }
     .adorno-bottom span { color: #FF005C; font-size: 14px; }
     @keyframes pulseGlow { 0% { filter: drop-shadow(0 0 5px rgba(255,0,92,0.2)); } 100% { filter: drop-shadow(0 0 15px rgba(0,194,255,0.5)); } }
 
+    /* ESTILOS DE LA APP */
     .oculto { display: none !important; }
     .pantalla { background-color: #121212; padding: 25px; border-radius: 24px; width: 90%; max-width: 400px; box-shadow: 0 0 40px rgba(0,0,0,0.9); border: 1px solid #222; box-sizing: border-box; text-align: center; }
     .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; font-weight: bold; font-size: 18px; color: #fff; }
@@ -52,12 +55,28 @@
     button.btn-principal, a.btn-whatsapp { display: block; width: 100%; background-color: #FF005C; color: white; border: none; padding: 15px; font-size: 16px; font-weight: 900; border-radius: 30px; cursor: pointer; text-transform: uppercase; margin-top: 10px; text-decoration: none; box-sizing: border-box; text-align: center; }
     a.btn-whatsapp { background-color: #25D366; }
 
+    /* TARJETA DE JUEGO Y ANIMACIÓN 3D FLIP */
     .tarjeta-reto { 
-      background-color: #1a1a1a; border: 2px solid #FF005C; padding: 20px; border-radius: 16px; margin-bottom: 15px; min-height: 90px; display: flex; align-items: center; justify-content: center; flex-direction: column; position: relative;
-      transform-style: preserve-3d; transition: transform 0.4s ease-in-out, opacity 0.4s ease-in-out;
+      background-color: #1a1a1a; 
+      border: 2px solid #FF005C; 
+      padding: 20px; 
+      border-radius: 16px; 
+      margin-bottom: 15px; 
+      min-height: 90px; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      flex-direction: column; 
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.4s ease-in-out, opacity 0.4s ease-in-out;
     }
     .tarjeta-reto p { font-size: 16px; font-weight: bold; margin: 0; line-height: 1.4; text-align: center; white-space: pre-wrap; }
-    .animar-flip { transform: rotateY(90deg) scale(0.9); opacity: 0.2; }
+    
+    .animar-flip {
+      transform: rotateY(90deg) scale(0.9);
+      opacity: 0.2;
+    }
 
     .botones-juego { display: flex; gap: 10px; margin-bottom: 15px; }
     .btn-verdad { flex: 1; background-color: #00C2FF; color: #000; border: none; padding: 15px; font-weight: 900; border-radius: 14px; cursor: pointer; font-size: 15px; text-transform: uppercase; }
@@ -65,6 +84,7 @@
     .foto-upload { background-color: #1a1a1a; border: 2px dashed #00C2FF; padding: 15px; border-radius: 12px; cursor: pointer; color: #00C2FF; font-weight: bold; margin-bottom: 10px; transition: 0.2s; }
     .foto-upload:hover { background-color: #222; }
 
+    /* ESTILOS DE JUGABILIDAD */
     .temporizador { background: #FF005C; color: #FFF; padding: 5px 15px; border-radius: 20px; font-weight: 900; font-size: 16px; margin: 0 auto 15px auto; width: fit-content; box-shadow: 0 0 10px rgba(255,0,92,0.5); }
     .temporizador.urgente { background: transparent; color: #FF005C; border: 2px solid #FF005C; animation: latido 0.5s infinite alternate; }
     @keyframes latido { 0% { transform: scale(1); } 100% { transform: scale(1.1); box-shadow: 0 0 20px rgba(255,0,92,0.8); } }
@@ -78,17 +98,17 @@
     
     .reaccion-flotante { position: absolute; font-size: 60px; z-index: 10; animation: flotarArriba 1.5s ease-out forwards; pointer-events: none; text-shadow: 0 0 20px rgba(0,0,0,0.8); }
     @keyframes flotarArriba { 0% { transform: translateY(0) scale(1); opacity: 1; } 100% { transform: translateY(-120px) scale(1.5); opacity: 0; } }
-
-    /* ESTILOS DE LA TARJETA WRAPPED / RESUMEN */
-    .wrapped-card { background: linear-gradient(135deg, #1a1a1a 0%, #121212 100%); border: 2px solid #00C2FF; border-radius: 20px; padding: 20px; margin-bottom: 20px; text-align: left; box-shadow: 0 0 25px rgba(0,194,255,0.2); }
-    .wrapped-stat { display: flex; justify-content: space-between; margin: 12px 0; font-size: 15px; border-bottom: 1px solid #222; padding-bottom: 8px; }
-    .wrapped-stat span:last-child { font-weight: 900; color: #FF005C; }
   </style>
 </head>
 <body>
 
-  <div class="adorno-top"><h2>VERDAD O RETO</h2></div>
-  <div class="adorno-bottom">V 1.0 • Juega bajo tu propio riesgo <span>🔥</span></div>
+  <!-- ELEMENTOS DECORATIVOS DE FONDO -->
+  <div class="adorno-top">
+    <h2>VERDAD O RETO</h2>
+  </div>
+  <div class="adorno-bottom">
+    V 1.0 • Juega bajo tu propio riesgo <span>🔥</span>
+  </div>
 
   <!-- 1. PERFIL -->
   <div id="pantallaPerfil" class="pantalla">
@@ -152,7 +172,7 @@
 
   <!-- 5. MESA DE JUEGO -->
   <div id="pantallaJuego" class="pantalla oculto">
-    <div class="app-header"><span onclick="irAResumen()" style="cursor:pointer; color:#FF005C;">📊 Resumen</span><span id="nombreMazoActivo">SALA</span><span></span></div>
+    <div class="app-header"><span onclick="abandonarPartida()" style="cursor:pointer; color:#FF005C;">🚪 Abandonar</span><span id="nombreMazoActivo">SALA</span><span></span></div>
     
     <div id="cajaTemporizador" class="temporizador oculto">⏱ <span id="textoTemporizador">60</span>s</div>
 
@@ -190,22 +210,6 @@
     </div>
   </div>
 
-  <!-- 6. PANTALLA RESUMEN EPICO (WRAPPED) -->
-  <div id="pantallaResumen" class="pantalla oculto">
-    <div class="app-header"><span></span><span>WRAPPED</span><span>✨</span></div>
-    <h1>Resumen Épico</h1>
-    <p class="subtitulo" id="tituloVibra">Vuestra sesión en datos</p>
-    
-    <div class="wrapped-card">
-      <div class="wrapped-stat"><span>💬 Verdades respondidas:</span> <span id="statVerdades">0</span></div>
-      <div class="wrapped-stat"><span>⚡ Retos elegidos:</span> <span id="statRetos">0</span></div>
-      <div class="wrapped-stat"><span>📸 Fotos de prueba:</span> <span id="statFotos">0</span></div>
-      <div class="wrapped-stat"><span>🔥 Reacciones enviadas:</span> <span id="statReacciones">0</span></div>
-    </div>
-
-    <button class="btn-principal" onclick="volverMenu()">Jugar otra vez</button>
-  </div>
-
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
@@ -219,26 +223,153 @@
     let tiempoRestante = 60;
     let timeoutEscribiendo;
 
-    // OBJETO DE ESTADÍSTICAS (WRAPPED)
-    let statsPartida = {
-      verdades: 0,
-      retos: 0,
-      fotos: 0,
-      reacciones: 0
-    };
-
+    // BASE DE DATOS MASIVA (CON SECCIÓN XX AMPLIADA A +50 CADA UNA Y PROGRESIÓN HOT)
     const baseDeDatos = {
       rompehielos: {
-        verdades: [ "¿Cuál es tu talento más inútil?", "¿Qué es lo más vergonzoso que has buscado en Google este mes?", "¿Alguna vez has fingido una llamada para escapar de una conversación aburrida?", "Si pudieras cambiar tu nombre, ¿cuál elegirías?", "¿Cuál ha sido la peor mentira que has contado a tus padres?", "¿Qué dibujo animado de tu infancia te gustaba en secreto?", "¿Cuál es el hábito más raro que tienes cuando estás solo en casa?", "Si fueras un mueble de tu casa, ¿cuál serías y por qué?", "¿Qué es lo más ridículo que te ha pasado en público?", "¿Alguna vez te has quedado dormido en el baño del trabajo o de clase?" ],
-        retos: [ "Ponte un calcetín en la oreja y hazte un selfie.", "Saca una foto imitando tu emoji favorito.", "Manda una foto haciendo una mueca exagerada con la cara.", "Hazte una foto sosteniendo un objeto extraño como si fuera un trofeo.", "Saca una foto haciendo equilibrio con un bolígrafo en la punta de la nariz." ]
+        verdades: [
+          "¿Cuál es tu talento más inútil?",
+          "¿Qué es lo más vergonzoso que has buscado en Google este mes?",
+          "¿Alguna vez has fingido una llamada para escapar de una conversación aburrida?",
+          "Si pudieras cambiar tu nombre, ¿cuál elegirías?",
+          "¿Cuál ha sido la peor mentira que has contado a tus padres?"
+        ],
+        retos: [
+          "Ponte un calcetín en la oreja y hazte un selfie.",
+          "Saca una foto imitando tu emoji favorito.",
+          "Manda una foto haciendo una mueca exagerada con la cara.",
+          "Hazte una foto sosteniendo un objeto extraño como si fuera un trofeo.",
+          "Saca una foto haciendo equilibrio con un bolígrafo en la punta de la nariz."
+        ]
       },
       parejas: {
-        verdades: [ "¿Qué fue exactamente lo primero que pensaste la primera vez que me viste?", "¿Cuál ha sido nuestro mejor momento juntos hasta ahora?", "¿Qué manía mía te parece más tierna aunque no lo digas?", "¿Cuál era tu recuerdo favorito de los dos?", "Si pudieras elegir un lugar del mundo para una escapada romántica secreta, ¿cuál sería?", "¿Qué canción te recuerda inmediatamente a mí?", "¿Qué detalle pequeño que hago por ti te hace más feliz?", "¿Cuál fue tu primera impresión sobre mi forma de vestir?", "Si tuvieras que definir nuestra relación en tres palabras, ¿cuáles serían?", "¿Qué te hizo darte cuenta de que sentías algo especial por mí?" ],
-        retos: [ "Manda una foto soplando un beso de la manera más romántica posible.", "Hazte una foto haciendo forma de corazón con las manos cerca de tu cara.", "Saca una foto guiñando un ojo de forma muy tierna.", "Manda una foto sonriendo con los ojos cerrados pensando en un buen momento.", "Hazte una foto haciendo un gesto de 'te quiero' con los dedos." ]
+        verdades: [
+          "¿Qué fue exactamente lo primero que pensaste la primera vez que me viste?",
+          "¿Cuál ha sido nuestro mejor momento juntos hasta ahora?",
+          "¿Qué manía mía te parece más tierna aunque no lo digas?",
+          "¿Cuál es tu recuerdo favorito de los dos?",
+          "Si pudieras elegir un lugar del mundo para una escapada romántica secreta, ¿cuál sería?"
+        ],
+        retos: [
+          "Manda una foto soplando un beso de la manera más romántica posible.",
+          "Hazte una foto haciendo forma de corazón con las manos cerca de tu cara.",
+          "Saca una foto guiñando un ojo de forma muy tierna.",
+          "Manda una foto sonriendo con los ojos cerrados pensando en un buen momento.",
+          "Hazte una foto haciendo un gesto de 'te quiero' con los dedos."
+        ]
       },
       seccionXX: {
-        verdades: [ "¿Cuál es tu fantasía sexual más oscura y prohibida que aún no has cumplido?", "¿En qué lugar más loco, inesperado o público has tenido relaciones?", "¿Cuál es tu zona del cuerpo más sensible al tacto?", "¿Qué es lo más atrevido que harías por una noche inolvidable?", "¿Prefieres la luz totalmente encendida, penumbra o a oscuras en la intimidad?", "¿Alguna vez has tenido un sueño erótico con alguien totalmente inesperado?", "¿Cuál es tu prenda de ropa interior favorita o la que más te excita ver?", "¿Qué juego previo o preliminar consideras imprescindible?", "Si pudieras cumplir una fantasía hoy mismo sin restricciones, ¿cuál sería?", "¿Qué juguete o accesorio te gustaría probar en la intimidad?" ],
-        retos: [ "Sácate una foto mostrando tus labios mordidos de forma sugerente y cercana.", "Hazte una foto levantando ligeramente tu camiseta o marcando tu zona favorita con estilo.", "Manda una foto con una mirada penetrante y seductora a la cámara.", "Saca una foto enseñando la parte de atrás de tu cuello de forma muy sugerente.", "Hazte una foto con una postura totalmente nocturna y provocativa." ]
+        verdades: [
+          // Nivel 1: Tensión y Coqueteo inicial (1-15)
+          "¿Qué fue lo primero que te atrajo físicamente de mí la primera vez que nos vimos?",
+          "¿Cuál es el recuerdo más travieso o picante que tienes de nosotros?",
+          "Si tuvieras que elegir una sola parte de mi cuerpo para besar durante una hora, ¿cuál sería?",
+          "¿Qué palabra o susurro al oído es capaz de encenderte al instante?",
+          "¿Cuál es el mensaje de texto más atrevido que te gustaría recibir ahora mismo?",
+          "¿Alguna vez has pensado en mí mientras estabas a solas? ¿Cuándo fue la última vez?",
+          "¿Qué tipo de ropa o estilo mío hace que pierdas la concentración por completo?",
+          "¿Cuál es el cumplido más sugerente que te han dicho o que te gustaría que te dijera?",
+          "¿Te consideras una persona dominante o sumisa cuando hay química real?",
+          "¿Cuál es tu mayor debilidad cuando alguien te flirtea abiertamente?",
+          "¿Qué olor corporal, perfume o loción te resulta completamente irresistible?",
+          "¿Te excita más la provocación visual, las palabras sucias o el contacto físico directo?",
+          "¿Alguna vez has comprado algo específicamente pensando en usarlo en la cama?",
+          "¿Qué parte de tu propio cuerpo te gusta más mostrar o te parece más atractiva?",
+          "¿Prefieres tomar la iniciativa por completo o que te sorprendan sin avisar?",
+
+          // Nivel 2: Deseo y Fantasías moderadas (16-35)
+          "¿En qué lugar más loco, inesperado o público te gustaría tener relaciones conmigo?",
+          "¿Cuál es tu zona del cuerpo más sensible al tacto que casi nadie conoce?",
+          "¿Prefieres la luz totalmente encendida, penumbra o a oscuras en la intimidad?",
+          "¿Qué prenda de ropa interior o accesorio crees que me queda mejor (o te excita ver)?",
+          "¿Alguna vez has tenido un sueño erótico conmigo y qué pasó en él?",
+          "¿Qué tan ruidoso/a sueles ser cuando estás disfrutando al máximo de la intimidad?",
+          "¿Alguna vez has fingido que estabas cansado/a para evitar algo, o al revés, has fingido energía?",
+          "¿Qué opinas de los masajes con aceites calientes y hasta dónde dejarías que lleguen?",
+          "¿Te causa curiosidad probar juguetes eróticos avanzados o prefieres lo tradicional?",
+          "¿Cuál ha sido tu mayor locura por culpa del deseo acumulado?",
+          "¿Alguna vez has grabado o te han grabado en una situación íntima sin que se entere nadie más?",
+          "¿Qué parte de tu cuerpo te excita más que te muerdan o te toquen con fuerza?",
+          "¿Te atreverías a salir a la calle o a un balcón sin ropa interior si te lo pido ahora?",
+          "Si tuvieras que describir tu nivel de apetito en este momento del 1 al 10, ¿cuál darías?",
+          "¿Has deseado alguna vez a dos personas al mismo tiempo en una situación de trío?",
+          "¿Qué es lo más guarro o explícito que te gustaría que te dijera al oído ahora mismo?",
+          "¿Te excita la idea de ser observado/a o existe algún riesgo de que nos descubran?",
+          "¿Cuál es tu postura favorita y por qué te hace perder la cabeza?",
+          "¿Te gusta marcar la piel (con marcas o chupones) o prefieres que no se note nada al día siguiente?",
+          "Si tuvieras total libertad para desnudarme pieza por pieza, ¿por dónde empezarías?",
+
+          // Nivel 3: Subidas de tono y Desinhibición total (36-50)
+          "¿Cuál es tu fantasía sexual más oscura y prohibida que aún no te has atrevido a cumplir?",
+          "Si pudieras atarme a la cama y hacerme lo que quisieras durante una hora, ¿cómo empezarías?",
+          "¿Qué juego de roles, disfraces o situaciones de dominación te gustaría probar en secreto?",
+          "¿Te atreverías a dejarme tomar el control absoluto y vendarte los ojos esta noche?",
+          "¿Qué es lo más salvaje, prohibido o extremo que has hecho en la intimidad con alguien?",
+          "¿Alguna vez has tenido experiencias con personas del mismo sexo o te genera curiosidad?",
+          "¿Qué límite físico o mental te costaría mucho cruzar, o te atreves a todo?",
+          "¿Qué sensación experimentas cuando te miran fijamente a los labios mientras hablas?",
+          "¿Te excita la idea de hacer videollamadas subidas de tono cuando estamos separados?",
+          "¿Cuál es la prenda de ropa que más te excita quitarme o que te quiten lentamente?",
+          "¿Alguna vez has usado comida (nata, chocolate, hielo) en la intimidad? ¿Cómo fue?",
+          "¿Qué tan importante es para ti el contacto visual durante los momentos más intensos?",
+          "¿Te excita que te hablen con autoridad y te den órdenes estrictas?",
+          "Si pudieras elegir exactamente qué hacer en una noche entera sin reglas, ¿cuál sería el plan?",
+          "¿Estás dispuesto/a a cumplir los retos más extremos y visuales que vienen a continuación sin censura?"
+        ],
+        retos: [
+          // Nivel 1 y 2: Miradas, labios, cuello y cercanía (1-25)
+          "Sácate una foto mostrando tus labios mordidos de forma sugerente y cercana.",
+          "Manda una foto con una mirada penetrante, fija y muy seductora a la cámara.",
+          "Hazte una foto levantando ligeramente tu camiseta o marcando tu silueta con estilo.",
+          "Saca una foto enfocando únicamente a tu boca con una sonrisa misteriosa y los labios húmedos.",
+          "Manda una foto reclinado/a hacia atrás con la cabeza ladeada y expresión de deseo.",
+          "Sácate una foto mostrando parte de tu clavícula y la base del cuello de cerca.",
+          "Manda una foto con los ojos medio cerrados y una expresión de relax absoluto.",
+          "Hazte una foto haciendo una mueca traviesa con la lengua ligeramente fuera.",
+          "Saca una foto mostrando tu perfil con la mandíbula marcada y una sonrisa pícara.",
+          "Manda una foto apoyando tu mano en tu propia barbilla con una mirada muy fija.",
+          "Sácate una foto enseñando un trozo de tu abdomen o cintura con la ropa un poco abierta.",
+          "Manda una foto enfocando de cerca la parte de atrás de tu cuello y nuca.",
+          "Hazte una foto con una postura nocturna, arqueando ligeramente la espalda.",
+          "Saca una foto mostrando parte de tus piernas o muslos con la iluminación tenue.",
+          "Manda una foto con una prenda ajustada que marque bien tu figura.",
+          "Sácate una foto abriéndote un botón más de la camisa o blusa de lo habitual.",
+          "Manda una foto pasando tus dedos suavemente por tus propios labios.",
+          "Hazte una foto estirando los brazos hacia arriba para marcar el torso por completo.",
+          "Saca una foto con una sombra muy oscura y una expresión desafiante y prohibida.",
+          "Manda una foto mordiendo la esquina de una almohada o sábana con intensidad.",
+          "Sácate una foto mostrando la parte alta de tu pecho o escote de forma sugerente.",
+          "Manda una foto recostado/a boca abajo mirando de lado hacia la cámara.",
+          "Hazte una foto acariciando tu propio brazo como si fuera la mano de otra persona.",
+          "Saca una foto mostrando tus hombros descubiertos y la piel iluminada de cerca.",
+          "Manda una foto con una prenda interior o bañador que tengas a mano (estilo avance).",
+
+          // Nivel 3: Exposición de partes del cuerpo y poses extremas (26-50)
+          "Sácate una foto haciendo una pose frontal muy seria pero con una mirada de puro deseo.",
+          "Manda una foto soplando hacia la cámara con los labios en forma de beso prolongado.",
+          "Hazte una foto con el pelo mojado o despeinado de forma intencionadamente sexy.",
+          "Saca una foto enfocando de cerca la línea de tu mandíbula y cuello tensado.",
+          "Manda una foto levantando el borde de la camiseta lo suficiente para ver tu ombligo.",
+          "Sácate una foto mostrando tus piernas cruzadas o estiradas de forma muy elegante y provocativa.",
+          "Manda una foto con una prenda de encaje o textura fina si tienes alguna cerca.",
+          "Hazte una foto presionando levemente tus dedos contra tu propio pecho o clavícula.",
+          "Saca una foto de espaldas mirando de reojo por encima del hombro hacia la cámara.",
+          "Manda una foto con la luz completamente apagada usando solo el flash del móvil para iluminar tu rostro y labios.",
+          "Sácate una foto mostrando una zona de tu piel (brazo, pierna o espalda) con un poco de brillo o aceite/crema.",
+          "Manda una foto haciendo una pose de modelo de lencería o ropa interior totalmente desinhibida.",
+          "Hazte una foto bajando los tirantes o abriendo la ropa de los hombros hacia los brazos.",
+          "Saca una foto mostrando la zona lateral de tu cadera o cintura con la ropa interior asomando sutilmente.",
+          "Manda una foto con el torso completamente descubierto (si eres chico) o mostrando un bikini/sujetador (si eres chica/o) de forma artística.",
+          "Sácate una foto de cuerpo entero frente al espejo en una postura sugerente y oscura.",
+          "Manda una foto enfocando de cerca tus labios pintados o naturales con una gota de agua o brillo.",
+          "Hazte una foto tumbado/a boca arriba con una postura totalmente abierta y relajada.",
+          "Saca una foto mostrando una parte de tu cuerpo que consideres tu favorita absoluta sin censura visual directa.",
+          "Manda una foto con una prenda semitransparente o translúcida si dispones de ella.",
+          "Sácate una foto haciendo un primer plano de tu espalda arqueada contra la pared o la cama.",
+          "Manda una foto mostrando la parte superior de tus muslos con la ropa interior o shorts muy cortos.",
+          "Hazte una foto desabrochando completamente tu camisa o blusa (mostrando el pecho con estilo fotográfico).",
+          "Saca una foto en la ducha o recién salido/a de ella con vapor en el espejo o la piel mojada (mantenlo sugerente y artístico).",
+          "Manda la foto más atrevida, explícita y sin complejos que te atrevas a hacer en este preciso instante."
+        ]
       }
     };
 
@@ -270,7 +401,11 @@
       intervaloTimer = setInterval(() => {
         tiempoRestante--;
         document.getElementById('textoTemporizador').innerText = tiempoRestante;
-        if (tiempoRestante <= 10) { document.getElementById('cajaTemporizador').classList.add('urgente'); }
+        
+        if (tiempoRestante <= 10) {
+          document.getElementById('cajaTemporizador').classList.add('urgente');
+        }
+        
         if (tiempoRestante <= 0) {
           detenerTemporizador();
           alert("¡TIEMPO AGOTADO! ⏰ Te has quedado sin tiempo.");
@@ -286,31 +421,44 @@
     document.getElementById('inputRespuesta').addEventListener('input', () => {
       socket.emit('escribiendo', miSala);
       clearTimeout(timeoutEscribiendo);
-      timeoutEscribiendo = setTimeout(() => { socket.emit('parar_escribir', miSala); }, 1500);
+      timeoutEscribiendo = setTimeout(() => {
+        socket.emit('parar_escribir', miSala);
+      }, 1500);
     });
 
-    socket.on('mostrar_escribiendo', () => { document.getElementById('indicadorEscribiendo').classList.remove('oculto'); });
-    socket.on('ocultar_escribiendo', () => { document.getElementById('indicadorEscribiendo').classList.add('oculto'); });
+    socket.on('mostrar_escribiendo', () => {
+      document.getElementById('indicadorEscribiendo').classList.remove('oculto');
+    });
+
+    socket.on('ocultar_escribiendo', () => {
+      document.getElementById('indicadorEscribiendo').classList.add('oculto');
+    });
 
     function enviarReaccion(emoji) {
-      statsPartida.reacciones++;
       socket.emit('enviar_reaccion', { sala: miSala, emoji: emoji });
       document.getElementById('barraReacciones').classList.add('oculto');
       mostrarEmojiAnimado(emoji);
     }
 
-    socket.on('recibir_reaccion', (emoji) => { mostrarEmojiAnimado(emoji); });
+    socket.on('recibir_reaccion', (emoji) => {
+      mostrarEmojiAnimado(emoji);
+    });
 
     function mostrarEmojiAnimado(emoji) {
       const contenedor = document.getElementById('contenedorTarjetaJuego');
       const divReaccion = document.createElement('div');
       divReaccion.className = 'reaccion-flotante';
       divReaccion.innerText = emoji;
+      
       const leftAleatorio = Math.floor(Math.random() * 60) + 20; 
       divReaccion.style.left = leftAleatorio + '%';
       divReaccion.style.bottom = '20px';
+
       contenedor.appendChild(divReaccion);
-      setTimeout(() => { divReaccion.remove(); }, 1500);
+
+      setTimeout(() => {
+        divReaccion.remove();
+      }, 1500);
     }
 
     document.getElementById('formularioPerfil').addEventListener('submit', (e) => {
@@ -335,31 +483,11 @@
     function irAMazos() { document.getElementById('pantallaMenu').classList.add('oculto'); document.getElementById('pantallaMazos').classList.remove('oculto'); }
     function irAMenu() { document.getElementById('pantallaLobby').classList.add('oculto'); document.getElementById('pantallaMenu').classList.remove('oculto'); }
     function seleccionarMazo(mazo) { mazoElegido = mazo; document.getElementById('pantallaMazos').classList.add('oculto'); document.getElementById('pantallaMenu').classList.remove('oculto'); }
-    
-    // IR A PANTALLA RESUMEN WRAPPED
-    function irAResumen() {
-      detenerTemporizador();
-      if (miSala) { socket.emit('abandonar_partida', miSala); }
-      
-      document.getElementById('pantallaJuego').classList.add('oculto');
-      document.getElementById('pantallaResumen').classList.remove('oculto');
-      
-      // Rellenar estadísticas
-      document.getElementById('statVerdades').innerText = statsPartida.verdades;
-      document.getElementById('statRetos').innerText = statsPartida.retos;
-      document.getElementById('statFotos').innerText = statsPartida.fotos;
-      document.getElementById('statReacciones').innerText = statsPartida.reacciones;
-
-      // Dinámica de título según mazo y uso
-      let vibeText = "¡Partida legendaria!";
-      if (mazoElegido === 'seccionXX') vibeText = "🔥 Nivel de picardía: Extremo";
-      else if (mazoElegido === 'parejas') vibeText = "❤️ Conexión profunda";
-      document.getElementById('tituloVibra').innerText = vibeText;
-    }
+    function abandonarPartida() { if (miSala) { socket.emit('abandonar_partida', miSala); } location.href = window.location.pathname; }
 
     socket.on('oponente_abandono', () => {
       alert("⚠️ Tu oponente ha abandonado el juego.");
-      irAResumen();
+      location.href = window.location.pathname;
     });
 
     function entrarLobbyDescubrir() {
@@ -451,10 +579,6 @@
       document.getElementById('imagenPrueba').style.display = 'none';
       document.getElementById('barraReacciones').classList.add('oculto');
       
-      // SUMAR ESTADÍSTICA LOCAL
-      if (tipo === 'verdad') statsPartida.verdades++;
-      else statsPartida.retos++;
-
       const carta = obtenerCartaSinRepetir(tipo);
       ultimaCartaJugada = carta;
       document.getElementById('controlesJuego').classList.add('oculto');
@@ -516,7 +640,6 @@
         const reader = new FileReader();
         reader.onload = function (e) {
           detenerTemporizador();
-          statsPartida.fotos++; // SUMAR CONTADOR DE FOTOS
 
           const fotoBase64 = e.target.result;
           document.getElementById('imagenPrueba').src = fotoBase64;
