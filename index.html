@@ -145,19 +145,78 @@
     let nombreJugador = '';
     let ultimaCartaJugada = '';
 
+    // Repositorio masivo de preguntas y retos específicos por mazo
     const baseDeDatos = {
       rompehielos: {
-        verdades: ["¿Cuál es tu talento más inútil?", "¿Qué es lo más vergonzoso que has buscado en Google?", "¿Alguna vez has fingido una llamada para escapar?"],
-        retos: ["Ponte un calcetín en la oreja y hazte un selfie.", "Saca una foto imitando tu emoji favorito."]
+        verdades: [
+          "¿Cuál es tu talento más inútil?",
+          "¿Qué es lo más vergonzoso que has buscado en Google este mes?",
+          "¿Alguna vez has fingido una llamada para escapar de una conversación aburrida?",
+          "Si pudieras cambiar tu nombre, ¿cuál elegirías?",
+          "¿Cuál ha sido la peor mentira que has contado a tus padres?",
+          "¿Qué dibujo animado de tu infancia te gustaba en secreto?",
+          "¿Cuál es el hábito más raro que tienes cuando estás solo en casa?",
+          "Si fueras un mueble de tu casa, ¿cuál serías y por qué?",
+          "¿Qué es lo más ridículo que te ha pasado en público?",
+          "¿Alguna vez te has quedado dormido en el baño del trabajo o de clase?"
+        ],
+        retos: [
+          "Ponte un calcetín en la oreja y hazte un selfie.",
+          "Saca una foto imitando tu emoji favorito.",
+          "Manda una foto haciendo una mueca exagerada con la cara.",
+          "Hazte una foto sosteniendo un objeto extraño como si fuera un trofeo.",
+          "Saca una foto haciendo equilibrio con un bolígrafo en la punta de la nariz."
+        ]
       },
       parejas: {
-        verdades: ["¿Qué fue lo primero que pensaste la primera vez que me viste?", "¿Cuál ha sido nuestro mejor momento juntos?"],
-        retos: ["Manda una foto soplando un beso de la manera más romántica.", "Hazte una foto haciendo forma de corazón con las manos."]
+        verdades: [
+          "¿Qué fue exactamente lo primero que pensaste la primera vez que me viste?",
+          "¿Cuál ha sido nuestro mejor momento juntos hasta ahora?",
+          "¿Qué manía mía te parece más tierna aunque no lo digas?",
+          "¿Cuál es tu recuerdo favorito de los dos?",
+          "Si pudieras elegir un lugar del mundo para una escapada romántica secreta, ¿cuál sería?",
+          "¿Qué canción te recuerda inmediatamente a mí?",
+          "¿Qué detalle pequeño que hago por ti te hace más feliz?",
+          "¿Cuál fue tu primera impresión sobre mi forma de vestir?",
+          "Si tuvieras que definir nuestra relación en tres palabras, ¿cuáles serían?",
+          "¿Qué te hizo darte cuenta de que sentías algo especial por mí?"
+        ],
+        retos: [
+          "Manda una foto soplando un beso de la manera más romántica posible.",
+          "Hazte una foto haciendo forma de corazón con las manos cerca de tu cara.",
+          "Saca una foto guiñando un ojo de forma muy tierna.",
+          "Manda una foto sonriendo con los ojos cerrados pensando en un buen momento.",
+          "Hazte una foto haciendo un gesto de 'te quiero' con los dedos."
+        ]
       },
       seccionXX: {
-        verdades: ["¿Cuál es tu fantasía sexual más oscura y prohibida?", "¿En qué lugar más loco o público has tenido relaciones?"],
-        retos: ["Sácate una foto mostrando tus labios mordidos de forma sugerente.", "Hazte una foto levantando ligeramente tu camiseta o marcando tu zona favorita."]
+        verdades: [
+          "¿Cuál es tu fantasía sexual más oscura y prohibida que aún no has cumplido?",
+          "¿En qué lugar más loco, inesperado o público has tenido relaciones?",
+          "¿Cuál es tu zona del cuerpo más sensible al tacto?",
+          "¿Qué es lo más atrevido que harías por una noche inolvidable?",
+          "¿Prefieres la luz totalmente encendida, penumbra o a oscuras en la intimidad?",
+          "¿Alguna vez has tenido un sueño erótico con alguien totalmente inesperado?",
+          "¿Cuál es tu prenda de ropa interior favorita o la que más te excita ver?",
+          "¿Qué juego previo o preliminar consideras imprescindible?",
+          "Si pudieras cumplir una fantasía hoy mismo sin restricciones, ¿cuál sería?",
+          "¿Qué juguete o accesorio te gustaría probar en la intimidad?"
+        ],
+        retos: [
+          "Sácate una foto mostrando tus labios mordidos de forma sugerente y cercana.",
+          "Hazte una foto levantando ligeramente tu camiseta o marcando tu zona favorita con estilo.",
+          "Manda una foto con una mirada penetrante y seductora a la cámara.",
+          "Saca una foto enseñando la parte de atrás de tu cuello de forma muy sugerente.",
+          "Hazte una foto con una postura totalmente nocturna y provocativa."
+        ]
       }
+    };
+
+    // Almacén temporal para evitar repetir cartas ya sorteadas en la partida
+    let cartasUsadas = {
+      rompehielos: { verdades: [], retos: [] },
+      parejas: { verdades: [], retos: [] },
+      seccionXX: { verdades: [], retos: [] }
     };
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -285,12 +344,31 @@
       miTurno = true;
     });
 
+    // Función para obtener una carta sin repetir hasta agotar el mazo
+    function obtenerCartaSinRepetir(tipo) {
+      const listaOriginal = baseDeDatos[mazoElegido][tipo === 'verdad' ? 'verdades' : 'retos'];
+      let usadas = cartasUsadas[mazoElegido][tipo === 'verdad' ? 'verdades' : 'retos'];
+
+      // Si ya se usaron todas, reiniciamos el historial de este mazo/tipo
+      if (usadas.length >= listaOriginal.length) {
+        cartasUsadas[mazoElegido][tipo === 'verdad' ? 'verdades' : 'retos'] = [];
+        usadas = [];
+      }
+
+      // Filtrar las disponibles que no hayan salido
+      const disponibles = listaOriginal.filter(c => !usadas.includes(c));
+      const cartaElegida = disponibles[Math.floor(Math.random() * disponibles.length)];
+
+      // Registrar como usada
+      cartasUsadas[mazoElegido][tipo === 'verdad' ? 'verdades' : 'retos'].push(cartaElegida);
+      return cartaElegida;
+    }
+
     function jugarCarta(tipo) {
       if (!miTurno) return;
       document.getElementById('imagenPrueba').style.display = 'none';
-      const cartas = baseDeDatos[mazoElegido][tipo === 'verdad' ? 'verdades' : 'retos'];
-      const carta = cartas[Math.floor(Math.random() * cartas.length)];
       
+      const carta = obtenerCartaSinRepetir(tipo);
       ultimaCartaJugada = carta;
       document.getElementById('controlesJuego').classList.add('oculto');
 
