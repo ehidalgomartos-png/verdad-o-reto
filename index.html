@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Verdad o Reto - Salas Privadas</title>
+  <title>Verdad o Reto - Multijugador en Vivo</title>
   <style>
     body { margin: 0; background-color: #0d0d0d; color: #FFF; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
     .oculto { display: none !important; }
@@ -20,7 +20,7 @@
     .mazo-xx { border-color: #550020; }
     
     .tarjeta-reto { background-color: #251018; border: 2px solid #FF005C; padding: 20px; border-radius: 15px; margin-bottom: 25px; min-height: 100px; display: flex; align-items: center; justify-content: center; flex-direction: column; }
-    .tarjeta-reto p { font-size: 18px; font-weight: bold; margin: 0; }
+    .tarjeta-reto p { font-size: 18px; font-weight: bold; margin: 0; line-height: 1.4; }
     
     .botones-juego { display: flex; gap: 10px; margin-bottom: 20px; }
     .btn-verdad { flex: 1; background-color: #00C2FF; color: #000; border: none; padding: 15px; font-weight: 900; border-radius: 15px; cursor: pointer; font-size: 16px; }
@@ -52,24 +52,26 @@
 
   <!-- MESA DE JUEGO -->
   <div id="pantallaJuego" class="pantalla oculto">
-    <h1>⚔️ SALA SECRETA</h1>
+    <h1 id="tituloSala">⚔️ SALA SECRETA</h1>
     
     <div id="zonaInvitacion" class="oculto" style="margin-bottom: 20px;">
       <a href="#" id="btnWhatsApp" class="btn-whatsapp" target="_blank">📱 Invitar por WhatsApp</a>
     </div>
 
     <div class="tarjeta-reto">
-      <p id="textoCarta">Conectando...</p>
+      <p id="textoCarta">Esperando oponente...</p>
       <img id="imagenPrueba" src="" style="max-width: 100%; border-radius: 10px; margin-top: 15px; display: none;">
     </div>
 
+    <!-- Controles para elegir carta (Solo se ven en tu turno) -->
     <div class="botones-juego oculto" id="controlesJuego">
       <button class="btn-verdad" onclick="jugarCarta('verdad')">VERDAD</button>
       <button class="btn-reto" onclick="jugarCarta('reto')">RETO</button>
     </div>
 
+    <!-- Sección para subir la foto si te tocó un reto -->
     <div id="seccionPrueba" class="oculto">
-      <div class="foto-upload" onclick="document.getElementById('inputPrueba').click()">📸 Sube tu foto prueba</div>
+      <div class="foto-upload" onclick="document.getElementById('inputPrueba').click()">📸 Sube tu foto de prueba</div>
       <input type="file" id="inputPrueba" accept="image/*" capture="environment" style="display: none;" onchange="subirFoto(this)">
     </div>
   </div>
@@ -79,19 +81,19 @@
     const socket = io();
     let miSala = '';
     let mazoElegido = 'rompehielos';
+    let miTurno = false;
 
     const baseDeDatos = {
       rompehielos: {
-        verdades: ["¿Talento inútil?", "¿Lo más vergonzoso buscado en Google?"],
-        retos: ["Selfie con cara rara.", "Saca foto de tu techo."]
+        verdades: ["¿Cuál es tu talento más inútil?", "¿Qué es lo más vergonzoso que has buscado en Google?"],
+        retos: ["Ponte un calcetín en la oreja y hazte un selfie.", "Saca una foto de lo que hay debajo de tu cama."]
       },
       seccionXX: {
-        verdades: ["¿Tu fantasía inconfesable?", "¿Mayor locura en una cita?"],
-        retos: ["Besa tu mano y haz foto.", "Foto de tu cara provocativa."]
+        verdades: ["¿Cuál es tu fantasía inconfesable?", "¿Cuál ha sido tu mayor locura en una cita?"],
+        retos: ["Besa tu mano y haz una foto.", "Hazte un selfie poniendo tu cara más provocativa."]
       }
     };
 
-    // ¿Hay código de sala en el enlace?
     const urlParams = new URLSearchParams(window.location.search);
     const salaInvitacion = urlParams.get('sala');
 
@@ -108,7 +110,8 @@
         miSala = salaInvitacion;
         socket.emit('unirse_sala', miSala);
         document.getElementById('pantallaJuego').classList.remove('oculto');
-        document.getElementById('textoCarta').innerText = "¡Te uniste! Esperando que tu amigo empiece...";
+        document.getElementById('textoCarta').innerText = "Te uniste a la sala. Esperando a que el creador mueva ficha...";
+        miTurno = false; // El invitado espera a que empiece el creador
       } else {
         document.getElementById('pantallaMazos').classList.remove('oculto');
       }
@@ -116,7 +119,7 @@
 
     function crearSala(mazo) {
       mazoElegido = mazo;
-      miSala = Math.random().toString(36).substring(2, 9); // Código único aleatorio
+      miSala = Math.random().toString(36).substring(2, 9);
       socket.emit('unirse_sala', miSala);
       
       document.getElementById('pantallaMazos').classList.add('oculto');
@@ -124,53 +127,87 @@
       
       const enlace = `${window.location.origin}/?sala=${miSala}`;
       document.getElementById('zonaInvitacion').classList.remove('oculto');
-      document.getElementById('btnWhatsApp').href = `https://api.whatsapp.com/send?text=¡Te reto al juego! Entra aquí: ${encodeURIComponent(enlace)}`;
+      document.getElementById('btnWhatsApp').href = `https://api.whatsapp.com/send?text=¡Te reto a Verdad o Reto! Entra aquí: ${encodeURIComponent(enlace)}`;
       
-      document.getElementById('textoCarta').innerText = "Mándale el WhatsApp a tu oponente y espera a que entre.";
+      document.getElementById('textoCarta').innerText = "Mándale el enlace de WhatsApp a tu amigo y espera a que entre.";
+      miTurno = false;
     }
 
+    // Cuando el oponente entra a la sala
     socket.on('oponente_unido', () => {
       document.getElementById('zonaInvitacion').classList.add('oculto');
+      document.getElementById('textoCarta').innerText = "¡Tu amigo se ha conectado! Te toca empezar el turno.";
       document.getElementById('controlesJuego').classList.remove('oculto');
-      document.getElementById('textoCarta').innerText = "¡Tu amigo ha entrado! Te toca empezar.";
+      miTurno = true;
     });
 
+    // 1. Jugador selecciona Verdad o Reto
     function jugarCarta(tipo) {
       document.getElementById('imagenPrueba').style.display = 'none';
       const cartas = baseDeDatos[mazoElegido][tipo === 'verdad' ? 'verdades' : 'retos'];
       const carta = cartas[Math.floor(Math.random() * cartas.length)];
       
-      document.getElementById('textoCarta').innerText = `Elegiste ${tipo.toUpperCase()}:\n\n"${carta}"`;
-      if (tipo === 'reto') document.getElementById('seccionPrueba').classList.remove('oculto');
-      else document.getElementById('seccionPrueba').classList.add('oculto');
+      document.getElementById('textoCarta').innerText = `Has elegido ${tipo.toUpperCase()}:\n\n"${carta}"`;
+      document.getElementById('controlesJuego').classList.add('oculto'); // Ocultar botones mientras juegas
 
+      if (tipo === 'reto') {
+        document.getElementById('textoCarta').innerText += "\n\n(Sube tu foto de prueba para continuar)";
+        document.getElementById('seccionPrueba').classList.remove('oculto');
+      } else {
+        // Si es verdad, el turno pasa directamente al oponente
+        miTurno = false;
+      }
+
+      // Enviar la acción al servidor para que el otro la vea
       socket.emit('accion_juego', { sala: miSala, tipo: tipo, textoCarta: carta });
     }
 
+    // 2. El oponente recibe la carta que sacaste
     socket.on('actualizar_mesa', (datos) => {
       document.getElementById('imagenPrueba').style.display = 'none';
       document.getElementById('seccionPrueba').classList.add('oculto');
-      document.getElementById('textoCarta').innerText = `Tu amigo sacó ${datos.tipo.toUpperCase()}:\n\n"${datos.textoCarta}"\n\nEsperando a que cumpla...`;
-      // Habilita tus controles para cuando acabe
-      document.getElementById('controlesJuego').classList.remove('oculto');
+      
+      document.getElementById('textoCarta').innerText = `Tu amigo eligió ${datos.tipo.toUpperCase()}:\n\n"${datos.textoCarta}"\n\n(Esperando su respuesta / foto de prueba...)`;
+      document.getElementById('controlesJuego').classList.add('oculto');
     });
 
+    // 3. Subir foto si te tocó un reto
     function subirFoto(input) {
       if (input.files && input.files[0]) {
         const reader = new FileReader();
         reader.onload = function (e) {
-          socket.emit('enviar_foto', { sala: miSala, fotoBase64: e.target.result });
-          document.getElementById('textoCarta').innerText = "Prueba enviada.";
+          const fotoBase64 = e.target.result;
+          
+          // Mostrar tu propia foto en pantalla
+          document.getElementById('imagenPrueba').src = fotoBase64;
+          document.getElementById('imagenPrueba').style.display = 'block';
+          document.getElementById('textoCarta').innerText = "¡Has enviado tu foto de prueba con éxito! Ahora le toca al oponente.";
           document.getElementById('seccionPrueba').classList.add('oculto');
+
+          // Enviar la foto al oponente
+          socket.emit('enviar_foto', { sala: miSala, fotoBase64: fotoBase64 });
+          
+          // Permitir que el oponente tome el turno
+          setTimeout(() => {
+            document.getElementById('controlesJuego').classList.remove('oculto');
+            document.getElementById('textoCarta').innerText = "¡Turno nuevo! Elige Verdad o Reto:";
+          }, 3000);
         };
         reader.readAsDataURL(input.files[0]);
       }
     }
 
+    // 4. El oponente recibe tu foto de prueba
     socket.on('recibir_foto', (fotoBase64) => {
-      document.getElementById('textoCarta').innerText = "¡Oponente demostró su reto!";
+      document.getElementById('textoCarta').innerText = "¡El oponente ha enviado la foto de prueba!";
       document.getElementById('imagenPrueba').src = fotoBase64;
       document.getElementById('imagenPrueba').style.display = 'block';
+
+      // Ahora te toca jugar a ti
+      setTimeout(() => {
+        document.getElementById('textoCarta').innerText = "¡Es tu turno! Elige tu próxima jugada:";
+        document.getElementById('controlesJuego').classList.remove('oculto');
+      }, 3000);
     });
   </script>
 </body>
