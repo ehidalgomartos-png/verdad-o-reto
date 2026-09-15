@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>V/R - Botón Abandonar</title>
+  <title>V/R - Matchmaking y Mazos</title>
   <style>
     body { margin: 0; background-color: #0d0d0d; color: #FFF; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
     .oculto { display: none !important; }
@@ -181,7 +181,6 @@
       location.href = window.location.pathname;
     }
 
-    // Botón específico para abandonar la partida actual
     function abandonarPartida() {
       if (miSala) {
         socket.emit('abandonar_partida', miSala);
@@ -189,7 +188,6 @@
       location.href = window.location.pathname;
     }
 
-    // Aviso si el oponente abandona
     socket.on('oponente_abandono', () => {
       alert("⚠️ Tu oponente ha abandonado el juego.");
       location.href = window.location.pathname;
@@ -217,14 +215,14 @@
         div.className = 'jugador-item';
         div.innerHTML = `
           <span style="font-weight:bold;">🟢 ${j.nombre}</span>
-          <button class="btn-retar-user" onclick="seleccionarUsuarioARetar('${j.id}')">Retar</button>
+          <button class="btn-retar-user" data-id="${j.id}" onclick="seleccionarUsuarioARetar(this)">Retar</button>
         `;
         contenedor.appendChild(div);
       });
     });
 
-    function seleccionarUsuarioARetar(idOponente) {
-      oponenteSeleccionadoID = idOponente;
+    function seleccionarUsuarioARetar(boton) {
+      oponenteSeleccionadoID = boton.getAttribute('data-id');
       document.getElementById('pantallaLobby').classList.add('oculto');
       document.getElementById('pantallaMazos').classList.remove('oculto');
     }
