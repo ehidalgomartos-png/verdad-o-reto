@@ -2,211 +2,165 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Verdad o Reto - Oficial</title>
+  <title>Verdad o Reto - Salas Privadas</title>
   <style>
-    body {
-      margin: 0; padding: 0; background-color: #0d0d0d; color: #FFF;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      display: flex; justify-content: center; align-items: center; min-height: 100vh;
-    }
+    body { margin: 0; background-color: #0d0d0d; color: #FFF; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
     .oculto { display: none !important; }
-    
-    .pantalla {
-      background-color: #161616; padding: 30px; border-radius: 20px;
-      width: 90%; max-width: 450px; box-shadow: 0 0 30px rgba(0, 194, 255, 0.1);
-      border: 1px solid #333; box-sizing: border-box; text-align: center;
-    }
-    h1 { color: #FFF; margin-bottom: 5px; font-weight: 900; text-transform: uppercase; }
+    .pantalla { background-color: #161616; padding: 30px; border-radius: 20px; width: 90%; max-width: 450px; box-shadow: 0 0 30px rgba(0, 194, 255, 0.1); border: 1px solid #333; box-sizing: border-box; text-align: center; }
+    h1 { color: #FFF; margin-bottom: 5px; font-weight: 900; }
     p.subtitulo { color: #00C2FF; margin-bottom: 25px; font-weight: bold; }
-    
-    input[type="text"] {
-      width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #444;
-      background-color: #222; color: #FFF; font-size: 16px; margin-bottom: 20px; box-sizing: border-box;
-    }
+    input[type="text"] { width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #444; background-color: #222; color: #FFF; font-size: 16px; margin-bottom: 20px; box-sizing: border-box; }
     input:focus { outline: none; border-color: #FF005C; }
-
-    button.btn-principal {
-      width: 100%; background-color: #00C2FF; color: #000; border: none;
-      padding: 15px; font-size: 16px; font-weight: 900; border-radius: 30px;
-      cursor: pointer; text-transform: uppercase; margin-bottom: 10px;
-    }
-
-    /* Tienda de Mazos */
-    .grid-mazos { display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; }
-    .mazo {
-      background-color: #1a1a1a; border-radius: 15px; padding: 15px; text-align: left;
-      border: 2px solid #333; cursor: pointer; transition: all 0.2s; position: relative;
-    }
-    .mazo:hover { border-color: #00C2FF; }
-    .mazo-xx { border-color: #550020; }
-    .mazo-xx:hover { border-color: #FF005C; box-shadow: 0 0 15px rgba(255,0,92,0.4); }
     
-    /* Mesa de Juego */
-    .tarjeta-reto {
-      background-color: #251018; border: 2px solid #FF005C;
-      padding: 20px; border-radius: 15px; margin-bottom: 25px; min-height: 100px;
-      display: flex; align-items: center; justify-content: center; flex-direction: column;
-    }
-    .tarjeta-reto p { color: #FFF; font-size: 18px; font-weight: bold; margin: 0; line-height: 1.4; }
+    button.btn-principal, a.btn-whatsapp { display: block; width: 100%; background-color: #00C2FF; color: #000; border: none; padding: 15px; font-size: 16px; font-weight: 900; border-radius: 30px; cursor: pointer; text-transform: uppercase; margin-bottom: 10px; text-decoration: none; box-sizing: border-box; }
+    a.btn-whatsapp { background-color: #25D366; color: #FFF; }
+    
+    .grid-mazos { display: flex; flex-direction: column; gap: 15px; }
+    .mazo { background-color: #1a1a1a; border-radius: 15px; padding: 15px; text-align: left; border: 2px solid #333; cursor: pointer; }
+    .mazo-xx { border-color: #550020; }
+    
+    .tarjeta-reto { background-color: #251018; border: 2px solid #FF005C; padding: 20px; border-radius: 15px; margin-bottom: 25px; min-height: 100px; display: flex; align-items: center; justify-content: center; flex-direction: column; }
+    .tarjeta-reto p { font-size: 18px; font-weight: bold; margin: 0; }
     
     .botones-juego { display: flex; gap: 10px; margin-bottom: 20px; }
     .btn-verdad { flex: 1; background-color: #00C2FF; color: #000; border: none; padding: 15px; font-weight: 900; border-radius: 15px; cursor: pointer; font-size: 16px; }
     .btn-reto { flex: 1; background-color: #FF005C; color: #FFF; border: none; padding: 15px; font-weight: 900; border-radius: 15px; cursor: pointer; font-size: 16px; }
-
-    .foto-upload {
-      background-color: #222; border: 2px dashed #00C2FF; padding: 20px; text-align: center;
-      border-radius: 10px; cursor: pointer; color: #00C2FF; font-weight: bold;
-    }
+    .foto-upload { background-color: #222; border: 2px dashed #00C2FF; padding: 20px; border-radius: 10px; cursor: pointer; color: #00C2FF; font-weight: bold; }
   </style>
 </head>
 <body>
 
-  <!-- ================= 1. PERFIL ================= -->
+  <!-- PANTALLA PERFIL -->
   <div id="pantallaPerfil" class="pantalla">
-    <h1>CREA TU PERFIL</h1>
+    <h1 id="tituloPerfil">CREA TU PERFIL</h1>
     <p class="subtitulo">Prepara tus secretos</p>
     <form id="formularioPerfil">
       <input type="text" id="nombreUsuario" placeholder="Tu Apodo..." required>
-      <button type="submit" class="btn-principal">Continuar</button>
+      <button type="submit" class="btn-principal" id="btnPerfil">Continuar</button>
     </form>
   </div>
 
-  <!-- ================= 2. SELECCIÓN DE MAZO ================= -->
+  <!-- PANTALLA MAZOS -->
   <div id="pantallaMazos" class="pantalla oculto">
     <h1>🔥 ELIGE TU VIBRA</h1>
-    <p class="subtitulo">Selecciona el mazo para esta partida</p>
-
+    <p class="subtitulo">Selecciona el mazo</p>
     <div class="grid-mazos">
-      <!-- Mazo Básico -->
-      <div class="mazo" onclick="iniciarPartida('rompehielos')">
-        <h3 style="margin:0 0 5px 0; color:#00C2FF;">🧊 Rompehielos (Gratis)</h3>
-        <p style="margin:0; font-size:14px; color:#aaa;">Preguntas suaves para romper el hielo y fotos divertidas sin cruzar la línea.</p>
-      </div>
-
-      <!-- Mazo XX -->
-      <div class="mazo mazo-xx" onclick="iniciarPartida('seccionXX')">
-        <h3 style="margin:0 0 5px 0; color:#FF005C;">🔥 SECCIÓN XX (+18)</h3>
-        <p style="margin:0; font-size:14px; color:#aaa;">El mazo sin censura. Retos atrevidos y preguntas que te harán sudar.</p>
-      </div>
+      <div class="mazo" onclick="crearSala('rompehielos')"><h3 style="color:#00C2FF; margin:0;">🧊 Rompehielos (Gratis)</h3></div>
+      <div class="mazo mazo-xx" onclick="crearSala('seccionXX')"><h3 style="color:#FF005C; margin:0;">🔥 SECCIÓN XX (+18)</h3></div>
     </div>
   </div>
 
-  <!-- ================= 3. MESA DE JUEGO ================= -->
+  <!-- MESA DE JUEGO -->
   <div id="pantallaJuego" class="pantalla oculto">
-    <h1>⚔️ SALA DE JUEGO</h1>
-    <p class="subtitulo" id="indicadorMazo">Mazo Activo</p>
+    <h1>⚔️ SALA SECRETA</h1>
+    
+    <div id="zonaInvitacion" class="oculto" style="margin-bottom: 20px;">
+      <a href="#" id="btnWhatsApp" class="btn-whatsapp" target="_blank">📱 Invitar por WhatsApp</a>
+    </div>
 
     <div class="tarjeta-reto">
-      <p id="textoCarta">Elige Verdad o Reto para sacar la primera carta.</p>
+      <p id="textoCarta">Conectando...</p>
       <img id="imagenPrueba" src="" style="max-width: 100%; border-radius: 10px; margin-top: 15px; display: none;">
     </div>
 
-    <div class="botones-juego" id="controlesJuego">
+    <div class="botones-juego oculto" id="controlesJuego">
       <button class="btn-verdad" onclick="jugarCarta('verdad')">VERDAD</button>
       <button class="btn-reto" onclick="jugarCarta('reto')">RETO</button>
     </div>
 
     <div id="seccionPrueba" class="oculto">
-      <div class="foto-upload" onclick="document.getElementById('inputPrueba').click()">
-        📸 Abrir cámara y demostrar reto
-      </div>
+      <div class="foto-upload" onclick="document.getElementById('inputPrueba').click()">📸 Sube tu foto prueba</div>
       <input type="file" id="inputPrueba" accept="image/*" capture="environment" style="display: none;" onchange="subirFoto(this)">
     </div>
   </div>
 
-  <!-- Script de Servidor y Lógica del Juego -->
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
-    let mazoElegido = '';
+    let miSala = '';
+    let mazoElegido = 'rompehielos';
 
-    // ================= LA BASE DE DATOS DE CARTAS =================
     const baseDeDatos = {
       rompehielos: {
-        verdades: [
-          "¿Cuál es tu talento más inútil?",
-          "¿Qué es lo más vergonzoso que has buscado en Google recientemente?",
-          "¿Alguna vez has fingido una llamada para escapar de una cita o reunión?"
-        ],
-        retos: [
-          "Ponte un calcetín en la oreja y hazte un selfie.",
-          "Saca una foto imitando tu emoji favorito.",
-          "Haz una foto de lo más raro que tengas a tu alcance ahora mismo."
-        ]
+        verdades: ["¿Talento inútil?", "¿Lo más vergonzoso buscado en Google?"],
+        retos: ["Selfie con cara rara.", "Saca foto de tu techo."]
       },
       seccionXX: {
-        verdades: [
-          "¿Cuál ha sido tu sueño más subido de tono con alguien que no esperabas?",
-          "¿Alguna vez te has sentido atraído/a por la pareja de una amistad?",
-          "¿Cuál es tu mayor fantasía inconfesable?"
-        ],
-        retos: [
-          "Sácate una foto dándole un beso apasionado a tu mano.",
-          "Hazte una foto mostrando ligeramente tu ropa interior.",
-          "Sácate un selfie poniendo la cara más provocativa que sepas hacer."
-        ]
+        verdades: ["¿Tu fantasía inconfesable?", "¿Mayor locura en una cita?"],
+        retos: ["Besa tu mano y haz foto.", "Foto de tu cara provocativa."]
       }
     };
 
-    // ================= NAVEGACIÓN =================
+    // ¿Hay código de sala en el enlace?
+    const urlParams = new URLSearchParams(window.location.search);
+    const salaInvitacion = urlParams.get('sala');
+
+    if (salaInvitacion) {
+      document.getElementById('tituloPerfil').innerText = "TE HAN RETADO";
+      document.getElementById('btnPerfil').innerText = "Entrar a la Partida";
+    }
+
     document.getElementById('formularioPerfil').addEventListener('submit', (e) => {
       e.preventDefault();
       document.getElementById('pantallaPerfil').classList.add('oculto');
-      document.getElementById('pantallaMazos').classList.remove('oculto');
+      
+      if (salaInvitacion) {
+        miSala = salaInvitacion;
+        socket.emit('unirse_sala', miSala);
+        document.getElementById('pantallaJuego').classList.remove('oculto');
+        document.getElementById('textoCarta').innerText = "¡Te uniste! Esperando que tu amigo empiece...";
+      } else {
+        document.getElementById('pantallaMazos').classList.remove('oculto');
+      }
     });
 
-    function iniciarPartida(mazo) {
+    function crearSala(mazo) {
       mazoElegido = mazo;
+      miSala = Math.random().toString(36).substring(2, 9); // Código único aleatorio
+      socket.emit('unirse_sala', miSala);
+      
       document.getElementById('pantallaMazos').classList.add('oculto');
       document.getElementById('pantallaJuego').classList.remove('oculto');
       
-      const nombreMazo = mazo === 'rompehielos' ? '🧊 Mazo Rompehielos' : '🔥 SECCIÓN XX (+18)';
-      document.getElementById('indicadorMazo').innerText = `Jugando con: ${nombreMazo}`;
+      const enlace = `${window.location.origin}/?sala=${miSala}`;
+      document.getElementById('zonaInvitacion').classList.remove('oculto');
+      document.getElementById('btnWhatsApp').href = `https://api.whatsapp.com/send?text=¡Te reto al juego! Entra aquí: ${encodeURIComponent(enlace)}`;
+      
+      document.getElementById('textoCarta').innerText = "Mándale el WhatsApp a tu oponente y espera a que entre.";
     }
 
-    // ================= LÓGICA DE CARTAS =================
+    socket.on('oponente_unido', () => {
+      document.getElementById('zonaInvitacion').classList.add('oculto');
+      document.getElementById('controlesJuego').classList.remove('oculto');
+      document.getElementById('textoCarta').innerText = "¡Tu amigo ha entrado! Te toca empezar.";
+    });
+
     function jugarCarta(tipo) {
-      // 1. Ocultar fotos anteriores
       document.getElementById('imagenPrueba').style.display = 'none';
+      const cartas = baseDeDatos[mazoElegido][tipo === 'verdad' ? 'verdades' : 'retos'];
+      const carta = cartas[Math.floor(Math.random() * cartas.length)];
       
-      // 2. Extraer una carta aleatoria del mazo elegido
-      const cartasDisponibles = baseDeDatos[mazoElegido][tipo === 'verdad' ? 'verdades' : 'retos'];
-      const cartaAleatoria = cartasDisponibles[Math.floor(Math.random() * cartasDisponibles.length)];
-      
-      const textoFinal = `Has elegido ${tipo.toUpperCase()}:\n\n"${cartaAleatoria}"`;
-      document.getElementById('textoCarta').innerText = textoFinal;
+      document.getElementById('textoCarta').innerText = `Elegiste ${tipo.toUpperCase()}:\n\n"${carta}"`;
+      if (tipo === 'reto') document.getElementById('seccionPrueba').classList.remove('oculto');
+      else document.getElementById('seccionPrueba').classList.add('oculto');
 
-      // 3. Mostrar botón de foto solo si es un reto
-      if (tipo === 'reto') {
-        document.getElementById('seccionPrueba').classList.remove('oculto');
-      } else {
-        document.getElementById('seccionPrueba').classList.add('oculto');
-      }
-
-      // 4. Enviar el TEXTO EXACTO de la carta al oponente por Socket
-      socket.emit('accion_juego', {
-        tipo: tipo,
-        textoCarta: cartaAleatoria
-      });
+      socket.emit('accion_juego', { sala: miSala, tipo: tipo, textoCarta: carta });
     }
 
-    // ================= RECEPCIÓN DE DATOS DEL OPONENTE =================
     socket.on('actualizar_mesa', (datos) => {
       document.getElementById('imagenPrueba').style.display = 'none';
       document.getElementById('seccionPrueba').classList.add('oculto');
-
-      const tipoOponente = datos.tipo.toUpperCase();
-      document.getElementById('textoCarta').innerText = `El oponente sacó una carta de ${tipoOponente}:\n\n"${datos.textoCarta}"\n\nEsperando a que cumpla su turno...`;
+      document.getElementById('textoCarta').innerText = `Tu amigo sacó ${datos.tipo.toUpperCase()}:\n\n"${datos.textoCarta}"\n\nEsperando a que cumpla...`;
+      // Habilita tus controles para cuando acabe
+      document.getElementById('controlesJuego').classList.remove('oculto');
     });
 
     function subirFoto(input) {
       if (input.files && input.files[0]) {
         const reader = new FileReader();
         reader.onload = function (e) {
-          const fotoBase64 = e.target.result;
-          socket.emit('enviar_foto', fotoBase64);
-          
-          document.getElementById('textoCarta').innerText = "¡Foto enviada al oponente con éxito! Espera su turno.";
+          socket.emit('enviar_foto', { sala: miSala, fotoBase64: e.target.result });
+          document.getElementById('textoCarta').innerText = "Prueba enviada.";
           document.getElementById('seccionPrueba').classList.add('oculto');
         };
         reader.readAsDataURL(input.files[0]);
@@ -214,7 +168,7 @@
     }
 
     socket.on('recibir_foto', (fotoBase64) => {
-      document.getElementById('textoCarta').innerText = "¡El oponente ha enviado su prueba!";
+      document.getElementById('textoCarta').innerText = "¡Oponente demostró su reto!";
       document.getElementById('imagenPrueba').src = fotoBase64;
       document.getElementById('imagenPrueba').style.display = 'block';
     });
