@@ -2,12 +2,12 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Verdad o Reto - Multijugador</title>
+  <title>Verdad o Reto - Multijugador Pro</title>
   <style>
     body { margin: 0; background-color: #0d0d0d; color: #FFF; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
     .oculto { display: none !important; }
     .pantalla { background-color: #161616; padding: 30px; border-radius: 20px; width: 90%; max-width: 450px; box-shadow: 0 0 30px rgba(0, 194, 255, 0.1); border: 1px solid #333; box-sizing: border-box; text-align: center; }
-    h1 { color: #FFF; margin-bottom: 5px; font-weight: 900; }
+    h1 { color: #FFF; margin-bottom: 5px; font-weight: 900; text-transform: uppercase; }
     p.subtitulo { color: #00C2FF; margin-bottom: 25px; font-weight: bold; }
     input[type="text"] { width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #444; background-color: #222; color: #FFF; font-size: 16px; margin-bottom: 15px; box-sizing: border-box; }
     input:focus { outline: none; border-color: #FF005C; }
@@ -15,9 +15,13 @@
     button.btn-principal, a.btn-whatsapp { display: block; width: 100%; background-color: #00C2FF; color: #000; border: none; padding: 15px; font-size: 16px; font-weight: 900; border-radius: 30px; cursor: pointer; text-transform: uppercase; margin-bottom: 10px; text-decoration: none; box-sizing: border-box; }
     a.btn-whatsapp { background-color: #25D366; color: #FFF; }
     
-    .grid-mazos { display: flex; flex-direction: column; gap: 15px; }
-    .mazo { background-color: #1a1a1a; border-radius: 15px; padding: 15px; text-align: left; border: 2px solid #333; cursor: pointer; }
+    .grid-mazos { display: flex; flex-direction: column; gap: 12px; }
+    .mazo { background-color: #1a1a1a; border-radius: 15px; padding: 15px; text-align: left; border: 2px solid #333; cursor: pointer; transition: 0.2s; }
+    .mazo:hover { border-color: #00C2FF; }
+    .mazo-parejas { border-color: #0055ff; }
+    .mazo-parejas:hover { border-color: #00C2FF; box-shadow: 0 0 15px rgba(0,194,255,0.4); }
     .mazo-xx { border-color: #550020; }
+    .mazo-xx:hover { border-color: #FF005C; box-shadow: 0 0 15px rgba(255,0,92,0.4); }
     
     .tarjeta-reto { background-color: #251018; border: 2px solid #FF005C; padding: 20px; border-radius: 15px; margin-bottom: 20px; min-height: 90px; display: flex; align-items: center; justify-content: center; flex-direction: column; }
     .tarjeta-reto p { font-size: 17px; font-weight: bold; margin: 0; line-height: 1.4; }
@@ -46,8 +50,18 @@
     <h1>🔥 ELIGE TU VIBRA</h1>
     <p class="subtitulo">Selecciona el mazo</p>
     <div class="grid-mazos">
-      <div class="mazo" onclick="crearSala('rompehielos')"><h3 style="color:#00C2FF; margin:0;">🧊 Rompehielos (Gratis)</h3></div>
-      <div class="mazo mazo-xx" onclick="crearSala('seccionXX')"><h3 style="color:#FF005C; margin:0;">🔥 SECCIÓN XX (+18)</h3></div>
+      <div class="mazo" onclick="crearSala('rompehielos')">
+        <h3 style="color:#00C2FF; margin:0;">🧊 Rompehielos</h3>
+        <p style="color:#aaa; font-size:13px; margin:5px 0 0 0;">Suave y divertido para empezar.</p>
+      </div>
+      <div class="mazo mazo-parejas" onclick="crearSala('parejas')">
+        <h3 style="color:#0088ff; margin:0;">❤️ Modo Parejas</h3>
+        <p style="color:#aaa; font-size:13px; margin:5px 0 0 0;">Íntimo, romántico y para conocerse a fondo.</p>
+      </div>
+      <div class="mazo mazo-xx" onclick="crearSala('seccionXX')">
+        <h3 style="color:#FF005C; margin:0;">🔥 SECCIÓN XX (+18)</h3>
+        <p style="color:#aaa; font-size:13px; margin:5px 0 0 0;">Cero censura, muy subido de tono.</p>
+      </div>
     </div>
   </div>
 
@@ -76,7 +90,7 @@
       <input type="file" id="inputPrueba" accept="image/*" capture="environment" style="display: none;" onchange="subirFoto(this)">
     </div>
 
-    <!-- Controles para elegir carta (Verdad o Reto) -->
+    <!-- Controles para elegir carta -->
     <div class="botones-juego oculto" id="controlesJuego">
       <button class="btn-verdad" onclick="jugarCarta('verdad')">VERDAD</button>
       <button class="btn-reto" onclick="jugarCarta('reto')">RETO</button>
@@ -88,16 +102,53 @@
     const socket = io();
     let miSala = '';
     let mazoElegido = 'rompehielos';
-    let miTurno = false; // Control estricto de turnos
+    let miTurno = false;
 
+    // ================= BASE DE DATOS AMPLIADA Y SUBIDA DE TONO =================
     const baseDeDatos = {
       rompehielos: {
-        verdades: ["¿Cuál es tu talento más inútil?", "¿Qué es lo más vergonzoso que has buscado en Google?"],
-        retos: ["Ponte un calcetín en la oreja y hazte un selfie.", "Saca una foto de lo que hay debajo de tu mesa."]
+        verdades: [
+          "¿Cuál es tu talento más inútil?",
+          "¿Qué es lo más vergonzoso que has buscado en Google recientemente?",
+          "¿Alguna vez has fingido una llamada para escapar de una cita?",
+          "¿Cuál es tu peor hábito cuando estás a solas?",
+          "Si pudieras cambiar tu nombre por un alimento, ¿cuál elegirías?"
+        ],
+        retos: [
+          "Ponte un calcetín en la oreja y hazte un selfie.",
+          "Saca una foto imitando exactamente tu emoji favorito.",
+          "Haz una foto de lo más raro que tengas a tu alcance."
+        ]
+      },
+      parejas: {
+        verdades: [
+          "¿Qué fue lo primero que pensaste la primera vez que me viste?",
+          "¿Cuál ha sido nuestro mejor momento juntos hasta ahora?",
+          "¿Qué manía mía te parece adorable aunque digas lo contrario?",
+          "Si pudieras cambiar algo de nuestra primera cita, ¿qué sería?",
+          "¿En qué momento exacto supo que te gustaba?"
+        ],
+        retos: [
+          "Manda una foto soplando un beso a la cámara de la manera más romántica posible.",
+          "Hazte una foto haciendo forma de corazón con las manos.",
+          "Sácate un selfie guiñando un ojo pensando en mí."
+        ]
       },
       seccionXX: {
-        verdades: ["¿Cuál es tu fantasía inconfesable?", "¿Cuál ha sido tu mayor locura en una cita?"],
-        retos: ["Besa tu mano y haz una foto.", "Hazte un selfie poniendo tu cara más provocativa."]
+        verdades: [
+          "¿Cuál es tu fantasía sexual más oscura y prohibida que jamás has contado?",
+          "¿En qué lugar más loco, público o peligroso has tenido relaciones o te ha gustaría tenerlas?",
+          "¿Qué prenda de ropa interior llevas puesta ahora mismo y qué tan atrevida es?",
+          "¿Cuál es la parte de tu cuerpo que más te excita que te toquen y cómo?",
+          "Si tuvieras que cumplir una fantasía inmediata conmigo esta noche, ¿cuál sería sin censura?",
+          "¿Alguna vez has tenido pensamientos íntimos con alguien totalmente inesperado de tu entorno?"
+        ],
+        retos: [
+          "Sácate una foto mostrando tus labios mordidos de forma muy sugerente y explícita.",
+          "Hazte una foto levantando ligeramente tu camiseta o marcando tu zona favorita.",
+          "Saca una foto en la que simules una postura totalmente explícita y provocativa.",
+          "Fotografía tu piel de cerca en un lugar sensible donde te gustaría que te besen."
+        ]
       }
     };
 
@@ -147,7 +198,6 @@
       miTurno = true;
     });
 
-    // 1. Elegir Verdad o Reto
     function jugarCarta(tipo) {
       if (!miTurno) return;
       document.getElementById('imagenPrueba').style.display = 'none';
@@ -167,13 +217,12 @@
       socket.emit('accion_juego', { sala: miSala, tipo: tipo, textoCarta: carta });
     }
 
-    // 2. El oponente recibe la carta que sacaste
     socket.on('actualizar_mesa', (datos) => {
       document.getElementById('imagenPrueba').style.display = 'none';
       document.getElementById('controlesJuego').classList.add('oculto');
       document.getElementById('seccionRespuesta').classList.add('oculto');
       document.getElementById('seccionPrueba').classList.add('oculto');
-      miTurno = false; // El oponente juega, nosotros esperamos
+      miTurno = false;
 
       if (datos.tipo === 'verdad') {
         document.getElementById('textoCarta').innerText = `Tu amigo eligió VERDAD:\n\n"${datos.textoCarta}"\n\n(Esperando su respuesta escrita...)`;
@@ -182,7 +231,6 @@
       }
     });
 
-    // 3. Enviar respuesta escrita de Verdad
     function enviarRespuestaTexto() {
       const respuesta = document.getElementById('inputRespuesta').value;
       if (!respuesta) return;
@@ -190,7 +238,7 @@
       document.getElementById('textoCarta').innerText = `Tu respuesta: "${respuesta}"\n\n¡Enviado! Esperando al oponente...`;
       document.getElementById('seccionRespuesta').classList.add('oculto');
       document.getElementById('inputRespuesta').value = '';
-      miTurno = false; // Fin de nuestro turno
+      miTurno = false;
 
       socket.emit('enviar_respuesta', { sala: miSala, respuesta: respuesta });
     }
@@ -198,10 +246,9 @@
     socket.on('recibir_respuesta', (respuesta) => {
       document.getElementById('textoCarta').innerText = `El oponente respondió:\n\n"${respuesta}"\n\n¡Te toca jugar a ti! Elige Verdad o Reto:`;
       document.getElementById('controlesJuego').classList.remove('oculto');
-      miTurno = true; // Ahora es nuestro turno
+      miTurno = true;
     });
 
-    // 4. Subir foto de prueba del Reto
     function subirFoto(input) {
       if (input.files && input.files[0]) {
         const reader = new FileReader();
@@ -212,7 +259,7 @@
           document.getElementById('imagenPrueba').style.display = 'block';
           document.getElementById('textoCarta').innerText = "¡Foto de prueba enviada con éxito! Esperando al oponente...";
           document.getElementById('seccionPrueba').classList.add('oculto');
-          miTurno = false; // Fin de nuestro turno
+          miTurno = false;
 
           socket.emit('enviar_foto', { sala: miSala, fotoBase64: fotoBase64 });
         };
@@ -225,7 +272,7 @@
       document.getElementById('imagenPrueba').src = fotoBase64;
       document.getElementById('imagenPrueba').style.display = 'block';
       document.getElementById('controlesJuego').classList.remove('oculto');
-      miTurno = true; // Ahora es nuestro turno
+      miTurno = true;
     });
   </script>
 </body>
