@@ -146,7 +146,6 @@
     let nombreJugador = '';
     let ultimaCartaJugada = '';
 
-    // Repositorio de preguntas (sin contribuciones de usuario)
     const baseDeDatos = {
       rompehielos: {
         verdades: [
@@ -213,7 +212,6 @@
       }
     };
 
-    // Almacén para evitar repeticiones en esta partida local
     let cartasUsadas = {
       rompehielos: { verdades: [], retos: [] },
       parejas: { verdades: [], retos: [] },
@@ -222,6 +220,12 @@
 
     const urlParams = new URLSearchParams(window.location.search);
     const salaInvitacion = urlParams.get('sala');
+    const mazoInvitacion = urlParams.get('mazo'); // <-- LEE EL MAZO DE LA URL
+    
+    // Si entró por enlace y trae mazo, lo configuramos automáticamente
+    if (mazoInvitacion) {
+      mazoElegido = mazoInvitacion;
+    }
 
     document.getElementById('formularioPerfil').addEventListener('submit', (e) => {
       e.preventDefault();
@@ -233,6 +237,7 @@
         miSala = salaInvitacion;
         socket.emit('unirse_sala', miSala);
         document.getElementById('pantallaJuego').classList.remove('oculto');
+        document.getElementById('nombreMazoActivo').innerText = mazoElegido.toUpperCase(); // Actualiza el título
         document.getElementById('textoCarta').innerText = "¡Te uniste al reto! Esperando al creador...";
         miTurno = false;
       } else {
@@ -316,7 +321,7 @@
 
       if (datos.creadorID === socket.id) {
         document.getElementById('textoCarta').innerText = "¡Match encontrado! Te toca empezar:";
-        document.getElementById('controlesJuego').classList.remove('oculto'); // Muestra los botones
+        document.getElementById('controlesJuego').classList.remove('oculto'); 
         miTurno = true;
       } else {
         document.getElementById('textoCarta').innerText = "¡Te han retado! El oponente está eligiendo...";
@@ -332,7 +337,8 @@
       document.getElementById('pantallaJuego').classList.remove('oculto');
       document.getElementById('nombreMazoActivo').innerText = mazoElegido.toUpperCase();
       
-      const enlace = `${window.location.origin}/?sala=${miSala}`;
+      // EL ENLACE AHORA LLEVA EL MAZO INCORPORADO
+      const enlace = `${window.location.origin}/?sala=${miSala}&mazo=${mazoElegido}`;
       document.getElementById('zonaInvitacion').classList.remove('oculto');
       document.getElementById('btnWhatsApp').href = `https://api.whatsapp.com/send?text=¡Te reto a Verdad o Reto (${mazoElegido.toUpperCase()})! Entra aquí: ${encodeURIComponent(enlace)}`;
       document.getElementById('textoCarta').innerText = "Mándale el WhatsApp a tu amigo y espera a que entre.";
@@ -342,22 +348,19 @@
     socket.on('oponente_unido', () => {
       document.getElementById('zonaInvitacion').classList.add('oculto');
       document.getElementById('textoCarta').innerText = "¡Tu amigo se ha conectado! Te toca empezar:";
-      document.getElementById('controlesJuego').classList.remove('oculto'); // Muestra los botones
+      document.getElementById('controlesJuego').classList.remove('oculto'); 
       miTurno = true;
     });
 
-    // Función para obtener una carta sin repetir hasta agotar el mazo
     function obtenerCartaSinRepetir(tipo) {
       const listaOriginal = baseDeDatos[mazoElegido][tipo === 'verdad' ? 'verdades' : 'retos'];
       let usadas = cartasUsadas[mazoElegido][tipo === 'verdad' ? 'verdades' : 'retos'];
 
-      // Si ya se usaron todas, reiniciamos el historial
       if (usadas.length >= listaOriginal.length) {
         cartasUsadas[mazoElegido][tipo === 'verdad' ? 'verdades' : 'retos'] = [];
         usadas = [];
       }
 
-      // Filtrar las disponibles
       const disponibles = listaOriginal.filter(c => !usadas.includes(c));
       const cartaElegida = disponibles[Math.floor(Math.random() * disponibles.length)];
 
