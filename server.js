@@ -4,7 +4,11 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+
+// Aumentamos el límite de tamaño a 100 MB para que acepte fotos de móviles sin problemas
+const io = new Server(server, {
+  maxHttpBufferSize: 1e8 
+});
 
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/index.html');
