@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>V/R - Matchmaking y Mazos</title>
+  <title>V/R - Verdad o Reto</title>
   <style>
     body { margin: 0; background-color: #0d0d0d; color: #FFF; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
     .oculto { display: none !important; }
@@ -16,6 +16,13 @@
     input:focus { outline: none; border-color: #FF005C; }
     label { display: block; text-align: left; font-size: 13px; color: #888; margin-bottom: 5px; font-weight: bold; }
 
+    /* Selección de Mazos */
+    .grid-mazos { display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px; text-align: left; }
+    .mazo { background-color: #1a1a1a; border-radius: 16px; padding: 15px; border: 2px solid #333; cursor: pointer; transition: 0.2s; }
+    .mazo:hover { border-color: #00C2FF; }
+    .mazo-parejas { border-color: #0055ff; }
+    .mazo-xx { border-color: #550020; }
+
     .menu-tarjeta { border-radius: 20px; padding: 25px 20px; text-align: left; cursor: pointer; margin-bottom: 15px; border: none; width: 100%; box-sizing: border-box; }
     .tarjeta-descubrir { background: linear-gradient(135deg, #FF005C 0%, #cc0046 100%); color: white; box-shadow: 0 8px 20px rgba(255,0,92,0.3); }
     .tarjeta-retar { background: linear-gradient(135deg, #0051ff 0%, #0033cc 100%); color: white; box-shadow: 0 8px 20px rgba(0,81,255,0.3); }
@@ -25,12 +32,6 @@
     .lista-jugadores { max-height: 250px; overflow-y: auto; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; }
     .jugador-item { background-color: #1a1a1a; padding: 12px 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
     .btn-retar-user { background-color: #FF005C; color: white; border: none; padding: 8px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; text-transform: uppercase; font-size: 12px; }
-
-    .grid-mazos { display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px; text-align: left; }
-    .mazo { background-color: #1a1a1a; border-radius: 16px; padding: 15px; border: 2px solid #333; cursor: pointer; transition: 0.2s; }
-    .mazo:hover { border-color: #00C2FF; }
-    .mazo-parejas { border-color: #0055ff; }
-    .mazo-xx { border-color: #550020; }
 
     button.btn-principal, a.btn-whatsapp { display: block; width: 100%; background-color: #FF005C; color: white; border: none; padding: 15px; font-size: 16px; font-weight: 900; border-radius: 30px; cursor: pointer; text-transform: uppercase; margin-top: 10px; text-decoration: none; box-sizing: border-box; text-align: center; }
     a.btn-whatsapp { background-color: #25D366; }
@@ -46,7 +47,7 @@
 </head>
 <body>
 
-  <!-- PERFIL -->
+  <!-- 1. PERFIL -->
   <div id="pantallaPerfil" class="pantalla">
     <div class="app-header"><span></span><span>V / R</span><span>🔔</span></div>
     <h1>Crea tu Perfil</h1>
@@ -56,26 +57,49 @@
       <input type="text" id="nombreUsuario" placeholder="Ej: Alex" required>
       <label>Edad</label>
       <input type="number" id="edadUsuario" placeholder="18" min="13" max="99" required>
-      <button type="submit" class="btn-principal">Entrar a Jugar</button>
+      <button type="submit" class="btn-principal">Continuar</button>
     </form>
   </div>
 
-  <!-- MENÚ PRINCIPAL -->
+  <!-- 2. SELECCIÓN DE MAZO (PRIMERO) -->
+  <div id="pantallaMazos" class="pantalla oculto">
+    <div class="app-header"><span onclick="volverMenu()" style="cursor:pointer;">⬅ Volver</span><span>MAZOS</span><span></span></div>
+    <h1>Elige tu Vibra</h1>
+    <p class="subtitulo">Selecciona el tipo de partida</p>
+    <div class="grid-mazos">
+      <div class="mazo" onclick="seleccionarMazo('rompehielos')">
+        <h3 style="color:#00C2FF; margin:0 0 5px 0;">🧊 Rompehielos</h3>
+        <p style="color:#aaa; font-size:12px; margin:0;">Suave y divertido para empezar.</p>
+      </div>
+      <div class="mazo mazo-parejas" onclick="seleccionarMazo('parejas')">
+        <h3 style="color:#0088ff; margin:0 0 5px 0;">❤️ Modo Parejas</h3>
+        <p style="color:#aaa; font-size:12px; margin:0;">Íntimo, romántico y para conocerse a fondo.</p>
+      </div>
+      <div class="mazo mazo-xx" onclick="seleccionarMazo('seccionXX')">
+        <h3 style="color:#FF005C; margin:0 0 5px 0;">🔥 SECCIÓN XX (+18)</h3>
+        <p style="color:#aaa; font-size:12px; margin:0;">Cero censura, muy subido de tono.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. MENÚ PRINCIPAL (DESCUBRIR O RETAR AMIGOS) -->
   <div id="pantallaMenu" class="pantalla oculto">
-    <div class="app-header"><span id="saludoHeader">Hola</span><span>V / R</span><span>🔔</span></div>
+    <div class="app-header"><span onclick="irAMazos()" style="cursor:pointer;">⬅ Cambiar Mazo</span><span id="saludoHeader">Hola</span><span></span></div>
+    
     <button class="menu-tarjeta tarjeta-descubrir" onclick="entrarLobbyDescubrir()">
-      <h2>🔥 Descubrir</h2>
-      <p>Elige a alguien en línea y desafíale</p>
+      <h2>🔥 Buscar en Línea</h2>
+      <p>Juega con alguien conectado ahora mismo</p>
     </button>
+    
     <button class="menu-tarjeta tarjeta-retar" onclick="crearSalaWhatsApp()">
-      <h2>👥 Retar Amigos</h2>
+      <h2>👥 Retar por WhatsApp</h2>
       <p>Crea sala privada y comparte enlace 🟢</p>
     </button>
   </div>
 
-  <!-- LOBBY EN VIVO -->
+  <!-- 4. LOBBY EN VIVO -->
   <div id="pantallaLobby" class="pantalla oculto">
-    <div class="app-header"><span onclick="volverMenu()" style="cursor:pointer;">⬅ Volver</span><span>LOBBY EN VIVO</span><span></span></div>
+    <div class="app-header"><span onclick="irAMenu()" style="cursor:pointer;">⬅ Volver</span><span>LOBBY</span><span></span></div>
     <h1>Jugadores en Línea</h1>
     <p class="subtitulo">Selecciona a un rival para retarle</p>
     <div class="lista-jugadores" id="contenedorListaJugadores">
@@ -83,28 +107,7 @@
     </div>
   </div>
 
-  <!-- PANTALLA DE SELECCIÓN DE MAZO -->
-  <div id="pantallaMazos" class="pantalla oculto">
-    <div class="app-header"><span onclick="entrarLobbyDescubrir()" style="cursor:pointer;">⬅ Volver</span><span>MAZOS</span><span></span></div>
-    <h1>Elige tu Vibra</h1>
-    <p class="subtitulo">Selecciona el tipo de partida</p>
-    <div class="grid-mazos">
-      <div class="mazo" onclick="confirmarMazo('rompehielos')">
-        <h3 style="color:#00C2FF; margin:0 0 5px 0;">🧊 Rompehielos</h3>
-        <p style="color:#aaa; font-size:12px; margin:0;">Suave y divertido para empezar.</p>
-      </div>
-      <div class="mazo mazo-parejas" onclick="confirmarMazo('parejas')">
-        <h3 style="color:#0088ff; margin:0 0 5px 0;">❤️ Modo Parejas</h3>
-        <p style="color:#aaa; font-size:12px; margin:0;">Íntimo, romántico y para conocerse a fondo.</p>
-      </div>
-      <div class="mazo mazo-xx" onclick="confirmarMazo('seccionXX')">
-        <h3 style="color:#FF005C; margin:0 0 5px 0;">🔥 SECCIÓN XX (+18)</h3>
-        <p style="color:#aaa; font-size:12px; margin:0;">Cero censura, muy subido de tono.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- MESA DE JUEGO -->
+  <!-- 5. MESA DE JUEGO -->
   <div id="pantallaJuego" class="pantalla oculto">
     <div class="app-header"><span onclick="abandonarPartida()" style="cursor:pointer; color:#FF005C;">🚪 Abandonar</span><span id="nombreMazoActivo">SALA</span><span></span></div>
     
@@ -140,7 +143,6 @@
     let mazoElegido = 'rompehielos';
     let miTurno = false;
     let nombreJugador = '';
-    let oponenteSeleccionadoID = null;
 
     const baseDeDatos = {
       rompehielos: {
@@ -173,12 +175,30 @@
         document.getElementById('textoCarta').innerText = "¡Te uniste al reto! Esperando al creador...";
         miTurno = false;
       } else {
-        document.getElementById('pantallaMenu').classList.remove('oculto');
+        // Al terminar el perfil, pasa directamente a elegir el mazo
+        document.getElementById('pantallaMazos').classList.remove('oculto');
       }
     });
 
     function volverMenu() {
       location.href = window.location.pathname;
+    }
+
+    function irAMazos() {
+      document.getElementById('pantallaMenu').classList.add('oculto');
+      document.getElementById('pantallaMazos').classList.remove('oculto');
+    }
+
+    function irAMenu() {
+      document.getElementById('pantallaLobby').classList.add('oculto');
+      document.getElementById('pantallaMenu').classList.remove('oculto');
+    }
+
+    // Al seleccionar el mazo, se guarda y se pasa al menú principal (Descubrir o WhatsApp)
+    function seleccionarMazo(mazo) {
+      mazoElegido = mazo;
+      document.getElementById('pantallaMazos').classList.add('oculto');
+      document.getElementById('pantallaMenu').classList.remove('oculto');
     }
 
     function abandonarPartida() {
@@ -195,9 +215,8 @@
 
     function entrarLobbyDescubrir() {
       document.getElementById('pantallaMenu').classList.add('oculto');
-      document.getElementById('pantallaMazos').classList.add('oculto');
       document.getElementById('pantallaLobby').classList.remove('oculto');
-      socket.emit('entrar_lobby', nombreJugador);
+      socket.emit('entrar_lobby', { nombre: nombreJugador, mazo: mazoElegido });
     }
 
     socket.on('actualizar_lista_espera', (lista) => {
@@ -206,7 +225,7 @@
       const otrosJugadores = lista.filter(j => j.id !== socket.id);
 
       if (otrosJugadores.length === 0) {
-        contenedor.innerHTML = '<p style="color: #666; font-size: 14px;">No hay nadie esperando ahora mismo. ¡Espera a que alguien se conecte o rétalos por WhatsApp!</p>';
+        contenedor.innerHTML = '<p style="color: #666; font-size: 14px;">No hay nadie esperando con este mazo ahora mismo. ¡Vuelve atrás y rétalos por WhatsApp!</p>';
         return;
       }
 
@@ -215,21 +234,15 @@
         div.className = 'jugador-item';
         div.innerHTML = `
           <span style="font-weight:bold;">🟢 ${j.nombre}</span>
-          <button class="btn-retar-user" data-id="${j.id}" onclick="seleccionarUsuarioARetar(this)">Retar</button>
+          <button class="btn-retar-user" data-id="${j.id}" onclick="retarUsuario(this)">Retar</button>
         `;
         contenedor.appendChild(div);
       });
     });
 
-    function seleccionarUsuarioARetar(boton) {
-      oponenteSeleccionadoID = boton.getAttribute('data-id');
-      document.getElementById('pantallaLobby').classList.add('oculto');
-      document.getElementById('pantallaMazos').classList.remove('oculto');
-    }
-
-    function confirmarMazo(mazo) {
-      mazoElegido = mazo;
-      socket.emit('retar_jugador', { oponenteID: oponenteSeleccionadoID, mazo: mazoElegido });
+    function retarUsuario(boton) {
+      const oponenteID = boton.getAttribute('data-id');
+      socket.emit('retar_jugador', { oponenteID: oponenteID, mazo: mazoElegido });
     }
 
     socket.on('partida_iniciada', (datos) => {
@@ -257,10 +270,11 @@
       socket.emit('unirse_sala', miSala);
       document.getElementById('pantallaMenu').classList.add('oculto');
       document.getElementById('pantallaJuego').classList.remove('oculto');
+      document.getElementById('nombreMazoActivo').innerText = mazoElegido.toUpperCase();
       
       const enlace = `${window.location.origin}/?sala=${miSala}`;
       document.getElementById('zonaInvitacion').classList.remove('oculto');
-      document.getElementById('btnWhatsApp').href = `https://api.whatsapp.com/send?text=¡Te reto a Verdad o Reto! Entra aquí: ${encodeURIComponent(enlace)}`;
+      document.getElementById('btnWhatsApp').href = `https://api.whatsapp.com/send?text=¡Te reto a Verdad o Reto (${mazoElegido.toUpperCase()})! Entra aquí: ${encodeURIComponent(enlace)}`;
       document.getElementById('textoCarta').innerText = "Mándale el WhatsApp a tu amigo y espera a que entre.";
       miTurno = false;
     }

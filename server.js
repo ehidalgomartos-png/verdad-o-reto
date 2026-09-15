@@ -17,11 +17,15 @@ let jugadoresBuscando = [];
 io.on('connection', (socket) => {
   console.log('Usuario conectado:', socket.id);
 
-  socket.on('entrar_lobby', (nombre) => {
-    socket.nombre = nombre || 'Anónimo';
+  socket.on('entrar_lobby', (data) => {
+    socket.nombre = data.nombre || 'Anónimo';
+    socket.mazo = data.mazo || 'rompehielos';
+    
     jugadoresBuscando = jugadoresBuscando.filter(j => j.id !== socket.id);
-    jugadoresBuscando.push({ id: socket.id, nombre: socket.nombre });
-    io.emit('actualizar_lista_espera', jugadoresBuscando);
+    jugadoresBuscando.push({ id: socket.id, nombre: socket.nombre, mazo: socket.mazo });
+    
+    // Solo mostramos en el lobby a los que tengan el mismo mazo seleccionado
+    actualizarLobbyGlobal();
   });
 
   socket.on('retar_jugador', (data) => {
@@ -30,7 +34,7 @@ io.on('connection', (socket) => {
     const mazoElegido = data.mazo || 'rompehielos';
     
     jugadoresBuscando = jugadoresBuscando.filter(j => j.id !== socket.id && j.id !== ofertadoID);
-    io.emit('actualizar_lista_espera', jugadoresBuscando);
+    actualizarLobbyGlobal();
 
     socket.join(salaID);
     socket.room = salaID;
@@ -73,12 +77,19 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     jugadoresBuscando = jugadoresBuscando.filter(j => j.id !== socket.id);
-    io.emit('actualizar_lista_espera', jugadoresBuscando);
+    actualizarLobbyGlobal();
     if (socket.room) {
       socket.to(socket.room).emit('oponente_abandono');
     }
   });
 });
+
+function actualizarLobbyGlobal() {
+  io.sockets.sockets.forEach((s) => {
+    const enEspera = jugadoresBuscando.filter(j => j.id !== s.id && j.mazo === s.mazo);
+    s.emit('actualizar_lista_espera', enEspera);
+  });
+}
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT);
