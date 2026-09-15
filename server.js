@@ -1,5 +1,5 @@
 const express = require('express');
-const http = require('http');
+const http = http = require('http'); // o simplemente require('http');
 const { Server } = require('socket.io');
 
 const app = express();
@@ -19,12 +19,12 @@ io.on('connection', (socket) => {
 
   socket.on('entrar_lobby', (nombre) => {
     socket.nombre = nombre || 'Anónimo';
+    jugadoresBuscando = jugadorasBuscandoFiltro(jugadoresBuscando, socket.id); // o la línea limpia de abajo
     jugadoresBuscando = jugadoresBuscando.filter(j => j.id !== socket.id);
     jugadoresBuscando.push({ id: socket.id, nombre: socket.nombre });
     io.emit('actualizar_lista_espera', jugadoresBuscando);
   });
 
-  // Recibe el ID del oponente y el mazo seleccionado
   socket.on('retar_jugador', (data) => {
     const salaID = 'sala_' + Math.random().toString(36).substring(2, 9);
     const ofertadoID = data.oponenteID;
@@ -34,10 +34,12 @@ io.on('connection', (socket) => {
     io.emit('actualizar_lista_espera', jugadoresBuscando);
 
     socket.join(salaID);
+    socket.room = salaID; // Guardamos la sala actual en el socket
     
     const oponenteSocket = io.sockets.sockets.get(ofertadoID);
     if (oponenteSocket) {
       oponenteSocket.join(salaID);
+      oponenteSocket.room = salaID;
       io.to(salaID).emit('partida_iniciada', { 
         salaID: salaID, 
         creadorID: socket.id, 
@@ -48,6 +50,7 @@ io.on('connection', (socket) => {
 
   socket.on('unirse_sala', (salaID) => {
     socket.join(salaID);
+    socket.room = salaID;
     socket.to(salaID).emit('oponente_unido');
   });
 
@@ -63,9 +66,19 @@ io.on('connection', (socket) => {
     socket.to(datos.sala).emit('recibir_foto', datos.fotoBase64);
   });
 
+  // NUEVO: Manejar el abandono voluntario o por desconexión
+  socket.on('abandonar_partida', (salaID) => {
+    if (salaID) {
+      socket.to(salaID).emit('oponente_abandono');
+    }
+  });
+
   socket.on('disconnect', () => {
     jugadoresBuscando = jugadoresBuscando.filter(j => j.id !== socket.id);
     io.emit('actualizar_lista_espera', jugadoresBuscando);
+    if (socket.room) {
+      socket.to(socket.room).emit('oponente_abandono');
+    }
   });
 });
 

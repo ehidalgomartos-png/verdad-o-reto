@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>V/R - Matchmaking con Selección de Mazo</title>
+  <title>V/R - Botón Abandonar</title>
   <style>
     body { margin: 0; background-color: #0d0d0d; color: #FFF; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
     .oculto { display: none !important; }
@@ -22,12 +22,10 @@
     .menu-tarjeta h2 { margin: 0 0 5px 0; font-size: 22px; font-weight: 900; }
     .menu-tarjeta p { margin: 0; font-size: 13px; opacity: 0.9; }
 
-    /* Lista de jugadores en línea */
     .lista-jugadores { max-height: 250px; overflow-y: auto; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; }
     .jugador-item { background-color: #1a1a1a; padding: 12px 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
     .btn-retar-user { background-color: #FF005C; color: white; border: none; padding: 8px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; text-transform: uppercase; font-size: 12px; }
 
-    /* Selección de Mazos */
     .grid-mazos { display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px; text-align: left; }
     .mazo { background-color: #1a1a1a; border-radius: 16px; padding: 15px; border: 2px solid #333; cursor: pointer; transition: 0.2s; }
     .mazo:hover { border-color: #00C2FF; }
@@ -108,7 +106,7 @@
 
   <!-- MESA DE JUEGO -->
   <div id="pantallaJuego" class="pantalla oculto">
-    <div class="app-header"><span onclick="volverMenu()" style="cursor:pointer;">❌ Salir</span><span id="nombreMazoActivo">SALA</span><span></span></div>
+    <div class="app-header"><span onclick="abandonarPartida()" style="cursor:pointer; color:#FF005C;">🚪 Abandonar</span><span id="nombreMazoActivo">SALA</span><span></span></div>
     
     <div id="zonaInvitacion" class="oculto" style="margin-bottom: 15px;">
       <a href="#" id="btnWhatsApp" class="btn-whatsapp" target="_blank">📱 Invitar por WhatsApp</a>
@@ -172,7 +170,7 @@
         miSala = salaInvitacion;
         socket.emit('unirse_sala', miSala);
         document.getElementById('pantallaJuego').classList.remove('oculto');
-        document.getElementById('textoCarta').innerText = "¡Te uniste a la sala! Esperando al creador...";
+        document.getElementById('textoCarta').innerText = "¡Te uniste al reto! Esperando al creador...";
         miTurno = false;
       } else {
         document.getElementById('pantallaMenu').classList.remove('oculto');
@@ -182,6 +180,20 @@
     function volverMenu() {
       location.href = window.location.pathname;
     }
+
+    // Botón específico para abandonar la partida actual
+    function abandonarPartida() {
+      if (miSala) {
+        socket.emit('abandonar_partida', miSala);
+      }
+      location.href = window.location.pathname;
+    }
+
+    // Aviso si el oponente abandona
+    socket.on('oponente_abandono', () => {
+      alert("⚠️ Tu oponente ha abandonado el juego.");
+      location.href = window.location.pathname;
+    });
 
     function entrarLobbyDescubrir() {
       document.getElementById('pantallaMenu').classList.add('oculto');
@@ -211,20 +223,17 @@
       });
     });
 
-    // 1. Al hacer clic en Retar a alguien, guardamos su ID y abrimos la selección de mazo
     function seleccionarUsuarioARetar(idOponente) {
       oponenteSeleccionadoID = idOponente;
       document.getElementById('pantallaLobby').classList.add('oculto');
       document.getElementById('pantallaMazos').classList.remove('oculto');
     }
 
-    // 2. Al elegir el mazo, disparamos el reto al servidor con el mazo escogido
     function confirmarMazo(mazo) {
       mazoElegido = mazo;
       socket.emit('retar_jugador', { oponenteID: oponenteSeleccionadoID, mazo: mazoElegido });
     }
 
-    // Cuando el servidor empareja a dos jugadores
     socket.on('partida_iniciada', (datos) => {
       miSala = datos.salaID;
       mazoElegido = datos.mazo || 'rompehielos';
