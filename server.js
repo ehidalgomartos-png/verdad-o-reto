@@ -68,6 +68,19 @@ io.on('connection', (socket) => {
     socket.to(datos.sala).emit('recibir_foto', datos.fotoBase64);
   });
 
+  // NUEVOS EVENTOS DE JUGABILIDAD Y DINAMISMO
+  socket.on('escribiendo', (sala) => {
+    socket.to(sala).emit('mostrar_escribiendo');
+  });
+
+  socket.on('parar_escribir', (sala) => {
+    socket.to(sala).emit('ocultar_escribiendo');
+  });
+
+  socket.on('enviar_reaccion', (datos) => {
+    socket.to(datos.sala).emit('recibir_reaccion', datos.emoji);
+  });
+
   socket.on('abandonar_partida', (salaID) => {
     if (salaID) {
       socket.to(salaID).emit('oponente_abandono');
