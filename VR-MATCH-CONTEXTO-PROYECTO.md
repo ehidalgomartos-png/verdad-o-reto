@@ -1071,3 +1071,23 @@ Health check esperado:
 ```json
 {"ok":true,"db":true,"version":"12.0.0"}
 ```
+
+
+---
+
+# FASE 13 — CONTROL DE CUENTA, SESIONES Y PORTABILIDAD
+
+Versión: **13.0.0**
+
+Se añadió un centro de control de cuenta con:
+
+- listado de sesiones abiertas
+- cierre de sesiones secundarias
+- cierre de todas las demás sesiones
+- lista de usuarios bloqueados
+- desbloqueo manual
+- descarga de una copia de los datos propios en JSON
+
+La gestión de sesiones evita recopilar IP o huella de dispositivo. La exportación no incluye contraseñas, tokens ni hashes de sesión. Puede incluir la ubicación que el propio usuario decidió guardar porque forma parte de sus datos personales almacenados.
+
+Esta fase mejora la privacidad y el control del usuario, pero no sustituye una revisión jurídica antes de producción.

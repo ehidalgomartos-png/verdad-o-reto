@@ -627,6 +627,7 @@
       <div class="settings-section"><strong>Privacidad</strong><label class="setting-switch"><span><b>Mostrarme en Descubrir</b><small>Desactívalo para pausar temporalmente tu perfil.</small></span><input id="privacyDiscoverable" type="checkbox" checked></label><label class="setting-switch"><span><b>Mostrar estado online</b><small>Oculta el indicador de conexión a otros usuarios.</small></span><input id="privacyShowOnline" type="checkbox" checked></label><label class="setting-switch"><span><b>Permitir invitaciones a jugar</b><small>Tus matches podrán proponerte una partida.</small></span><input id="privacyGameInvites" type="checkbox" checked></label><button class="btn btn-secondary" type="button" onclick="guardarPrivacidad()">Guardar privacidad</button></div>
       <div id="pwaInstallSection" class="settings-section"><strong>Aplicación</strong><div class="pwa-install-card"><div class="pwa-install-icon">V/R</div><div><b>Instalar V/R Match</b><small id="pwaInstallStatus">Añade V/R Match a tu pantalla de inicio y ábrelo como una app.</small></div></div><button id="pwaInstallButton" class="btn btn-secondary" type="button" onclick="instalarPWA()">⇩ Instalar aplicación</button></div>
       <div class="settings-section"><strong>Cambiar contraseña</strong><div class="field"><input id="currentPassword" type="password" maxlength="72" autocomplete="current-password" placeholder="Contraseña actual"></div><div class="field"><input id="newPassword" type="password" maxlength="72" autocomplete="new-password" placeholder="Nueva contraseña · mínimo 8"></div><button class="btn btn-secondary" type="button" onclick="cambiarPasswordCuenta()">Actualizar contraseña</button></div>
+      <div class="settings-section account-control-section"><strong>Control de cuenta y datos</strong><p class="account-legal-copy">Gestiona sesiones abiertas, personas bloqueadas y una copia de la información asociada a tu cuenta.</p><div class="account-control-grid"><button class="account-control-card" type="button" onclick="abrirCentroCuenta('sessions')"><span>🔐</span><b>Sesiones</b><small>Revisa y cierra accesos abiertos.</small></button><button class="account-control-card" type="button" onclick="abrirCentroCuenta('blocked')"><span>⊘</span><b>Bloqueados</b><small>Consulta o desbloquea perfiles.</small></button></div><button id="exportDataButton" class="btn btn-secondary" type="button" onclick="descargarMisDatos()">⇩ Descargar mis datos</button></div>
       <button id="accountPlusButton" class="btn btn-secondary" type="button" onclick="cerrarCuenta();abrirPlus()">✦ Ver V/R+</button>
       <div class="settings-section"><strong>Beta y soporte</strong><p class="account-legal-copy">¿Encontraste un error o tienes una idea? Envíala desde aquí. No adjuntamos chats ni ubicación a tu comentario.</p><button class="btn btn-secondary" type="button" onclick="abrirFeedback()">💬 Enviar comentario beta</button></div>
       <div class="settings-section"><strong>Legal y seguridad</strong><p class="account-legal-copy">V/R Match está en beta. Los textos legales actuales son borradores de producto y deben revisarse profesionalmente antes del lanzamiento comercial.</p><div class="account-legal-links"><a href="/terms.html" target="_blank" rel="noopener">Condiciones beta</a><a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a><a href="/community.html" target="_blank" rel="noopener">Normas de comunidad</a></div></div>
@@ -643,6 +644,23 @@
       <div class="field"><label for="feedbackKind">Tipo</label><select id="feedbackKind" class="profile-select"><option value="bug">Encontré un error</option><option value="idea">Tengo una idea</option><option value="ux">Experiencia / diseño</option><option value="other">Otro</option></select></div>
       <div class="field"><label for="feedbackMessage">Comentario</label><textarea id="feedbackMessage" class="profile-textarea" maxlength="1200" placeholder="Cuéntanos qué ocurrió o qué mejorarías…"></textarea><small id="feedbackCounter">0 / 1200</small></div>
       <div class="modal-actions"><button class="btn btn-ghost" type="button" onclick="cerrarFeedback()">Cancelar</button><button class="btn btn-primary" type="button" onclick="enviarFeedbackBeta()">Enviar comentario</button></div>
+    </div>
+  </div>
+
+  <div id="accountControlModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card account-modal-card account-control-modal-card">
+      <button class="modal-close" type="button" onclick="cerrarCentroCuenta()">×</button>
+      <span class="eyebrow">FASE 13 · PRIVACIDAD</span><h3>Control de cuenta</h3>
+      <p>V/R Match no muestra tokens, contraseñas, IP ni una huella del dispositivo. Aquí puedes gestionar tus accesos y bloqueos.</p>
+      <div class="account-control-tabs"><button id="accountControlTabSessions" class="active" type="button" onclick="cambiarCentroCuentaTab('sessions')">🔐 Sesiones</button><button id="accountControlTabBlocked" type="button" onclick="cambiarCentroCuentaTab('blocked')">⊘ Bloqueados</button></div>
+      <div id="accountSessionsPanel" class="account-control-panel">
+        <div class="account-control-panel-head"><div><strong>Sesiones abiertas</strong><small>Solo guardamos fechas de sesión; no mostramos IP ni dispositivo.</small></div><button class="mini-link" type="button" onclick="cerrarOtrasSesiones()">Cerrar las demás</button></div>
+        <div id="accountSessionsList" class="account-security-list"><div class="empty-state"><span class="spinner"></span><strong>Cargando sesiones…</strong></div></div>
+      </div>
+      <div id="accountBlockedPanel" class="account-control-panel hidden">
+        <div class="account-control-panel-head"><div><strong>Personas bloqueadas</strong><small>Al desbloquear no se recupera automáticamente un match anterior.</small></div></div>
+        <div id="accountBlockedList" class="account-security-list"><div class="empty-state"><span class="spinner"></span><strong>Cargando bloqueos…</strong></div></div>
+      </div>
     </div>
   </div>
 
@@ -1697,6 +1715,64 @@
       $('adminPanelButton').classList.toggle('hidden',!currentUserAdmin); $('accountModal').classList.remove('hidden'); $('accountModal').setAttribute('aria-hidden','false');
     }
     function cerrarCuenta() { $('accountModal').classList.add('hidden'); $('accountModal').setAttribute('aria-hidden','true'); }
+    let accountControlTab='sessions';
+    function abrirCentroCuenta(tab='sessions'){
+      accountControlTab=tab==='blocked'?'blocked':'sessions';
+      $('accountControlModal').classList.remove('hidden'); $('accountControlModal').setAttribute('aria-hidden','false');
+      cambiarCentroCuentaTab(accountControlTab);
+    }
+    function cerrarCentroCuenta(){ $('accountControlModal').classList.add('hidden'); $('accountControlModal').setAttribute('aria-hidden','true'); }
+    async function cambiarCentroCuentaTab(tab){
+      accountControlTab=tab==='blocked'?'blocked':'sessions';
+      $('accountControlTabSessions').classList.toggle('active',accountControlTab==='sessions');
+      $('accountControlTabBlocked').classList.toggle('active',accountControlTab==='blocked');
+      $('accountSessionsPanel').classList.toggle('hidden',accountControlTab!=='sessions');
+      $('accountBlockedPanel').classList.toggle('hidden',accountControlTab!=='blocked');
+      if(accountControlTab==='sessions')await cargarSesionesCuenta();else await cargarBloqueadosCuenta();
+    }
+    function fechaCuenta(ts){if(!ts)return '—';try{return new Date(Number(ts)).toLocaleString('es-ES',{dateStyle:'medium',timeStyle:'short'});}catch{return '—';}}
+    async function cargarSesionesCuenta(){
+      const box=$('accountSessionsList'); box.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Cargando sesiones…</strong></div>';
+      const res=await api('/api/account/sessions');
+      if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudieron cargar')}</strong></div>`;return;}
+      const rows=res.sessions||[];
+      box.innerHTML=rows.length?rows.map(row=>`<div class="account-security-row"><div class="account-security-icon">${row.current?'●':'○'}</div><div class="account-security-main"><strong>${row.current?'Esta sesión':'Otra sesión'}</strong><small>Última actividad: ${escapeHtml(fechaCuenta(row.lastSeenAt))}</small><small>Iniciada: ${escapeHtml(fechaCuenta(row.createdAt))} · caduca: ${escapeHtml(fechaCuenta(row.expiresAt))}</small></div>${row.current?'<span class="security-badge verified">Actual</span>':`<button class="mini-danger" type="button" onclick="revocarSesionCuenta('${escapeHtml(row.id)}')">Cerrar</button>`}</div>`).join(''):'<div class="empty-state"><span>✓</span><strong>No hay sesiones abiertas</strong></div>';
+    }
+    async function revocarSesionCuenta(id){
+      const res=await api(`/api/account/sessions/${encodeURIComponent(id)}`,{method:'DELETE'});
+      if(!res.ok)return mostrarToast(res.error||'No se pudo cerrar la sesión.','error');
+      mostrarToast('Sesión cerrada.','info'); await cargarSesionesCuenta();
+    }
+    async function cerrarOtrasSesiones(){
+      if(!confirm('¿Cerrar todas las demás sesiones de tu cuenta?'))return;
+      const res=await api('/api/account/sessions/revoke-others',{method:'POST',body:{}});
+      if(!res.ok)return mostrarToast(res.error||'No se pudieron cerrar.','error');
+      mostrarToast(`${res.revoked||0} sesión(es) cerrada(s).`,'info'); await cargarSesionesCuenta();
+    }
+    async function cargarBloqueadosCuenta(){
+      const box=$('accountBlockedList'); box.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Cargando bloqueos…</strong></div>';
+      const res=await api('/api/account/blocked');
+      if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudieron cargar')}</strong></div>`;return;}
+      const rows=res.blocked||[];
+      box.innerHTML=rows.length?rows.map(row=>`<div class="account-security-row"><div class="account-block-avatar">${row.avatar&&String(row.avatar).startsWith('/')?`<img src="${escapeHtml(row.avatar)}" alt="">`:escapeHtml(row.avatar||'⊘')}</div><div class="account-security-main"><strong>${escapeHtml(row.nombre||'Perfil')}</strong><small>${escapeHtml(row.ciudad||'Sin ciudad')} · bloqueado ${escapeHtml(fechaCuenta(row.blockedAt))}</small></div><button class="mini-danger" type="button" onclick="desbloquearCuenta('${escapeHtml(row.id)}')">Desbloquear</button></div>`).join(''):'<div class="empty-state"><span>✓</span><strong>No tienes perfiles bloqueados</strong><small>Los perfiles que bloquees aparecerán aquí.</small></div>';
+    }
+    async function desbloquearCuenta(id){
+      if(!confirm('¿Desbloquear este perfil?'))return;
+      const res=await api(`/api/account/blocked/${encodeURIComponent(id)}`,{method:'DELETE'});
+      if(!res.ok)return mostrarToast(res.error||'No se pudo desbloquear.','error');
+      mostrarToast('Perfil desbloqueado.','info'); await cargarBloqueadosCuenta();
+    }
+    async function descargarMisDatos(){
+      const btn=$('exportDataButton'),old=btn.textContent;btn.disabled=true;btn.textContent='Preparando…';
+      try{
+        const response=await fetch('/api/account/export',{headers:{Authorization:`Bearer ${authToken}`}});
+        if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.error||'No se pudo preparar la descarga.');}
+        const blob=await response.blob(); const url=URL.createObjectURL(blob); const a=document.createElement('a');
+        a.href=url;a.download=`vr-match-mis-datos-${new Date().toISOString().slice(0,10)}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+        mostrarToast('Copia de tus datos descargada.','info');
+      }catch(e){mostrarToast(e.message||'No se pudo descargar.','error');}
+      finally{btn.disabled=false;btn.textContent=old;}
+    }
     function abrirFeedback(){
       $('feedbackKind').value='bug'; $('feedbackMessage').value=''; $('feedbackCounter').textContent='0 / 1200';
       $('feedbackModal').classList.remove('hidden'); $('feedbackModal').setAttribute('aria-hidden','false');

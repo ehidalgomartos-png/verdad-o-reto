@@ -22,7 +22,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '12.0.0';
+const APP_VERSION = '13.0.0';
 const LEGAL_VERSION = 'beta-2026-09-16';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -169,6 +169,14 @@ ensureColumn('reports', 'moderator_note', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('reports', 'match_id', 'TEXT');
 ensureColumn('reports', 'evidence_json', "TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('users', 'onboarding_completed', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('sessions', 'session_id', 'TEXT');
+ensureColumn('sessions', 'last_seen_at', 'INTEGER');
+// Fase 13: cada sesión recibe un identificador opaco para poder gestionarla sin exponer tokens.
+for (const row of db.prepare('SELECT token_hash,session_id,created_at,last_seen_at FROM sessions').all()) {
+  if (!row.session_id) db.prepare('UPDATE sessions SET session_id=? WHERE token_hash=?').run(safeId('ses'), row.token_hash);
+  if (!row.last_seen_at) db.prepare('UPDATE sessions SET last_seen_at=? WHERE token_hash=?').run(row.created_at || now(), row.token_hash);
+}
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_session_id ON sessions(session_id)');
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS auth_tokens (
@@ -348,6 +356,9 @@ function validDeck(mazo) { return VALID_MAZOS.has(mazo) ? mazo : 'rompehielos'; 
 function safeRoomId() { return `sala_${crypto.randomBytes(6).toString('hex')}`; }
 function safeJsonArray(value) {
   try { const x = JSON.parse(value || '[]'); return Array.isArray(x) ? x : []; } catch { return []; }
+}
+function safeJsonObject(value) {
+  try { const x = JSON.parse(value || '{}'); return x && typeof x === 'object' && !Array.isArray(x) ? x : {}; } catch { return {}; }
 }
 function pair(a, b) { return [a, b].sort(); }
 function matchIdFor(a, b) { return `match_${crypto.createHash('sha256').update(pair(a,b).join(':')).digest('hex').slice(0, 24)}`; }
@@ -816,14 +827,18 @@ function matchesFor(userId) {
 
 function createSession(userId) {
   const token = crypto.randomBytes(32).toString('base64url');
-  const ts = now();
-  db.prepare('INSERT INTO sessions(token_hash,user_id,created_at,expires_at) VALUES(?,?,?,?)').run(hashToken(token), userId, ts, ts + SESSION_DAYS*86400000);
+  const ts = now(), sessionId = safeId('ses');
+  db.prepare('INSERT INTO sessions(token_hash,user_id,created_at,expires_at,session_id,last_seen_at) VALUES(?,?,?,?,?,?)')
+    .run(hashToken(token), userId, ts, ts + SESSION_DAYS*86400000, sessionId, ts);
   return token;
 }
 function userFromToken(token) {
   if (!token) return null;
-  const row = db.prepare(`SELECT u.id,u.email,u.status,s.expires_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?`).get(hashToken(token));
+  const tokenHash = hashToken(token);
+  const row = db.prepare(`SELECT u.id,u.email,u.status,s.expires_at,s.session_id,s.last_seen_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?`).get(tokenHash);
   if (!row || row.status !== 'active' || row.expires_at <= now()) return null;
+  // Última actividad de la sesión, sin almacenar IP, dispositivo ni huella del navegador.
+  if (!row.last_seen_at || now() - row.last_seen_at > 60*1000) db.prepare('UPDATE sessions SET last_seen_at=? WHERE token_hash=?').run(now(), tokenHash);
   return row;
 }
 function bearer(req) {
@@ -1089,6 +1104,82 @@ app.put('/api/account/privacy', requireAuth, (req,res) => {
   const p=getProfile(req.user.id); if(!p)return res.status(400).json({ok:false,error:'Completa tu perfil primero.'});
   db.prepare('UPDATE profiles SET discoverable=?,show_online=?,allow_game_invites=?,updated_at=? WHERE user_id=?').run(bool01(req.body?.discoverable,p.privacy.discoverable),bool01(req.body?.showOnline,p.privacy.showOnline),bool01(req.body?.allowGameInvites,p.privacy.allowGameInvites),now(),req.user.id);
   broadcastDiscovery(); res.json({ok:true,privacy:getProfile(req.user.id).privacy});
+});
+
+
+app.get('/api/account/sessions', requireAuth, (req,res) => {
+  const currentHash = hashToken(bearer(req));
+  const rows = db.prepare('SELECT token_hash,session_id,created_at,last_seen_at,expires_at FROM sessions WHERE user_id=? AND expires_at>? ORDER BY last_seen_at DESC,created_at DESC').all(req.user.id,now());
+  res.json({ok:true,sessions:rows.map(row=>({
+    id:row.session_id,
+    createdAt:row.created_at,
+    lastSeenAt:row.last_seen_at || row.created_at,
+    expiresAt:row.expires_at,
+    current:row.token_hash===currentHash
+  }))});
+});
+
+app.delete('/api/account/sessions/:id', requireAuth, rateLimit({limit:20,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  const sessionId=cleanShortText(req.params.id,80);
+  const row=db.prepare('SELECT token_hash FROM sessions WHERE session_id=? AND user_id=?').get(sessionId,req.user.id);
+  if(!row)return res.status(404).json({ok:false,error:'Sesión no encontrada.'});
+  if(row.token_hash===hashToken(bearer(req)))return res.status(400).json({ok:false,error:'Para cerrar esta sesión usa Cerrar sesión.'});
+  db.prepare('DELETE FROM sessions WHERE session_id=? AND user_id=?').run(sessionId,req.user.id);
+  res.json({ok:true});
+});
+
+app.post('/api/account/sessions/revoke-others', requireAuth, rateLimit({limit:10,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  const currentHash=hashToken(bearer(req));
+  const result=db.prepare('DELETE FROM sessions WHERE user_id=? AND token_hash<>?').run(req.user.id,currentHash);
+  res.json({ok:true,revoked:Number(result.changes||0)});
+});
+
+app.get('/api/account/blocked', requireAuth, (req,res) => {
+  const rows=db.prepare(`SELECT b.blocked AS id,b.created_at,p.name,p.avatar,p.city
+    FROM blocks b LEFT JOIN profiles p ON p.user_id=b.blocked
+    WHERE b.blocker=? ORDER BY b.created_at DESC`).all(req.user.id);
+  res.json({ok:true,blocked:rows.map(row=>({id:row.id,nombre:row.name||'Perfil',avatar:row.avatar||'',ciudad:row.city||'',blockedAt:row.created_at}))});
+});
+
+app.delete('/api/account/blocked/:userId', requireAuth, rateLimit({limit:30,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  const target=String(req.params.userId||'');
+  const result=db.prepare('DELETE FROM blocks WHERE blocker=? AND blocked=?').run(req.user.id,target);
+  if(!result.changes)return res.status(404).json({ok:false,error:'Ese perfil no estaba en tu lista de bloqueados.'});
+  broadcastDiscovery();
+  res.json({ok:true});
+});
+
+app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60*1000,key:req=>req.user.id}), (req,res) => {
+  try {
+    const userId=req.user.id;
+    const user=db.prepare('SELECT id,email,status,created_at,last_seen_at,email_verified,email_verified_at,onboarding_completed FROM users WHERE id=?').get(userId);
+    const profileRow=db.prepare('SELECT * FROM profiles WHERE user_id=?').get(userId);
+    const profile=getProfile(userId);
+    const legal=db.prepare('SELECT legal_version,adult_confirmed,terms_accepted,accepted_at FROM legal_acceptances WHERE user_id=? ORDER BY accepted_at ASC').all(userId);
+    const likes=db.prepare('SELECT to_user,created_at FROM likes WHERE from_user=? ORDER BY created_at ASC').all(userId);
+    const passes=db.prepare('SELECT to_user,created_at FROM passes WHERE from_user=? ORDER BY created_at ASC').all(userId);
+    const blocks=db.prepare('SELECT blocked,created_at FROM blocks WHERE blocker=? ORDER BY created_at ASC').all(userId);
+    const reports=db.prepare('SELECT id,reported,reason,details,created_at,status,updated_at,moderator_note FROM reports WHERE reporter=? ORDER BY created_at ASC').all(userId);
+    const feedback=db.prepare('SELECT id,kind,message,page,created_at,status,admin_note,updated_at FROM beta_feedback WHERE user_id=? ORDER BY created_at ASC').all(userId);
+    const notifications=db.prepare('SELECT id,source_user,type,title,body,data_json,created_at,read_at FROM notifications WHERE user_id=? ORDER BY created_at ASC').all(userId).map(n=>({...n,data:safeJsonObject(n.data_json),data_json:undefined}));
+    const matches=db.prepare('SELECT * FROM matches WHERE user1=? OR user2=? ORDER BY created_at ASC').all(userId,userId).map(m=>{
+      const partnerId=m.user1===userId?m.user2:m.user1;
+      const partner=publicProfile(getProfile(partnerId));
+      const messages=db.prepare('SELECT id,from_user,text,created_at FROM messages WHERE match_id=? ORDER BY created_at ASC').all(m.id).map(msg=>({id:msg.id,from:msg.from_user===userId?'me':'partner',text:msg.text,createdAt:msg.created_at}));
+      return {id:m.id,createdAt:m.created_at,active:Boolean(m.active),partner:partner?{id:partner.id,nombre:partner.nombre,ciudad:partner.ciudad}: {id:partnerId},messages};
+    });
+    const exportData={
+      product:'V/R Match',formatVersion:1,appVersion:APP_VERSION,generatedAt:now(),
+      account:{id:user.id,email:user.email,status:user.status,createdAt:user.created_at,lastSeenAt:user.last_seen_at,emailVerified:Boolean(user.email_verified),emailVerifiedAt:user.email_verified_at||null,onboardingCompleted:Boolean(user.onboarding_completed)},
+      profile: profile ? {...profile,storedLocation:profileRow&&hasStoredLocation(profileRow)?{lat:Number(profileRow.location_lat),lng:Number(profileRow.location_lng),updatedAt:profileRow.location_updated_at}:null}:null,
+      plus:getPlusState(userId),notificationPreferences:notificationPreferences(userId),legalAcceptances:legal,
+      likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,notifications,matches
+    };
+    res.setHeader('Content-Type','application/json; charset=utf-8');
+    res.setHeader('Content-Disposition','attachment; filename="vr-match-mis-datos.json"');
+    res.setHeader('Cache-Control','no-store');
+    res.send(JSON.stringify(exportData,null,2));
+  } catch(e){console.error('Error exportando cuenta:',e);res.status(500).json({ok:false,error:'No se pudieron preparar tus datos.'});}
 });
 
 app.post('/api/account/delete', requireAuth, rateLimit({limit:3,windowMs:24*60*60*1000,key:req=>req.user.id}), (req,res) => {
@@ -1678,4 +1769,4 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v12.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad beta: métricas internas + feedback + diagnóstico cliente');});
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v13.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad beta: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad F13: sesiones + bloqueados + exportación de datos');});
