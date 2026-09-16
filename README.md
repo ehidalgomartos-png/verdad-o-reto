@@ -1,56 +1,55 @@
-# V/R Match — Fase 8 · V/R+
+# V/R Match — Fase 9 · Notificaciones
 
-Versión: **8.0.0**
+Versión: **9.0.0**
 
-Esta versión continúa directamente sobre la Fase 7. Mantiene cuentas, perfiles, descubrimiento por proximidad, matches, chat, juego integrado, email/recuperación y moderación avanzada.
+Esta versión continúa directamente sobre la Fase 8. Mantiene cuentas, perfiles, descubrimiento por proximidad, matches, chat, juego integrado, email/recuperación, moderación avanzada y V/R+.
 
-## Qué añade Fase 8
+## Qué añade Fase 9
 
-### V/R+ como capa real de producto
-- Estado de membresía V/R+ persistente en SQLite.
-- Pantalla propia de V/R+.
-- Estado Free / Plus visible para la propia cuenta.
-- Administración manual de membresías durante la beta.
-- La capa de cobro **NO está activada todavía**. El checkout real se conectará al pasar a producción.
+### Centro de notificaciones dentro de V/R Match
+- Campana de notificaciones en la cabecera.
+- Contador de avisos no leídos.
+- Historial persistente en SQLite.
+- Marcar una notificación como leída.
+- Marcar todas como leídas.
 
-### Rewind
-- Usuarios V/R+ pueden recuperar el último perfil que hayan pasado.
-- Solo revierte el último `pass`; no deshace matches ni likes mutuos.
+### Eventos que generan notificaciones
+- Nuevo match.
+- Nuevo mensaje.
+- Invitación a jugar.
+- Turno de juego.
 
-### Filtros avanzados V/R+
-- Solo cuentas con correo confirmado.
-- Mínimo de intereses compartidos: 0–3.
-- Orden de descubrimiento:
-  - Compatibilidad.
-  - Cercanía.
-  - Intereses comunes.
-  - Actividad reciente.
+### Preferencias por usuario
+Cada usuario puede activar o desactivar de forma independiente:
+- nuevos matches,
+- nuevos mensajes,
+- invitaciones a jugar,
+- turnos de juego.
 
-### Boost V/R+
-- 1 Boost cada 24 horas.
-- Duración: 30 minutos.
-- Los perfiles con Boost se priorizan en Descubrir.
-- No revela ubicación exacta ni datos privados.
+### Avisos del navegador
+- Con permiso del usuario, V/R Match puede mostrar avisos del navegador mientras la app está abierta.
+- Se incluye `sw.js` y la arquitectura de Web Push para recibir avisos en segundo plano.
+- El Web Push de fondo es **opcional durante la beta** y solo se activa si se configuran claves VAPID en Render.
 
-### Panel administrador
-Desde Moderación → Usuarios el administrador puede:
-- Conceder V/R+ durante 30 días.
-- Revocar V/R+.
-- Ver si una cuenta tiene V/R+ activo.
-- Las acciones quedan registradas en Historial.
+### Web Push / VAPID
+Variables opcionales:
 
-## Pagos
+```text
+VAPID_PUBLIC_KEY
+VAPID_PRIVATE_KEY
+VAPID_SUBJECT
+```
 
-En esta fase se implementa la **lógica de membresía y ventajas**, pero no se procesa ningún pago real.
+Generar un par de claves localmente:
 
-Se deja para el cierre de producción, junto con:
-- dominio propio,
-- upgrade de Render,
-- almacenamiento persistente,
-- proveedor de pagos / checkout,
-- webhooks de suscripción.
+```bash
+npm install
+npm run vapid
+```
 
-Esto evita cobrar dinero mientras el backend sigue en Render Free con almacenamiento efímero.
+No guardar la clave privada en GitHub. Configurar las claves únicamente en `Render → Environment`.
+
+Durante la beta se puede dejar VAPID sin configurar. En ese caso las notificaciones internas siguen funcionando y el navegador puede avisar mientras la app está abierta.
 
 ## Deploy
 
@@ -59,38 +58,33 @@ Esto evita cobrar dinero mientras el backend sigue en Render Free con almacenami
 3. Commit y push a `main`.
 4. Render desplegará automáticamente.
 5. Revisar logs.
-6. Comprobar:
-
-```text
-/healthz
-```
+6. Comprobar `/healthz`.
 
 Respuesta esperada:
 
 ```json
-{"ok":true,"db":true,"version":"8.0.0"}
+{"ok":true,"db":true,"version":"9.0.0"}
 ```
 
 En logs debe aparecer:
 
 ```text
-V/R Match v8.0 escuchando en puerto 10000
+V/R Match v9.0 escuchando en puerto 10000
+Web Push: opcional / no configurado
 ```
 
-## Cómo probar V/R+ durante la beta
+Si VAPID se configura correctamente:
 
-1. Entrar con la cuenta administradora.
-2. Abrir `Cuenta y seguridad` → `Panel de moderación`.
-3. Ir a `Usuarios`.
-4. Abrir un usuario.
-5. Pulsar `Conceder V/R+ 30 días`.
-6. La cuenta recibirá el estado V/R+ automáticamente si está conectada.
-7. Abrir V/R+ desde Descubrir.
-8. Probar Rewind, filtros avanzados y Boost.
+```text
+Web Push: configurado
+```
 
-## Importante
+## Beta / producción
 
-- `VR_ADMIN_EMAILS` continúa configurado únicamente en Render Environment.
-- No guardar claves SMTP/API en GitHub.
-- `VR_REQUIRE_EMAIL_VERIFICATION` puede seguir en `false` durante la beta.
-- Render Free continúa usando filesystem temporal; los datos son de prueba hasta el upgrade final.
+Se mantiene durante la beta:
+- `VR_REQUIRE_EMAIL_VERIFICATION=false`.
+- Render Free y filesystem temporal.
+- V/R+ sin cobro real.
+- dominio propio pendiente.
+
+Para producción siguen pendientes el dominio, remitente propio de email, almacenamiento persistente/upgrade de Render, checkout real y activación definitiva de Web Push.

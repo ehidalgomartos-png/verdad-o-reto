@@ -957,3 +957,21 @@ Dejar para el cierre:
 ```json
 {"ok":true,"db":true,"version":"8.0.0"}
 ```
+
+---
+
+# ACTUALIZACIÓN — FASE 9 · NOTIFICACIONES
+
+**Versión preparada:** 9.0.0
+
+Se incorpora un sistema persistente de notificaciones para:
+- nuevo match,
+- nuevo mensaje,
+- invitación a jugar,
+- turno de juego.
+
+Incluye centro de notificaciones, contador de no leídas, preferencias por usuario y arquitectura opcional de Web Push mediante VAPID + Service Worker (`sw.js`).
+
+El Web Push de fondo puede permanecer sin configurar durante la beta. Las claves VAPID, si se activan, deben vivir únicamente en Render Environment y nunca en GitHub.
+
+Siguiente paso después de validar Fase 9: **Fase 10 — producto móvil / PWA y evaluación de empaquetado móvil**.

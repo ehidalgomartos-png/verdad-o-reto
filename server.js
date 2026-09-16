@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 const nodemailer = require('nodemailer');
+const webpush = require('web-push');
 const { Server } = require('socket.io');
 
 const app = express();
@@ -40,6 +41,14 @@ const REQUIRE_EMAIL_VERIFICATION = String(process.env.VR_REQUIRE_EMAIL_VERIFICAT
 const ADMIN_EMAILS = new Set(String(process.env.VR_ADMIN_EMAILS || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean));
 const APP_BASE_URL = String(process.env.VR_APP_BASE_URL || '').replace(/\/$/, '');
 const SMTP_CONFIGURED = Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_FROM);
+const VAPID_PUBLIC_KEY = String(process.env.VAPID_PUBLIC_KEY || '').trim();
+const VAPID_PRIVATE_KEY = String(process.env.VAPID_PRIVATE_KEY || '').trim();
+const VAPID_SUBJECT = String(process.env.VAPID_SUBJECT || 'mailto:admin@vrmatch.local').trim();
+let PUSH_CONFIGURED = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
+if (PUSH_CONFIGURED) {
+  try { webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY); }
+  catch (e) { PUSH_CONFIGURED = false; console.warn('Web Push desactivado:', e.message); }
+}
 const mailTransport = SMTP_CONFIGURED ? nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT),
@@ -199,6 +208,39 @@ CREATE TABLE IF NOT EXISTS plus_boosts (
   active_until INTEGER,
   last_used_at INTEGER
 );
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  new_match INTEGER NOT NULL DEFAULT 1,
+  new_message INTEGER NOT NULL DEFAULT 1,
+  game_invite INTEGER NOT NULL DEFAULT 1,
+  game_turn INTEGER NOT NULL DEFAULT 1,
+  push_enabled INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS notifications (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  source_user TEXT REFERENCES users(id) ON DELETE SET NULL,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  data_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  read_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, read_at);
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(user_id, endpoint)
+);
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
 `);
 
 app.disable('x-powered-by');
@@ -489,6 +531,101 @@ function revokePlus(userId) {
   return getPlusState(userId);
 }
 
+const NOTIFICATION_TYPES = new Set(['match','message','game_invite','game_turn']);
+function notificationPreferences(userId) {
+  const row = db.prepare('SELECT * FROM notification_preferences WHERE user_id=?').get(userId);
+  return {
+    newMatch: row ? row.new_match !== 0 : true,
+    newMessage: row ? row.new_message !== 0 : true,
+    gameInvite: row ? row.game_invite !== 0 : true,
+    gameTurn: row ? row.game_turn !== 0 : true,
+    pushEnabled: row ? row.push_enabled !== 0 : false
+  };
+}
+function notificationAllowed(userId, type) {
+  const p = notificationPreferences(userId);
+  if (type === 'match') return p.newMatch;
+  if (type === 'message') return p.newMessage;
+  if (type === 'game_invite') return p.gameInvite;
+  if (type === 'game_turn') return p.gameTurn;
+  return false;
+}
+function notificationFromRow(row) {
+  if (!row) return null;
+  let data = {};
+  try { data = JSON.parse(row.data_json || '{}') || {}; } catch {}
+  return {
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    body: row.body,
+    data,
+    sourceUser: row.source_user || null,
+    createdAt: row.created_at,
+    readAt: row.read_at || null,
+    unread: !row.read_at
+  };
+}
+function notificationsFor(userId, limit = 60) {
+  const n = Math.max(1, Math.min(100, Number(limit) || 60));
+  return db.prepare('SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT ?').all(userId,n).map(notificationFromRow);
+}
+function unreadNotificationCount(userId) {
+  return Number(db.prepare('SELECT COUNT(*) n FROM notifications WHERE user_id=? AND read_at IS NULL').get(userId)?.n || 0);
+}
+async function sendPushForUser(userId, notification) {
+  if (!PUSH_CONFIGURED || !notificationPreferences(userId).pushEnabled) return;
+  const subscriptions = db.prepare('SELECT id,endpoint,p256dh,auth FROM push_subscriptions WHERE user_id=?').all(userId);
+  if (!subscriptions.length) return;
+  const data = notification?.data || {};
+  const payload = JSON.stringify({
+    title: notification.title,
+    body: notification.body,
+    tag: `vr-${notification.type}-${notification.id}`,
+    notificationId: notification.id,
+    url: `/?notification=${encodeURIComponent(notification.id)}`,
+    data
+  });
+  for (const sub of subscriptions) {
+    try {
+      await webpush.sendNotification({ endpoint:sub.endpoint, keys:{ p256dh:sub.p256dh, auth:sub.auth } }, payload, { TTL: 180 });
+    } catch (e) {
+      const code = Number(e?.statusCode || 0);
+      if (code === 404 || code === 410) db.prepare('DELETE FROM push_subscriptions WHERE id=?').run(sub.id);
+      else console.warn('Web Push falló:', e.message);
+    }
+  }
+}
+function createNotification(userId, type, title, body, data = {}, sourceUser = null) {
+  if (!NOTIFICATION_TYPES.has(type) || !notificationAllowed(userId,type)) return null;
+  const notification = {
+    id:safeId('not'),
+    type,
+    title:cleanShortText(title,80),
+    body:cleanShortText(body,180),
+    data:data && typeof data === 'object' ? data : {},
+    sourceUser:sourceUser || null,
+    createdAt:now(),
+    readAt:null,
+    unread:true
+  };
+  db.prepare('INSERT INTO notifications(id,user_id,source_user,type,title,body,data_json,created_at) VALUES(?,?,?,?,?,?,?,?)')
+    .run(notification.id,userId,notification.sourceUser,type,notification.title,notification.body,JSON.stringify(notification.data),notification.createdAt);
+  db.prepare(`DELETE FROM notifications WHERE user_id=? AND id NOT IN
+    (SELECT id FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 200)`).run(userId,userId);
+  emitToUser(userId,'notification_new',{...notification,unreadCount:unreadNotificationCount(userId)});
+  if (PUSH_CONFIGURED) setImmediate(() => sendPushForUser(userId,notification).catch(e=>console.warn('Push:',e.message)));
+  return notification;
+}
+function notificationState(userId) {
+  return {
+    notifications: notificationsFor(userId,60),
+    unread: unreadNotificationCount(userId),
+    preferences: notificationPreferences(userId),
+    pushConfigured: PUSH_CONFIGURED
+  };
+}
+
 function profileFromRow(row) {
   if (!row) return null;
   return {
@@ -754,7 +891,67 @@ app.post('/api/auth/logout', requireAuth, (req,res) => {
 
 app.get('/api/me', requireAuth, (req,res) => {
   const full=db.prepare('SELECT email_verified FROM users WHERE id=?').get(req.user.id);
-  res.json({ ok:true, user:{id:req.user.id,email:req.user.email,emailVerified:Boolean(full?.email_verified),admin:isAdmin(req.user)}, profile:getProfile(req.user.id), matches:matchesFor(req.user.id), plus:getPlusState(req.user.id) });
+  res.json({ ok:true, user:{id:req.user.id,email:req.user.email,emailVerified:Boolean(full?.email_verified),admin:isAdmin(req.user)}, profile:getProfile(req.user.id), matches:matchesFor(req.user.id), plus:getPlusState(req.user.id), notificationState:notificationState(req.user.id) });
+});
+
+app.get('/api/notifications', requireAuth, (req,res) => {
+  res.json({ok:true,...notificationState(req.user.id)});
+});
+app.post('/api/notifications/read-all', requireAuth, (req,res) => {
+  db.prepare('UPDATE notifications SET read_at=? WHERE user_id=? AND read_at IS NULL').run(now(),req.user.id);
+  res.json({ok:true,unread:0});
+});
+app.post('/api/notifications/:id/read', requireAuth, (req,res) => {
+  const id=String(req.params.id||'');
+  db.prepare('UPDATE notifications SET read_at=COALESCE(read_at,?) WHERE id=? AND user_id=?').run(now(),id,req.user.id);
+  res.json({ok:true,unread:unreadNotificationCount(req.user.id)});
+});
+app.get('/api/notification-preferences', requireAuth, (req,res) => {
+  res.json({ok:true,preferences:notificationPreferences(req.user.id),pushConfigured:PUSH_CONFIGURED});
+});
+app.put('/api/notification-preferences', requireAuth, (req,res) => {
+  const current=notificationPreferences(req.user.id), ts=now();
+  const next={
+    newMatch:bool01(req.body?.newMatch,current.newMatch),
+    newMessage:bool01(req.body?.newMessage,current.newMessage),
+    gameInvite:bool01(req.body?.gameInvite,current.gameInvite),
+    gameTurn:bool01(req.body?.gameTurn,current.gameTurn),
+    pushEnabled:bool01(req.body?.pushEnabled,current.pushEnabled)
+  };
+  db.prepare(`INSERT INTO notification_preferences(user_id,new_match,new_message,game_invite,game_turn,push_enabled,updated_at)
+    VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET new_match=excluded.new_match,new_message=excluded.new_message,
+    game_invite=excluded.game_invite,game_turn=excluded.game_turn,push_enabled=excluded.push_enabled,updated_at=excluded.updated_at`)
+    .run(req.user.id,next.newMatch,next.newMessage,next.gameInvite,next.gameTurn,next.pushEnabled,ts);
+  res.json({ok:true,preferences:notificationPreferences(req.user.id),pushConfigured:PUSH_CONFIGURED});
+});
+app.get('/api/push/config', requireAuth, (req,res) => {
+  res.json({ok:true,configured:PUSH_CONFIGURED,publicKey:PUSH_CONFIGURED?VAPID_PUBLIC_KEY:''});
+});
+app.post('/api/push/subscribe', requireAuth, (req,res) => {
+  if (!PUSH_CONFIGURED) return res.status(503).json({ok:false,error:'El push en segundo plano todavía no está configurado en el servidor.'});
+  const subscription=req.body?.subscription||req.body;
+  const endpoint=String(subscription?.endpoint||'').slice(0,2000);
+  const p256dh=String(subscription?.keys?.p256dh||'').slice(0,512);
+  const auth=String(subscription?.keys?.auth||'').slice(0,512);
+  if(!endpoint.startsWith('https://')||!p256dh||!auth)return res.status(400).json({ok:false,error:'Suscripción push no válida.'});
+  const ts=now();
+  db.prepare('DELETE FROM push_subscriptions WHERE endpoint=? AND user_id<>?').run(endpoint,req.user.id);
+  const existing=db.prepare('SELECT id FROM push_subscriptions WHERE user_id=? AND endpoint=?').get(req.user.id,endpoint);
+  if(existing) db.prepare('UPDATE push_subscriptions SET p256dh=?,auth=?,updated_at=? WHERE id=?').run(p256dh,auth,ts,existing.id);
+  else db.prepare('INSERT INTO push_subscriptions(id,user_id,endpoint,p256dh,auth,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').run(safeId('push'),req.user.id,endpoint,p256dh,auth,ts,ts);
+  const p=notificationPreferences(req.user.id);
+  db.prepare(`INSERT INTO notification_preferences(user_id,new_match,new_message,game_invite,game_turn,push_enabled,updated_at)
+    VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET push_enabled=1,updated_at=excluded.updated_at`)
+    .run(req.user.id,p.newMatch?1:0,p.newMessage?1:0,p.gameInvite?1:0,p.gameTurn?1:0,1,ts);
+  res.json({ok:true,preferences:notificationPreferences(req.user.id)});
+});
+app.post('/api/push/unsubscribe', requireAuth, (req,res) => {
+  const endpoint=String(req.body?.endpoint||'').slice(0,2000);
+  if(endpoint)db.prepare('DELETE FROM push_subscriptions WHERE user_id=? AND endpoint=?').run(req.user.id,endpoint);
+  else db.prepare('DELETE FROM push_subscriptions WHERE user_id=?').run(req.user.id);
+  const remaining=Number(db.prepare('SELECT COUNT(*) n FROM push_subscriptions WHERE user_id=?').get(req.user.id)?.n||0);
+  db.prepare('UPDATE notification_preferences SET push_enabled=?,updated_at=? WHERE user_id=?').run(remaining?1:0,now(),req.user.id);
+  res.json({ok:true,preferences:notificationPreferences(req.user.id)});
 });
 
 app.put('/api/profile', requireAuth, (req,res) => {
@@ -1066,10 +1263,11 @@ app.post('/api/report', requireAuth, rateLimit({limit:10,windowMs:60*60*1000,key
   res.json({ok:true});
 });
 
-app.get('/healthz', (req,res) => { try { db.prepare('SELECT 1').get(); res.status(200).json({ok:true,db:true,version:'8.0.0'}); } catch { res.status(503).json({ok:false,db:false}); } });
+app.get('/healthz', (req,res) => { try { db.prepare('SELECT 1').get(); res.status(200).json({ok:true,db:true,version:'9.0.0'}); } catch { res.status(503).json({ok:false,db:false}); } });
 app.use('/uploads', express.static(UPLOAD_DIR, { fallthrough:false, maxAge:'7d', dotfiles:'deny' }));
 app.get(['/', '/index.html'], (req,res) => res.sendFile(path.join(ROOT,'index.html')));
 app.get('/styles.css', (req,res) => res.sendFile(path.join(ROOT,'styles.css')));
+app.get('/sw.js', (req,res) => { res.setHeader('Cache-Control','no-cache'); res.sendFile(path.join(ROOT,'sw.js')); });
 app.get('/preview.html', (req,res) => res.sendFile(path.join(ROOT,'preview.html')));
 
 function socketSet(userId) {
@@ -1120,10 +1318,22 @@ function socketForUser(userId) {
 function createDatingRoom(socket, opponent, mazo) {
   const deck=validDeck(mazo); leaveRoom(socket);leaveRoom(opponent);removeFromLobby(socket.id);removeFromLobby(opponent.id);
   const salaID=safeRoomId(); socket.join(salaID);opponent.join(salaID);socket.room=salaID;opponent.room=salaID;socket.mazo=opponent.mazo=deck;
-  rooms.set(salaID,{players:new Set([socket.id,opponent.id]),creatorId:socket.id,mazo:deck});
+  rooms.set(salaID,{players:new Set([socket.id,opponent.id]),creatorId:socket.id,mazo:deck,dating:true});
   socket.emit('partida_iniciada',{salaID,creadorID:socket.id,mazo:deck,origen:'dating',oponenteNombre:opponent.nombre||'Tu match',oponenteAvatar:opponent.avatar||''});
   opponent.emit('partida_iniciada',{salaID,creadorID:socket.id,mazo:deck,origen:'dating',oponenteNombre:socket.nombre||'Tu match',oponenteAvatar:socket.avatar||''});
   return salaID;
+}
+function roomOpponentSocket(socket) {
+  if(!socket.room)return null;
+  const room=rooms.get(socket.room); if(!room)return null;
+  for(const sid of room.players){ if(sid!==socket.id){ const other=io.sockets.sockets.get(sid); if(other)return other; } }
+  return null;
+}
+function notifyOpponentTurn(socket, reason='Tu turno') {
+  const other=roomOpponentSocket(socket);
+  if(!other?.userId)return;
+  const senderName=socket.nombre||getProfile(socket.userId)?.nombre||'Tu oponente';
+  createNotification(other.userId,'game_turn','Te toca jugar',`${senderName} terminó su jugada. Es tu turno.`,{roomId:socket.room,reason},socket.userId);
 }
 
 io.on('connection', socket => {
@@ -1131,7 +1341,7 @@ io.on('connection', socket => {
   socketSet(userId).add(socket.id);
   db.prepare('UPDATE users SET last_seen_at=? WHERE id=?').run(now(),userId);
   const p=getProfile(userId); if(p){socket.nombre=p.nombre;socket.avatar=p.avatar;socket.edad=p.edad;}
-  socket.emit('dating_profiles',discoverFor(userId)); socket.emit('dating_matches',matchesFor(userId)); socket.emit('plus_state',getPlusState(userId));
+  socket.emit('dating_profiles',discoverFor(userId)); socket.emit('dating_matches',matchesFor(userId)); socket.emit('plus_state',getPlusState(userId)); socket.emit('notification_state',notificationState(userId));
   setTimeout(()=>broadcastDiscovery(),20);
 
   socket.on('dating_join',(data={},ack)=>{
@@ -1191,6 +1401,8 @@ io.on('connection', socket => {
       db.prepare('INSERT INTO matches(id,user1,user2,created_at,active) VALUES(?,?,?,?,1) ON CONFLICT(user1,user2) DO UPDATE SET active=1').run(id,u1,u2,ts);
       match=getActiveMatch(userId,target); const me=publicProfile(getProfile(userId)),other=publicProfile(getProfile(target));
       emitToUser(userId,'dating_match',{...other,matchId:match.id}); emitToUser(target,'dating_match',{...me,matchId:match.id}); emitMatches(userId);emitMatches(target);
+      createNotification(userId,'match','¡Nuevo match!',`Tú y ${other?.nombre||'alguien'} os gustáis.`,{partnerId:target,matchId:match.id},target);
+      createNotification(target,'match','¡Nuevo match!',`Tú y ${me?.nombre||'alguien'} os gustáis.`,{partnerId:userId,matchId:match.id},userId);
     }
     done({ok:true,match:Boolean(match)}); socket.emit('dating_profiles',discoverFor(userId)); broadcastDiscovery();
   });
@@ -1209,7 +1421,10 @@ io.on('connection', socket => {
     const duplicate=db.prepare('SELECT 1 FROM messages WHERE match_id=? AND from_user=? AND text=? AND created_at>? LIMIT 1').get(match.id,userId,text,now()-15000); if(duplicate)return done({ok:false,error:'Ese mensaje ya se envió hace un momento.'});
     const message={id:safeId('msg'),from:userId,to:target,text,ts:now()};
     db.prepare('INSERT INTO messages(id,match_id,from_user,text,created_at) VALUES(?,?,?,?,?)').run(message.id,match.id,userId,text,message.ts);
-    emitToUser(userId,'dating_chat_message',message);emitToUser(target,'dating_chat_message',message);emitMatches(userId);emitMatches(target);done({ok:true,id:message.id});
+    emitToUser(userId,'dating_chat_message',message);emitToUser(target,'dating_chat_message',message);emitMatches(userId);emitMatches(target);
+    const senderName=getProfile(userId)?.nombre||'Tu match';
+    createNotification(target,'message','Nuevo mensaje',`${senderName} te ha escrito.`,{partnerId:userId,matchId:match.id,messageId:message.id},userId);
+    done({ok:true,id:message.id});
   });
 
   socket.on('dating_game_invite',(data={},ack)=>{
@@ -1219,7 +1434,9 @@ io.on('connection', socket => {
     if(!opponent)return done({ok:false,error:'Tu match no está conectado ahora mismo.'});
     const me=publicProfile(getProfile(userId)); const mazo=validDeck(data.mazo);
     pendingGameInvites.set(gameInviteKey(userId,target),{from:userId,to:target,mazo,expiresAt:now()+GAME_INVITE_TTL_MS});
-    emitToUser(target,'dating_game_invite',{...me,mazo});done({ok:true});
+    emitToUser(target,'dating_game_invite',{...me,mazo});
+    createNotification(target,'game_invite','Invitación a jugar',`${me?.nombre||'Tu match'} quiere romper el hielo contigo.`,{partnerId:userId,mazo,expiresAt:now()+GAME_INVITE_TTL_MS},userId);
+    done({ok:true});
   });
 
   socket.on('dating_game_accept',(data={},ack)=>{
@@ -1237,20 +1454,20 @@ io.on('connection', socket => {
   socket.on('retar_jugador',(data={},ack)=>{
     const done=typeof ack==='function'?ack:()=>{};const opponentId=String(data.oponenteID||'');const mazo=validDeck(data.mazo);const opponent=io.sockets.sockets.get(opponentId);const waiting=waitingPlayers.get(opponentId);
     if(!opponent||!waiting)return done({ok:false,error:'Ese jugador ya no está disponible.'});if(opponentId===socket.id)return done({ok:false,error:'No puedes retarte a ti mismo.'});if(waiting.mazo!==mazo)return done({ok:false,error:'El mazo ya no coincide.'});
-    const salaID=safeRoomId();removeFromLobby(socket.id);removeFromLobby(opponentId);socket.join(salaID);opponent.join(salaID);socket.room=salaID;opponent.room=salaID;socket.mazo=opponent.mazo=mazo;rooms.set(salaID,{players:new Set([socket.id,opponent.id]),creatorId:socket.id,mazo});done({ok:true,salaID});
+    const salaID=safeRoomId();removeFromLobby(socket.id);removeFromLobby(opponentId);socket.join(salaID);opponent.join(salaID);socket.room=salaID;opponent.room=salaID;socket.mazo=opponent.mazo=mazo;rooms.set(salaID,{players:new Set([socket.id,opponent.id]),creatorId:socket.id,mazo,dating:false});done({ok:true,salaID});
     socket.emit('partida_iniciada',{salaID,creadorID:socket.id,mazo,oponenteNombre:opponent.nombre||'Tu oponente',oponenteAvatar:opponent.avatar||''});opponent.emit('partida_iniciada',{salaID,creadorID:socket.id,mazo,oponenteNombre:socket.nombre||'Tu oponente',oponenteAvatar:socket.avatar||''});
   });
   socket.on('unirse_sala',(payload,ack)=>{
     const done=typeof ack==='function'?ack:()=>{};const data=(payload&&typeof payload==='object')?payload:{salaID:payload};const roomId=String(data.salaID||'').slice(0,64);if(!roomId)return done({ok:false,error:'Sala no válida.'});
     if(data.nombre)socket.nombre=cleanName(data.nombre);if(data.mazo)socket.mazo=validDeck(data.mazo);removeFromLobby(socket.id);const room=rooms.get(roomId);if(room&&room.players.size>=2&&!room.players.has(socket.id))return done({ok:false,error:'La sala ya está completa.'});
-    socket.join(roomId);socket.room=roomId;if(room){room.players.add(socket.id);socket.mazo=room.mazo;done({ok:true,roomId,full:true});const opponent=[...room.players].filter(id=>id!==socket.id).map(id=>io.sockets.sockets.get(id)).find(Boolean);if(opponent){socket.emit('oponente_unido',{nombre:opponent.nombre||'Tu amigo',avatar:opponent.avatar||'',tuTurno:false});opponent.emit('oponente_unido',{nombre:socket.nombre||'Tu amigo',avatar:socket.avatar||'',tuTurno:true});}}else{rooms.set(roomId,{players:new Set([socket.id]),creatorId:socket.id,mazo:socket.mazo||'rompehielos'});done({ok:true,roomId,full:false});}
+    socket.join(roomId);socket.room=roomId;if(room){room.players.add(socket.id);socket.mazo=room.mazo;done({ok:true,roomId,full:true});const opponent=[...room.players].filter(id=>id!==socket.id).map(id=>io.sockets.sockets.get(id)).find(Boolean);if(opponent){socket.emit('oponente_unido',{nombre:opponent.nombre||'Tu amigo',avatar:opponent.avatar||'',tuTurno:false});opponent.emit('oponente_unido',{nombre:socket.nombre||'Tu amigo',avatar:socket.avatar||'',tuTurno:true});}}else{rooms.set(roomId,{players:new Set([socket.id]),creatorId:socket.id,mazo:socket.mazo||'rompehielos',dating:false});done({ok:true,roomId,full:false});}
   });
   socket.on('accion_juego',(d={})=>{if(!socket.room||socket.room!==d.sala)return;socket.to(socket.room).emit('actualizar_mesa',{tipo:d.tipo==='reto'?'reto':'verdad',textoCarta:String(d.textoCarta||'').slice(0,1000),sala:socket.room});});
-  socket.on('enviar_respuesta',(d={})=>{if(socket.room&&socket.room===d.sala)socket.to(socket.room).emit('recibir_respuesta',{respuesta:String(d.respuesta||'').slice(0,500),pregunta:String(d.pregunta||'').slice(0,1000)});});
-  socket.on('enviar_media',(d={},ack)=>{const done=typeof ack==='function'?ack:()=>{};if(!socket.room||socket.room!==d.sala)return done({ok:false,error:'La sala ya no está activa.'});const tipo=d.tipo==='video'?'video':'imagen',dataUrl=String(d.dataUrl||''),mime=String(d.mime||'').slice(0,80);const img=tipo==='imagen'&&/^data:image\/(?:jpeg|png|webp)(?:;[^;]+)*;base64,/i.test(dataUrl),vid=tipo==='video'&&/^data:video\/(?:webm|mp4)(?:;[^;]+)*;base64,/i.test(dataUrl);if(!img&&!vid)return done({ok:false,error:'El formato de la prueba no es válido.'});if(dataUrl.length>9e6)return done({ok:false,error:'El vídeo pesa demasiado. Grábalo un poco más corto.'});socket.to(socket.room).emit('recibir_media',{tipo,dataUrl,mime});done({ok:true});});
+  socket.on('enviar_respuesta',(d={})=>{if(socket.room&&socket.room===d.sala){socket.to(socket.room).emit('recibir_respuesta',{respuesta:String(d.respuesta||'').slice(0,500),pregunta:String(d.pregunta||'').slice(0,1000)});notifyOpponentTurn(socket,'respuesta');}});
+  socket.on('enviar_media',(d={},ack)=>{const done=typeof ack==='function'?ack:()=>{};if(!socket.room||socket.room!==d.sala)return done({ok:false,error:'La sala ya no está activa.'});const tipo=d.tipo==='video'?'video':'imagen',dataUrl=String(d.dataUrl||''),mime=String(d.mime||'').slice(0,80);const img=tipo==='imagen'&&/^data:image\/(?:jpeg|png|webp)(?:;[^;]+)*;base64,/i.test(dataUrl),vid=tipo==='video'&&/^data:video\/(?:webm|mp4)(?:;[^;]+)*;base64,/i.test(dataUrl);if(!img&&!vid)return done({ok:false,error:'El formato de la prueba no es válido.'});if(dataUrl.length>9e6)return done({ok:false,error:'El vídeo pesa demasiado. Grábalo un poco más corto.'});socket.to(socket.room).emit('recibir_media',{tipo,dataUrl,mime});notifyOpponentTurn(socket,'prueba');done({ok:true});});
   socket.on('escribiendo',sala=>{if(socket.room&&socket.room===sala)socket.to(sala).emit('mostrar_escribiendo');});socket.on('parar_escribir',sala=>{if(socket.room&&socket.room===sala)socket.to(sala).emit('ocultar_escribiendo');});
   socket.on('enviar_reaccion',(d={})=>{if(socket.room&&socket.room===d.sala){const allowed=new Set(['🔥','😱','😂','❤️']);socket.to(d.sala).emit('recibir_reaccion',allowed.has(d.emoji)?d.emoji:'👍');}});
-  socket.on('tiempo_agotado',(d={})=>{if(socket.room&&socket.room===d.sala)socket.to(d.sala).emit('tiempo_agotado_remoto');});
+  socket.on('tiempo_agotado',(d={})=>{if(socket.room&&socket.room===d.sala){socket.to(d.sala).emit('tiempo_agotado_remoto');notifyOpponentTurn(socket,'tiempo_agotado');}});
   socket.on('abandonar_partida',salaID=>{if(socket.room&&socket.room===salaID)leaveRoom(socket,true);});
 
   socket.on('disconnect',()=>{
@@ -1258,4 +1475,4 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{console.log(`V/R Match v8.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);});
+server.listen(PORT, '0.0.0.0', ()=>{console.log(`V/R Match v9.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);});

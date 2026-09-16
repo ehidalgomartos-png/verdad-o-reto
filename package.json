@@ -1,12 +1,13 @@
 {
   "name": "vr-match",
-  "version": "8.0.0",
+  "version": "9.0.0",
   "private": true,
-  "description": "V/R Match dating app with proximity, moderation and V/R+ premium feature layer with SQLite",
+  "description": "V/R Match dating app with proximity, moderation, V/R+ and persistent notifications",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js"
+    "check": "node --check server.js",
+    "vapid": "web-push generate-vapid-keys --json"
   },
   "engines": {
     "node": "22.x"
@@ -15,6 +16,7 @@
     "better-sqlite3": "^13.0.3",
     "express": "^4.21.2",
     "socket.io": "^4.8.1",
-    "nodemailer": "^10.0.8"
+    "nodemailer": "^10.0.8",
+    "web-push": "^3.6.7"
   }
 }

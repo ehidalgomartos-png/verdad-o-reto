@@ -32,7 +32,10 @@
         <strong>V/R MATCH</strong>
         <small>HAZ MATCH. ROMPE EL HIELO.</small>
       </div>
-      <div id="connectionBadge" class="connection-badge offline"><span class="connection-dot"></span><span id="connectionText">Conectando</span></div>
+      <div class="brand-actions">
+        <button id="notificationBell" class="notification-bell hidden" type="button" onclick="abrirNotificaciones()" aria-label="Notificaciones">🔔<i id="notificationBadge" class="notification-count hidden">0</i></button>
+        <div id="connectionBadge" class="connection-badge offline"><span class="connection-dot"></span><span id="connectionText">Conectando</span></div>
+      </div>
     </header>
 
     <section id="pantallaAuth" class="screen auth-screen">
@@ -587,6 +590,35 @@
     </div>
   </div>
 
+  <div id="notificationModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card notification-modal-card">
+      <button class="modal-close" type="button" onclick="cerrarNotificaciones()">×</button>
+      <div class="notification-head">
+        <div><span class="eyebrow">FASE 9 · NOTIFICACIONES</span><h3>Centro de avisos</h3><p>Matches, mensajes e invitaciones sin perder el hilo.</p></div>
+        <button class="mini-link" type="button" onclick="marcarTodasNotificaciones()">Marcar todo leído</button>
+      </div>
+
+      <div class="notification-browser-card">
+        <div><strong>🔔 Avisos del navegador</strong><small id="notificationPushStatus">Comprueba los permisos para recibir avisos fuera de la pestaña.</small></div>
+        <button id="notificationPushButton" class="btn btn-secondary" type="button" onclick="activarNotificacionesNavegador()">Activar</button>
+      </div>
+
+      <div class="notification-settings">
+        <strong>Qué quieres recibir</strong>
+        <label class="setting-switch compact"><span><b>Nuevo match</b><small>Cuando el interés sea mutuo.</small></span><input id="notifPrefMatch" type="checkbox" checked></label>
+        <label class="setting-switch compact"><span><b>Mensajes</b><small>Nuevos mensajes de tus matches.</small></span><input id="notifPrefMessage" type="checkbox" checked></label>
+        <label class="setting-switch compact"><span><b>Invitaciones a jugar</b><small>Rompehielos, Conóceme o Verdad o Reto.</small></span><input id="notifPrefInvite" type="checkbox" checked></label>
+        <label class="setting-switch compact"><span><b>Tu turno</b><small>Cuando vuelve a tocarte durante una partida.</small></span><input id="notifPrefTurn" type="checkbox" checked></label>
+        <button class="btn btn-secondary" type="button" onclick="guardarPreferenciasNotificaciones()">Guardar preferencias</button>
+      </div>
+
+      <div class="notification-list-head"><strong>Actividad reciente</strong><span id="notificationUnreadText">0 sin leer</span></div>
+      <div id="notificationList" class="notification-list">
+        <div class="empty-state"><span>🔔</span><strong>Sin novedades</strong><small>Cuando ocurra algo importante aparecerá aquí.</small></div>
+      </div>
+    </div>
+  </div>
+
   <div id="cameraModal" class="modal camera-modal hidden" aria-hidden="true">
     <div class="camera-card">
       <div class="camera-header">
@@ -669,6 +701,12 @@
     let pointerDragging = false;
     let adminCurrentTab = 'reports';
     let adminSelectedUserId = null;
+    let notificationItems = [];
+    let notificationUnread = 0;
+    let notificationPreferences = { newMatch:true, newMessage:true, gameInvite:true, gameTurn:true, pushEnabled:false };
+    let pushConfigured = false;
+    let pushSubscriptionActive = false;
+    let notificationBrowserEnabled = localStorage.getItem('vr_browser_notifications') === '1';
 
     const baseDeDatos = {
       rompehielos: {
@@ -1056,6 +1094,7 @@
     const mazoInvitacion = params.get('mazo');
     let resetToken = params.get('reset') || '';
     const verificationResult = params.get('verification') || '';
+    let pendingNotificationId = params.get('notification') || '';
 
     const $ = (id) => document.getElementById(id);
     const screens = ['pantallaAuth','pantallaPerfil','pantallaDescubrir','pantallaPlus','pantallaMatches','pantallaChat','pantallaAdmin','pantallaMazos','pantallaMenu','pantallaLobby','pantallaJuego'];
@@ -1088,6 +1127,245 @@
       } catch {
         return { ok:false, status:0, error:'No se pudo conectar con el servidor.' };
       }
+    }
+
+    function normalizarPreferenciasNotificacion(data={}) {
+      return {
+        newMatch:data.newMatch !== false,
+        newMessage:data.newMessage !== false,
+        gameInvite:data.gameInvite !== false,
+        gameTurn:data.gameTurn !== false,
+        pushEnabled:Boolean(data.pushEnabled)
+      };
+    }
+    function actualizarBadgeNotificaciones() {
+      const bell=$('notificationBell'), badge=$('notificationBadge');
+      if(bell)bell.classList.toggle('hidden',!currentUserId);
+      if(!badge)return;
+      notificationUnread=Math.max(0,Number(notificationUnread)||0);
+      badge.textContent=notificationUnread>99?'99+':String(notificationUnread);
+      badge.classList.toggle('hidden',notificationUnread===0);
+      const txt=$('notificationUnreadText');
+      if(txt)txt.textContent=`${notificationUnread} sin leer`;
+    }
+    function tipoIconoNotificacion(tipo) {
+      if(tipo==='match')return '💕';
+      if(tipo==='message')return '💬';
+      if(tipo==='game_invite')return '🎮';
+      if(tipo==='game_turn')return '⚡';
+      return '🔔';
+    }
+    function fechaNotificacion(ts) {
+      if(!ts)return '';
+      const d=new Date(Number(ts)), diff=Date.now()-d.getTime();
+      if(diff<60000)return 'Ahora';
+      if(diff<3600000)return `Hace ${Math.max(1,Math.floor(diff/60000))} min`;
+      if(diff<86400000)return `Hace ${Math.max(1,Math.floor(diff/3600000))} h`;
+      return d.toLocaleDateString('es-ES',{day:'2-digit',month:'short'});
+    }
+    function aplicarEstadoNotificaciones(state={}) {
+      notificationItems=Array.isArray(state.notifications)?state.notifications:notificationItems;
+      notificationUnread=Number.isFinite(Number(state.unread))?Number(state.unread):notificationItems.filter(n=>n.unread).length;
+      notificationPreferences=normalizarPreferenciasNotificacion(state.preferences||notificationPreferences);
+      pushConfigured=Boolean(state.pushConfigured);
+      actualizarBadgeNotificaciones();
+      renderNotificaciones();
+      actualizarControlesNotificaciones();
+    }
+    function actualizarControlesNotificaciones() {
+      if($('notifPrefMatch'))$('notifPrefMatch').checked=notificationPreferences.newMatch;
+      if($('notifPrefMessage'))$('notifPrefMessage').checked=notificationPreferences.newMessage;
+      if($('notifPrefInvite'))$('notifPrefInvite').checked=notificationPreferences.gameInvite;
+      if($('notifPrefTurn'))$('notifPrefTurn').checked=notificationPreferences.gameTurn;
+      const status=$('notificationPushStatus'), button=$('notificationPushButton');
+      if(!status||!button)return;
+      if(!('Notification' in window)) {
+        status.textContent='Este navegador no admite notificaciones del sistema.';
+        button.textContent='No disponible';button.disabled=true;return;
+      }
+      button.disabled=false;
+      if(Notification.permission==='denied') {
+        status.textContent='Permiso bloqueado. Actívalo desde la configuración del navegador.';
+        button.textContent='Bloqueado';button.disabled=true;return;
+      }
+      if(pushSubscriptionActive && pushConfigured) {
+        status.textContent='Push en segundo plano activo en este dispositivo.';
+        button.textContent='Desactivar push';return;
+      }
+      if(Notification.permission==='granted' && notificationBrowserEnabled) {
+        status.textContent=pushConfigured?'Permiso concedido. Falta sincronizar el push.':'Avisos activos mientras V/R Match esté abierto. Push de fondo preparado para producción.';
+        button.textContent=pushConfigured?'Sincronizar push':'Avisos activos';return;
+      }
+      status.textContent=pushConfigured?'Activa el permiso para recibir avisos incluso en segundo plano.':'Activa avisos del navegador; el push de fondo se habilitará al configurar VAPID.';
+      button.textContent='Activar';
+    }
+    function renderNotificaciones() {
+      const box=$('notificationList'); if(!box)return;
+      box.innerHTML='';
+      if(!notificationItems.length) {
+        box.innerHTML='<div class="empty-state"><span>🔔</span><strong>Sin novedades</strong><small>Cuando ocurra algo importante aparecerá aquí.</small></div>';
+        actualizarBadgeNotificaciones();return;
+      }
+      notificationItems.forEach(n=>{
+        const row=document.createElement('button');
+        row.type='button';row.className=`notification-row${n.unread?' unread':''}`;
+        row.onclick=()=>abrirNotificacion(n.id);
+        const icon=document.createElement('span');icon.className='notification-row-icon';icon.textContent=tipoIconoNotificacion(n.type);
+        const copy=document.createElement('span');copy.className='notification-row-copy';
+        const title=document.createElement('strong');title.textContent=n.title||'V/R Match';
+        const body=document.createElement('small');body.textContent=n.body||'Tienes una novedad.';
+        copy.append(title,body);
+        const time=document.createElement('span');time.className='notification-row-time';time.textContent=fechaNotificacion(n.createdAt);
+        row.append(icon,copy,time);box.appendChild(row);
+      });
+      actualizarBadgeNotificaciones();
+    }
+    async function cargarNotificaciones() {
+      if(!authToken)return;
+      const res=await api('/api/notifications');
+      if(res.ok)aplicarEstadoNotificaciones(res);
+      await comprobarSuscripcionPush();
+      await sincronizarPushExistente();
+      if(pendingNotificationId) {
+        const id=pendingNotificationId;
+        pendingNotificationId='';
+        history.replaceState({},document.title,location.pathname);
+        setTimeout(()=>abrirNotificacion(id),200);
+      }
+    }
+    async function abrirNotificaciones() {
+      if(!currentUserId)return;
+      $('notificationModal').classList.remove('hidden');
+      $('notificationModal').setAttribute('aria-hidden','false');
+      await cargarNotificaciones();
+    }
+    function cerrarNotificaciones() {
+      $('notificationModal').classList.add('hidden');
+      $('notificationModal').setAttribute('aria-hidden','true');
+    }
+    async function marcarTodasNotificaciones() {
+      const res=await api('/api/notifications/read-all',{method:'POST',body:{}});
+      if(!res.ok)return mostrarToast(res.error||'No se pudieron marcar.','warn');
+      notificationItems=notificationItems.map(n=>({...n,unread:false,readAt:n.readAt||Date.now()}));notificationUnread=0;
+      renderNotificaciones();
+    }
+    async function marcarNotificacionLeida(id) {
+      const n=notificationItems.find(x=>x.id===id);
+      if(n?.unread){n.unread=false;n.readAt=Date.now();notificationUnread=Math.max(0,notificationUnread-1);renderNotificaciones();}
+      const res=await api(`/api/notifications/${encodeURIComponent(id)}/read`,{method:'POST',body:{}});
+      if(res.ok&&Number.isFinite(Number(res.unread))){notificationUnread=Number(res.unread);actualizarBadgeNotificaciones();}
+    }
+    async function abrirNotificacion(id) {
+      let n=notificationItems.find(x=>x.id===id);
+      if(!n){await cargarNotificaciones();n=notificationItems.find(x=>x.id===id);}
+      if(!n)return;
+      await marcarNotificacionLeida(id);
+      cerrarNotificaciones();
+      const partnerId=String(n.data?.partnerId||'');
+      if((n.type==='message'||n.type==='match'||n.type==='game_invite')&&partnerId) {
+        const match=datingMatches.find(m=>m.id===partnerId);
+        if(match){abrirChat(partnerId);return;}
+        irAMatches();return;
+      }
+      if(n.type==='game_turn') {
+        if(miSala){showScreen('pantallaJuego');mostrarToast('Es tu turno en la partida.','info');}
+        else mostrarToast('La partida ya no está activa en este dispositivo.','warn');
+      }
+    }
+    async function guardarPreferenciasNotificaciones() {
+      const body={
+        newMatch:$('notifPrefMatch').checked,
+        newMessage:$('notifPrefMessage').checked,
+        gameInvite:$('notifPrefInvite').checked,
+        gameTurn:$('notifPrefTurn').checked,
+        pushEnabled:notificationPreferences.pushEnabled
+      };
+      const res=await api('/api/notification-preferences',{method:'PUT',body});
+      if(!res.ok)return mostrarToast(res.error||'No se pudieron guardar las preferencias.','error');
+      notificationPreferences=normalizarPreferenciasNotificacion(res.preferences||body);
+      pushConfigured=Boolean(res.pushConfigured);
+      actualizarControlesNotificaciones();mostrarToast('Preferencias de notificaciones guardadas.','info');
+    }
+    function urlBase64ToUint8Array(base64String) {
+      const padding='='.repeat((4-base64String.length%4)%4);
+      const base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');
+      const raw=atob(base64);return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+    }
+    async function registrarServiceWorker() {
+      if(!('serviceWorker' in navigator))return null;
+      try{return await navigator.serviceWorker.register('/sw.js');}catch{return null;}
+    }
+    async function comprobarSuscripcionPush() {
+      pushSubscriptionActive=false;
+      if(!('serviceWorker' in navigator))return actualizarControlesNotificaciones();
+      try {
+        const reg=await navigator.serviceWorker.getRegistration('/');
+        const sub=reg?await reg.pushManager.getSubscription():null;
+        pushSubscriptionActive=Boolean(sub);
+      } catch {}
+      actualizarControlesNotificaciones();
+    }
+    async function sincronizarPushExistente() {
+      if(!authToken||!notificationBrowserEnabled||!('Notification' in window)||Notification.permission!=='granted'||!('serviceWorker' in navigator))return;
+      const cfg=await api('/api/push/config');
+      pushConfigured=Boolean(cfg.configured);
+      if(!pushConfigured||!cfg.publicKey)return actualizarControlesNotificaciones();
+      try{
+        const reg=await registrarServiceWorker();
+        if(!reg)return;
+        let sub=await reg.pushManager.getSubscription();
+        if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(cfg.publicKey)});
+        const res=await api('/api/push/subscribe',{method:'POST',body:{subscription:sub.toJSON()}});
+        if(res.ok){pushSubscriptionActive=true;notificationPreferences=normalizarPreferenciasNotificacion(res.preferences||notificationPreferences);}
+      }catch{}
+      actualizarControlesNotificaciones();
+    }
+    async function desvincularPushSesion() {
+      if(!authToken||!('serviceWorker' in navigator))return;
+      try{
+        const reg=await navigator.serviceWorker.getRegistration('/');
+        const sub=reg?await reg.pushManager.getSubscription():null;
+        if(sub)await api('/api/push/unsubscribe',{method:'POST',body:{endpoint:sub.endpoint}});
+      }catch{}
+    }
+    async function activarNotificacionesNavegador() {
+      if(!('Notification' in window))return mostrarToast('Tu navegador no permite notificaciones.','warn');
+      if(pushSubscriptionActive&&pushConfigured) {
+        try{
+          const reg=await navigator.serviceWorker.getRegistration('/');
+          const sub=reg?await reg.pushManager.getSubscription():null;
+          if(sub){await api('/api/push/unsubscribe',{method:'POST',body:{endpoint:sub.endpoint}});await sub.unsubscribe();}
+          pushSubscriptionActive=false;notificationPreferences.pushEnabled=false;localStorage.removeItem('vr_browser_notifications');notificationBrowserEnabled=false;
+          actualizarControlesNotificaciones();return mostrarToast('Push desactivado en este dispositivo.','info');
+        }catch{return mostrarToast('No se pudo desactivar el push.','warn');}
+      }
+      const permission=await Notification.requestPermission();
+      if(permission!=='granted'){actualizarControlesNotificaciones();return mostrarToast('Necesitas permitir las notificaciones en el navegador.','warn');}
+      notificationBrowserEnabled=true;localStorage.setItem('vr_browser_notifications','1');
+      const reg=await registrarServiceWorker();
+      const cfg=await api('/api/push/config');
+      pushConfigured=Boolean(cfg.configured);
+      if(pushConfigured&&reg&&cfg.publicKey) {
+        try{
+          let sub=await reg.pushManager.getSubscription();
+          if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(cfg.publicKey)});
+          const res=await api('/api/push/subscribe',{method:'POST',body:{subscription:sub.toJSON()}});
+          if(res.ok){pushSubscriptionActive=true;notificationPreferences=normalizarPreferenciasNotificacion(res.preferences||notificationPreferences);mostrarToast('Push en segundo plano activado.','info');}
+          else mostrarToast(res.error||'No se pudo activar el push de fondo.','warn');
+        }catch(e){mostrarToast('Permiso concedido, pero no se pudo registrar el push.','warn');}
+      } else {
+        mostrarToast('Avisos del navegador activos. El push de fondo se habilitará al configurar VAPID.','info');
+      }
+      actualizarControlesNotificaciones();
+    }
+    async function mostrarNotificacionSistema(n) {
+      if(!notificationBrowserEnabled||!('Notification' in window)||Notification.permission!=='granted'||pushSubscriptionActive)return;
+      if(!document.hidden)return;
+      try{
+        const reg=await registrarServiceWorker();
+        if(reg)await reg.showNotification(n.title||'V/R Match',{body:n.body||'Tienes una novedad.',tag:`vr-${n.type}-${n.id}`,data:{notificationId:n.id,url:`/?notification=${encodeURIComponent(n.id)}`}});
+        else new Notification(n.title||'V/R Match',{body:n.body||'Tienes una novedad.'});
+      }catch{}
     }
 
     function cambiarAuthMode(mode) {
@@ -1222,9 +1500,11 @@
       if (authToken) localStorage.setItem('vr_auth_token', authToken);
       aplicarCuenta(result.user || {});
       aplicarPlusState(result.plus || currentPlus);
+      if(result.notificationState)aplicarEstadoNotificaciones(result.notificationState);
       if (result.profile) aplicarPerfilServidor(result.profile);
       if (Array.isArray(result.matches)) datingMatches = result.matches;
       conectarSocket();
+      cargarNotificaciones().catch(()=>{});
       if (result.profile) {
         if (salaInvitacion) {
           showScreen('pantallaPerfil');
@@ -1249,13 +1529,15 @@
 
     async function cerrarSesion(callApi=true) {
       const oldToken = authToken;
+      if (callApi && oldToken) await desvincularPushSesion();
       if (callApi && oldToken) await api('/api/auth/logout', { method:'POST', body:{} });
       if (socket.connected) socket.disconnect();
       authToken=''; currentUserId=''; currentUserEmail=''; currentUserEmailVerified=false; currentUserAdmin=false; currentPlus=normalizarPlus({});
+      notificationItems=[];notificationUnread=0;notificationPreferences=normalizarPreferenciasNotificacion({});pushSubscriptionActive=false;
       localStorage.removeItem('vr_auth_token'); localStorage.removeItem('vr_profile');
       datingProfiles=[]; datingMatches=[]; datingPassed=new Set(); datingChats.clear();
       currentChatMatch=null; currentMatch=null; nombreJugador=''; edadJugador=0; avatarJugador=''; fotosJugador=[]; pendingLocation=null; locationConfigured=false; locationUpdatedAt=null;
-      $('authPassword').value=''; actualizarConexion(false); showScreen('pantallaAuth');
+      $('authPassword').value=''; actualizarConexion(false); actualizarBadgeNotificaciones(); cerrarNotificaciones(); showScreen('pantallaAuth');
     }
 
     function abrirRecuperacion() { $('forgotEmail').value=$('authEmail').value||''; $('forgotModal').classList.remove('hidden'); $('forgotModal').setAttribute('aria-hidden','false'); }
@@ -1924,6 +2206,21 @@
 
     socket.on('plus_state', (data = {}) => {
       aplicarPlusState(data);
+    });
+
+    socket.on('notification_state', (data = {}) => {
+      aplicarEstadoNotificaciones(data);
+    });
+
+    socket.on('notification_new', (data = {}) => {
+      if(!data.id)return;
+      const existing=notificationItems.findIndex(n=>n.id===data.id);
+      if(existing>=0)notificationItems[existing]={...notificationItems[existing],...data};
+      else notificationItems.unshift(data);
+      notificationItems=notificationItems.slice(0,100);
+      notificationUnread=Number.isFinite(Number(data.unreadCount))?Number(data.unreadCount):notificationItems.filter(n=>n.unread).length;
+      renderNotificaciones();
+      mostrarNotificacionSistema(data);
     });
 
     socket.on('dating_profiles', (lista = []) => {
@@ -2775,6 +3072,11 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
     $('bioUsuario').addEventListener('input', () => { $('bioCounter').textContent = String($('bioUsuario').value.length); });
     $('inputAvatar').addEventListener('change', async (e) => { await procesarFotosPerfil(e.target.files); e.target.value = ''; });
     $('chatForm').addEventListener('submit', (e) => { e.preventDefault(); const input=$('chatInput'); enviarChat(input.value); input.value=''; });
+    if('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message',(event)=>{
+        if(event.data?.type==='VR_NOTIFICATION_CLICK'&&event.data.notificationId)abrirNotificacion(String(event.data.notificationId));
+      });
+    }
     initDatingSwipe();
     $('deckAdult').title = 'Solo mayores de 18 años';
     if (mazoInvitacion) $('mazoSeleccionadoLabel').textContent = `Mazo: ${nombreMazo(mazoInvitacion)}`;
