@@ -1,26 +1,43 @@
-# V/R Match · Fase 4 — seguridad, recuperación y moderación
+# V/R Match · Fase 6 — proximidad y descubrimiento
 
-Esta versión parte del MVP que ya funciona en GitHub + Render y mantiene el flujo **Descubrir → Match → Chat → Juego**, añadiendo una capa de seguridad y administración sin borrar la base de datos de Fase 3.
+Esta versión continúa el MVP ya desplegado en GitHub + Render y conserva el flujo principal:
 
-## Qué incorpora la Fase 4
+**Descubrir → Like → Match → Chat → Juego → volver al Chat**
 
-- Registro e inicio de sesión +18 con contraseñas derivadas mediante `scrypt` y salt aleatorio.
-- Sesiones de 30 días con tokens aleatorios guardados de forma hasheada en SQLite.
-- Migraciones compatibles con la base existente: no hace falta borrar `vrmatch.db`.
-- Recuperación de contraseña mediante enlace temporal de 45 minutos.
-- Verificación de correo preparada mediante enlace temporal de 24 horas.
-- Verificación de correo **no obligatoria por defecto** para no bloquear usuarios existentes.
-- Cambio de contraseña desde **Cuenta y seguridad**; cierra el resto de sesiones.
-- Privacidad: pausar aparición en Descubrir, ocultar estado online y desactivar invitaciones de juego.
-- Eliminación permanente de cuenta, datos asociados y fotos subidas.
-- Rate limiting en registro, login, recuperación, likes, passes, chat y denuncias.
-- Protección frente a mensajes duplicados enviados en pocos segundos.
-- Bloqueo y denuncia de usuarios.
-- Panel de administración para revisar denuncias, resolverlas, descartarlas o suspender una cuenta.
-- Estadísticas básicas para administrador: usuarios activos, matches, denuncias abiertas y mensajes.
-- CORS configurable y restringido en Render al dominio de la app.
-- Cabeceras básicas de seguridad, HTTPS/HSTS en producción y `/healthz`.
-- SQLite y uploads preparados para Persistent Disk de Render mediante `VR_STORAGE_DIR=/var/data`.
+La Fase 6 añade proximidad opcional sin revelar coordenadas exactas entre usuarios.
+
+## Novedades de la Fase 6
+
+- Botón **Usar mi ubicación** dentro del perfil.
+- La ubicación es **opcional** y puede eliminarse posteriormente.
+- El navegador solicita permiso antes de obtenerla.
+- El servidor redondea latitud/longitud a 3 decimales antes de guardarlas.
+- Las coordenadas nunca se envían a otros perfiles.
+- Tampoco se comparten con otros usuarios las preferencias privadas, el radio configurado ni la fecha de actualización de ubicación.
+- En las tarjetas solo aparece una distancia aproximada, por ejemplo:
+  - `a menos de 1 km`
+  - `a 8 km`
+  - `a 42 km`
+- Radio permanente configurable: **5, 15, 30, 50, 100 o 200 km**.
+- Cuando el usuario tiene ubicación activada, Descubrir filtra por ese radio y ordena por proximidad.
+- Filtro rápido de distancia en Descubrir para reducir aún más los resultados.
+- Si no se activa ubicación, la app continúa funcionando con ciudad y los filtros existentes.
+- `Permissions-Policy` habilita geolocalización únicamente para el propio sitio.
+- Migraciones automáticas: no es necesario borrar la base SQLite existente.
+
+## Fases anteriores conservadas
+
+- Cuentas +18, login y sesiones persistentes.
+- Perfiles, preferencias, likes, passes y matches.
+- Chat persistente.
+- Juego integrado en el chat.
+- Bloqueo, denuncia, deshacer match y privacidad.
+- Moderación y administración.
+- Recuperación de contraseña.
+- Verificación de correo.
+- Rate limiting y controles anti-spam.
+- Validación de propiedad de fotos subidas.
+- Invitaciones de juego con consentimiento y caducidad.
 
 ## Archivos principales
 
@@ -31,10 +48,9 @@ server.js
 package.json
 render.yaml
 .env.example
-uploads/.gitkeep
 ```
 
-No subas `.env`, `node_modules`, bases `.db` locales ni fotos reales de usuarios al repositorio.
+No subas `.env`, `node_modules`, bases `.db`, fotos reales de usuarios ni claves API al repositorio.
 
 ## Ejecutar en local
 
@@ -45,119 +61,115 @@ npm install
 npm start
 ```
 
-Abre `http://localhost:3000`.
+Abre:
 
-## Actualizar tu servicio actual de GitHub + Render
+```text
+http://localhost:3000
+```
 
-Tu servicio ya está publicado en:
+## Actualizar GitHub + Render
+
+Servicio actual:
 
 ```text
 https://verdad-o-reto-zz0k.onrender.com
 ```
 
-Para actualizarlo:
-
-1. Sustituye en tu repositorio los archivos de la versión anterior por los de esta carpeta.
-2. Conserva cualquier configuración que tengas en Render.
-3. Haz commit y push a la rama conectada a Render.
-4. Render hará Auto-Deploy.
-5. En los logs deberías ver `V/R Match v5.0 escuchando en puerto ...`.
-6. Abre `/healthz`; debe responder con `ok: true`, `db: true` y `version: 5.0.0`.
-
-La migración añade columnas/tablas nuevas con `CREATE TABLE IF NOT EXISTS` y `ALTER TABLE` solo cuando faltan. No borres la base anterior.
-
-## Variables de Render
-
-### Mínimas
+1. Sustituye en GitHub los archivos anteriores por los de esta carpeta.
+2. Haz commit y push a `main`.
+3. Render realizará el Auto-Deploy.
+4. En Logs debe aparecer aproximadamente:
 
 ```text
-VR_APP_BASE_URL=https://verdad-o-reto-zz0k.onrender.com
-VR_ALLOWED_ORIGINS=https://verdad-o-reto-zz0k.onrender.com
-VR_REQUIRE_EMAIL_VERIFICATION=false
+V/R Match v6.0 escuchando en puerto 10000
+Email SMTP: configurado | verificación obligatoria: false
 ```
 
-### Persistencia
+5. Comprueba:
 
-Si tienes Persistent Disk:
+```text
+/healthz
+```
+
+Resultado esperado:
+
+```json
+{"ok":true,"db":true,"version":"6.0.0"}
+```
+
+## Render Free durante desarrollo
+
+Esta copia de `render.yaml` **no solicita Persistent Disk** porque el proyecto sigue usando Render Free durante desarrollo.
+
+En Free, SQLite y las fotos del filesystem deben considerarse temporales: pueden perderse con reinicios o redeploys. El upgrade de Render y la persistencia definitiva se han pospuesto para el cierre de la etapa de desarrollo.
+
+Cuando se pase a un plan compatible con disco persistente podrá volver a configurarse:
 
 ```text
 VR_STORAGE_DIR=/var/data
 ```
 
-Monta el disco exactamente en:
+con un Persistent Disk montado en:
 
 ```text
 /var/data
 ```
 
-La base quedará en `/var/data/data/vrmatch.db` y las fotos en `/var/data/uploads/`.
+## Email actual
 
-Sin Persistent Disk, la app puede probarse, pero SQLite y las fotos pueden desaparecer en un reinicio/redeploy del servicio.
+La Fase 5 ya fue validada con Resend.
 
-## Administrador de denuncias
-
-En Render → Environment añade:
+En Render Free se usa el puerto alternativo:
 
 ```text
-VR_ADMIN_EMAILS=tu-correo-real@dominio.com
+SMTP_HOST=smtp.resend.com
+SMTP_PORT=2465
+SMTP_USER=resend
+SMTP_PASS=<API KEY EN RENDER, NUNCA EN GITHUB>
+SMTP_SECURE=true
 ```
 
-Puedes poner varios correos separados por comas. Al iniciar sesión con una de esas cuentas aparecerá el acceso de administración en **Cuenta y seguridad**.
-
-No hay contraseña de administrador separada: el permiso se concede únicamente a las cuentas cuyo correo figure en `VR_ADMIN_EMAILS`.
-
-## Recuperación de contraseña y verificación de correo
-
-El código ya está integrado, pero para que lleguen emails reales necesitas SMTP.
-
-En Render → Environment configura:
+Por ahora se mantiene:
 
 ```text
-SMTP_HOST=...
-SMTP_PORT=587
-SMTP_USER=...
-SMTP_PASS=...
-SMTP_FROM=V/R Match <no-reply@tu-dominio.com>
-SMTP_SECURE=false
+VR_REQUIRE_EMAIL_VERIFICATION=false
 ```
 
-Para puerto 465 normalmente usa `SMTP_SECURE=true`.
+El dominio propio, el remitente profesional y la verificación obligatoria se dejan para la etapa final junto con el upgrade de Render.
 
-Mientras SMTP no esté configurado, la aplicación sigue funcionando y el servidor indicará `Email SMTP: no configurado`. En ese estado no conviene activar la verificación obligatoria porque el usuario no tendría cómo recibir el enlace.
+## Probar la geolocalización
 
-Cuando SMTP esté probado, puedes activar:
+Usa dos cuentas de prueba.
 
-```text
-VR_REQUIRE_EMAIL_VERIFICATION=true
-```
+1. En Cuenta A entra a **Editar perfil**.
+2. Pulsa **Usar mi ubicación** y acepta el permiso del navegador.
+3. Elige un radio, por ejemplo `50 km`.
+4. Guarda el perfil.
+5. Repite el proceso en Cuenta B.
+6. Abre Descubrir.
+7. Comprueba que la tarjeta muestra ciudad + distancia aproximada.
+8. Cambia el radio a uno menor y verifica que el filtrado responde.
+9. Prueba **Quitar ubicación**, guarda y verifica que la app vuelve a funcionar mediante los filtros tradicionales.
 
-Las cuentas antiguas procedentes de Fase 3 se migran como verificadas para evitar bloquearlas. Las cuentas nuevas quedan pendientes hasta verificar su correo.
+### Privacidad de ubicación
 
-## Prueba recomendada tras el deploy
+- La ubicación nunca se activa automáticamente.
+- El usuario debe pulsar el botón y aceptar el permiso del navegador.
+- El servidor redondea las coordenadas antes de almacenarlas.
+- Los clientes de otros usuarios no reciben latitud ni longitud ni metadatos de ubicación.
+- Solo reciben `distanceKm`, ya redondeada, además de los datos públicos del perfil.
+- El usuario puede eliminar la ubicación desde su perfil.
 
-Usa dos navegadores/perfiles distintos:
+## Pendiente para producción
 
-1. Entra con dos cuentas existentes y confirma que siguen funcionando.
-2. Comprueba Descubrir, like mutuo, match, chat y juego.
-3. Cambia una preferencia de privacidad y recarga.
-4. Prueba cambiar contraseña.
-5. Configura `VR_ADMIN_EMAILS` y comprueba que aparece Moderación.
-6. Desde otra cuenta crea una denuncia y revísala desde el panel admin.
-7. Cuando configures SMTP, prueba “He olvidado mi contraseña”.
-8. Solo después de comprobar el correo, activa verificación obligatoria.
+Antes de una apertura pública grande:
 
-## Seguridad pendiente antes de una apertura grande
-
-Esta fase mejora mucho el MVP, pero para una plataforma de citas pública con volumen todavía conviene añadir: moderación automática/manual de imágenes, política de privacidad y términos legales definitivos, exportación de datos, almacenamiento de objetos externo, backups de base de datos, observabilidad, auditoría más extensa y mecanismos reforzados contra abuso automatizado.
-
-## Ajustes de validación antes del despliegue
-
-Esta copia incluye una revisión adicional previa a producción:
-
-- Las rutas `/uploads/...` que se reutilicen en un perfil deben pertenecer al propio usuario y existir en disco.
-- Los enlaces/tokens de recuperación o verificación no se imprimen en los logs cuando SMTP no está configurado.
-- La aceptación de una partida de dating exige una invitación pendiente real; la invitación caduca a los 5 minutos y el servidor conserva el mazo autorizado.
-- El historial de chat carga los 150 mensajes más recientes y los entrega en orden cronológico.
-- Al eliminar la última foto del perfil también se limpia el avatar asociado.
-- El rate limiting en memoria tiene un límite de buckets para evitar crecimiento ilimitado ante claves únicas.
-
+- dominio propio;
+- remitente de correo propio en Resend;
+- `VR_REQUIRE_EMAIL_VERIFICATION=true`;
+- upgrade de Render o migración a infraestructura persistente;
+- almacenamiento externo para imágenes;
+- backups;
+- políticas legales y privacidad definitivas;
+- moderación reforzada de imágenes/contenido;
+- observabilidad y auditoría.

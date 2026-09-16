@@ -8,8 +8,6 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22
-      - key: VR_STORAGE_DIR
-        value: /var/data
       - key: VR_APP_BASE_URL
         value: https://verdad-o-reto-zz0k.onrender.com
       - key: VR_ALLOWED_ORIGINS
@@ -30,7 +28,3 @@ services:
         sync: false
       - key: SMTP_SECURE
         sync: false
-    disk:
-      name: vr-match-data
-      mountPath: /var/data
-      sizeGB: 1

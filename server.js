@@ -85,6 +85,10 @@ CREATE TABLE IF NOT EXISTS profiles (
   looking_for TEXT NOT NULL DEFAULT 'all',
   city_pref TEXT NOT NULL DEFAULT '',
   interest_pref TEXT NOT NULL DEFAULT '',
+  radius_km INTEGER NOT NULL DEFAULT 50,
+  location_lat REAL,
+  location_lng REAL,
+  location_updated_at INTEGER,
   updated_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS likes (
@@ -144,6 +148,10 @@ ensureColumn('users', 'email_verified_at', 'INTEGER');
 ensureColumn('profiles', 'discoverable', 'INTEGER NOT NULL DEFAULT 1');
 ensureColumn('profiles', 'show_online', 'INTEGER NOT NULL DEFAULT 1');
 ensureColumn('profiles', 'allow_game_invites', 'INTEGER NOT NULL DEFAULT 1');
+ensureColumn('profiles', 'radius_km', 'INTEGER NOT NULL DEFAULT 50');
+ensureColumn('profiles', 'location_lat', 'REAL');
+ensureColumn('profiles', 'location_lng', 'REAL');
+ensureColumn('profiles', 'location_updated_at', 'INTEGER');
 ensureColumn('reports', 'updated_at', 'INTEGER');
 ensureColumn('reports', 'moderator_note', "TEXT NOT NULL DEFAULT ''");
 
@@ -175,7 +183,7 @@ app.use((req,res,next) => {
   res.setHeader('X-Content-Type-Options','nosniff');
   res.setHeader('X-Frame-Options','DENY');
   res.setHeader('Referrer-Policy','strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy','camera=(self), microphone=(self), geolocation=()');
+  res.setHeader('Permissions-Policy','camera=(self), microphone=(self), geolocation=(self)');
   if (process.env.NODE_ENV === 'production' || process.env.RENDER) res.setHeader('Strict-Transport-Security','max-age=15552000; includeSubDomains');
   next();
 });
@@ -351,6 +359,35 @@ function cleanAvatar(userId, value) {
   return ownedUploadPath(userId, avatar);
 }
 
+function cleanRadius(value, fallback = 50) {
+  const allowed = [5, 15, 30, 50, 100, 200];
+  const n = Number(value);
+  return allowed.includes(n) ? n : (allowed.includes(Number(fallback)) ? Number(fallback) : 50);
+}
+function hasStoredLocation(row) {
+  return Boolean(row && row.location_lat !== null && row.location_lat !== undefined && row.location_lng !== null && row.location_lng !== undefined && Number.isFinite(Number(row.location_lat)) && Number.isFinite(Number(row.location_lng)));
+}
+function normalizeCoordinate(value, min, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < min || n > max) return null;
+  // Aproximación suficiente para distancia sin guardar una posición hiperprecisa.
+  return Math.round(n * 1000) / 1000;
+}
+function distanceKmBetweenRows(a, b) {
+  if (!hasStoredLocation(a) || !hasStoredLocation(b)) return null;
+  const lat1 = Number(a.location_lat) * Math.PI / 180;
+  const lat2 = Number(b.location_lat) * Math.PI / 180;
+  const dLat = (Number(b.location_lat) - Number(a.location_lat)) * Math.PI / 180;
+  const dLng = (Number(b.location_lng) - Number(a.location_lng)) * Math.PI / 180;
+  const h = Math.sin(dLat/2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng/2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1-h));
+}
+function publicDistance(km) {
+  if (!Number.isFinite(km)) return null;
+  if (km < 1) return 0.5;
+  return Math.round(km);
+}
+
 function profileFromRow(row) {
   if (!row) return null;
   return {
@@ -368,7 +405,12 @@ function profileFromRow(row) {
       ageMax: row.age_max,
       lookingFor: row.looking_for,
       city: row.city_pref || '',
-      interest: row.interest_pref || ''
+      interest: row.interest_pref || '',
+      radiusKm: cleanRadius(row.radius_km, 50)
+    },
+    location: {
+      enabled: hasStoredLocation(row),
+      updatedAt: row.location_updated_at || null
     },
     privacy: {
       discoverable: row.discoverable !== 0,
@@ -380,6 +422,13 @@ function profileFromRow(row) {
 }
 function getProfile(userId) {
   return profileFromRow(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(userId));
+}
+function publicProfile(profile) {
+  if (!profile) return null;
+  // Minimiza datos compartidos entre usuarios: preferencias, privacidad y
+  // metadatos internos de ubicación permanecen solo en el servidor/cuenta propia.
+  const { preferences, privacy, location, ...safe } = profile;
+  return safe;
 }
 function profileAccepts(profile, candidate) {
   if (!profile || !candidate) return false;
@@ -403,20 +452,40 @@ function getActiveMatch(a, b) {
   return db.prepare('SELECT * FROM matches WHERE user1=? AND user2=? AND active=1').get(u1,u2) || null;
 }
 function discoverFor(userId) {
-  const me = getProfile(userId);
+  const meRow = db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(userId);
+  const me = profileFromRow(meRow);
   if (!me || me.privacy?.discoverable === false) return [];
   const excluded = new Set([userId]);
   for (const r of db.prepare('SELECT to_user id FROM likes WHERE from_user=?').all(userId)) excluded.add(r.id);
   for (const r of db.prepare('SELECT to_user id FROM passes WHERE from_user=?').all(userId)) excluded.add(r.id);
   for (const r of db.prepare('SELECT blocked id FROM blocks WHERE blocker=? UNION SELECT blocker id FROM blocks WHERE blocked=?').all(userId,userId)) excluded.add(r.id);
   for (const r of db.prepare('SELECT CASE WHEN user1=? THEN user2 ELSE user1 END id FROM matches WHERE (user1=? OR user2=?) AND active=1').all(userId,userId,userId)) excluded.add(r.id);
-  return db.prepare('SELECT * FROM profiles WHERE user_id != ? ORDER BY updated_at DESC').all(userId)
-    .map(profileFromRow)
-    .filter(p => !excluded.has(p.id) && profileAccepts(me,p) && profileAccepts(p,me));
+
+  const useDistance = hasStoredLocation(meRow);
+  const radiusKm = cleanRadius(meRow?.radius_km, 50);
+  return db.prepare('SELECT * FROM profiles WHERE user_id != ?').all(userId)
+    .map(row => {
+      const fullProfile = profileFromRow(row);
+      const distance = distanceKmBetweenRows(meRow, row);
+      const profile = publicProfile(fullProfile);
+      if (distance !== null) profile.distanceKm = publicDistance(distance);
+      return { row, fullProfile, profile, distance };
+    })
+    .filter(item => !excluded.has(item.profile.id) && profileAccepts(me,item.fullProfile) && profileAccepts(item.fullProfile,me))
+    // Si el usuario activa ubicación, la proximidad pasa a ser un filtro real.
+    .filter(item => !useDistance || (item.distance !== null && item.distance <= radiusKm))
+    .sort((a,b) => {
+      if (useDistance) {
+        const ad = a.distance ?? Number.POSITIVE_INFINITY, bd = b.distance ?? Number.POSITIVE_INFINITY;
+        if (ad !== bd) return ad - bd;
+      }
+      return Number(b.row.updated_at || 0) - Number(a.row.updated_at || 0);
+    })
+    .map(item => item.profile);
 }
 function matchPartnerRow(match, userId) {
   const partnerId = match.user1 === userId ? match.user2 : match.user1;
-  const partner = getProfile(partnerId);
+  const partner = publicProfile(getProfile(partnerId));
   if (!partner) return null;
   const last = db.prepare('SELECT text, created_at, from_user FROM messages WHERE match_id=? ORDER BY created_at DESC LIMIT 1').get(match.id);
   return { ...partner, matchId: match.id, matchedAt: match.created_at, lastMessage: last || null };
@@ -552,15 +621,32 @@ app.put('/api/profile', requireAuth, (req,res) => {
     const avatar = cleanAvatar(userId, avatarInput) || (hasAvatarField ? '' : (photos[0] || safeExistingAvatar || ''));
     const ageMin = Math.max(18, Math.min(99, Number(req.body?.preferences?.ageMin) || 18));
     const ageMax = Math.max(ageMin, Math.min(99, Number(req.body?.preferences?.ageMax) || 99));
+    const existingRow = db.prepare('SELECT * FROM profiles WHERE user_id=?').get(userId);
+    const radiusKm = cleanRadius(req.body?.preferences?.radiusKm, existingRow?.radius_km || 50);
+    let locationLat = existingRow?.location_lat ?? null;
+    let locationLng = existingRow?.location_lng ?? null;
+    let locationUpdatedAt = existingRow?.location_updated_at ?? null;
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'location')) {
+      const location = req.body?.location || {};
+      if (location.clear === true) {
+        locationLat = null; locationLng = null; locationUpdatedAt = null;
+      } else {
+        const lat = normalizeCoordinate(location.lat, -90, 90);
+        const lng = normalizeCoordinate(location.lng, -180, 180);
+        if (lat === null || lng === null) return res.status(400).json({ok:false,error:'La ubicación recibida no es válida.'});
+        locationLat = lat; locationLng = lng; locationUpdatedAt = now();
+      }
+    }
     const values = {
       name, age, gender:cleanGender(req.body?.gender), city:cleanShortText(req.body?.ciudad,40), bio:cleanShortText(req.body?.bio,180),
       interests:cleanInterests(req.body?.intereses), avatar, photos,
-      ageMin, ageMax, lookingFor:cleanLooking(req.body?.preferences?.lookingFor), cityPref:cleanShortText(req.body?.preferences?.city,40), interestPref:cleanShortText(req.body?.preferences?.interest,30),
+      ageMin, ageMax, lookingFor:cleanLooking(req.body?.preferences?.lookingFor), cityPref:cleanShortText(req.body?.preferences?.city,40), interestPref:cleanShortText(req.body?.preferences?.interest,30), radiusKm,
+      locationLat, locationLng, locationUpdatedAt,
       discoverable:bool01(req.body?.privacy?.discoverable, existing?.privacy?.discoverable ?? true), showOnline:bool01(req.body?.privacy?.showOnline, existing?.privacy?.showOnline ?? true), allowGameInvites:bool01(req.body?.privacy?.allowGameInvites, existing?.privacy?.allowGameInvites ?? true)
     };
-    db.prepare(`INSERT INTO profiles(user_id,name,age,gender,city,bio,interests_json,avatar,photos_json,age_min,age_max,looking_for,city_pref,interest_pref,discoverable,show_online,allow_game_invites,updated_at)
-      VALUES(@userId,@name,@age,@gender,@city,@bio,@interests,@avatar,@photos,@ageMin,@ageMax,@lookingFor,@cityPref,@interestPref,@discoverable,@showOnline,@allowGameInvites,@updatedAt)
-      ON CONFLICT(user_id) DO UPDATE SET name=excluded.name,age=excluded.age,gender=excluded.gender,city=excluded.city,bio=excluded.bio,interests_json=excluded.interests_json,avatar=excluded.avatar,photos_json=excluded.photos_json,age_min=excluded.age_min,age_max=excluded.age_max,looking_for=excluded.looking_for,city_pref=excluded.city_pref,interest_pref=excluded.interest_pref,discoverable=excluded.discoverable,show_online=excluded.show_online,allow_game_invites=excluded.allow_game_invites,updated_at=excluded.updated_at`)
+    db.prepare(`INSERT INTO profiles(user_id,name,age,gender,city,bio,interests_json,avatar,photos_json,age_min,age_max,looking_for,city_pref,interest_pref,radius_km,location_lat,location_lng,location_updated_at,discoverable,show_online,allow_game_invites,updated_at)
+      VALUES(@userId,@name,@age,@gender,@city,@bio,@interests,@avatar,@photos,@ageMin,@ageMax,@lookingFor,@cityPref,@interestPref,@radiusKm,@locationLat,@locationLng,@locationUpdatedAt,@discoverable,@showOnline,@allowGameInvites,@updatedAt)
+      ON CONFLICT(user_id) DO UPDATE SET name=excluded.name,age=excluded.age,gender=excluded.gender,city=excluded.city,bio=excluded.bio,interests_json=excluded.interests_json,avatar=excluded.avatar,photos_json=excluded.photos_json,age_min=excluded.age_min,age_max=excluded.age_max,looking_for=excluded.looking_for,city_pref=excluded.city_pref,interest_pref=excluded.interest_pref,radius_km=excluded.radius_km,location_lat=excluded.location_lat,location_lng=excluded.location_lng,location_updated_at=excluded.location_updated_at,discoverable=excluded.discoverable,show_online=excluded.show_online,allow_game_invites=excluded.allow_game_invites,updated_at=excluded.updated_at`)
       .run({userId,...values,interests:JSON.stringify(values.interests),photos:JSON.stringify(values.photos),updatedAt:now()});
     cleanupUnusedUploads(userId,[...photos,avatar].filter(x=>String(x).startsWith('/uploads/')));
     const profile = getProfile(userId);
@@ -635,7 +721,7 @@ app.post('/api/report', requireAuth, rateLimit({limit:10,windowMs:60*60*1000,key
   res.json({ok:true});
 });
 
-app.get('/healthz', (req,res) => { try { db.prepare('SELECT 1').get(); res.status(200).json({ok:true,db:true,version:'5.0.0'}); } catch { res.status(503).json({ok:false,db:false}); } });
+app.get('/healthz', (req,res) => { try { db.prepare('SELECT 1').get(); res.status(200).json({ok:true,db:true,version:'6.0.0'}); } catch { res.status(503).json({ok:false,db:false}); } });
 app.use('/uploads', express.static(UPLOAD_DIR, { fallthrough:false, maxAge:'7d', dotfiles:'deny' }));
 app.get(['/', '/index.html'], (req,res) => res.sendFile(path.join(ROOT,'index.html')));
 app.get('/styles.css', (req,res) => res.sendFile(path.join(ROOT,'styles.css')));
@@ -716,9 +802,10 @@ io.on('connection', socket => {
       const avatar=cleanAvatar(userId,avatarInput)||(hasAvatarField?'':(photos[0]||safeCurrentAvatar||''));
       const pref=data.preferences||{};
       const ageMin=Math.max(18,Math.min(99,Number(pref.ageMin)||18)); const ageMax=Math.max(ageMin,Math.min(99,Number(pref.ageMax)||99));
-      db.prepare(`INSERT INTO profiles(user_id,name,age,gender,city,bio,interests_json,avatar,photos_json,age_min,age_max,looking_for,city_pref,interest_pref,updated_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET name=excluded.name,age=excluded.age,gender=excluded.gender,city=excluded.city,bio=excluded.bio,interests_json=excluded.interests_json,avatar=excluded.avatar,photos_json=excluded.photos_json,age_min=excluded.age_min,age_max=excluded.age_max,looking_for=excluded.looking_for,city_pref=excluded.city_pref,interest_pref=excluded.interest_pref,updated_at=excluded.updated_at`)
-      .run(userId,name,age,cleanGender(data.gender),cleanShortText(data.ciudad,40),cleanShortText(data.bio,180),JSON.stringify(cleanInterests(data.intereses)),avatar,JSON.stringify(photos),ageMin,ageMax,cleanLooking(pref.lookingFor),cleanShortText(pref.city,40),cleanShortText(pref.interest,30),now());
+      const radiusKm=cleanRadius(pref.radiusKm,current?.preferences?.radiusKm||50);
+      db.prepare(`INSERT INTO profiles(user_id,name,age,gender,city,bio,interests_json,avatar,photos_json,age_min,age_max,looking_for,city_pref,interest_pref,radius_km,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET name=excluded.name,age=excluded.age,gender=excluded.gender,city=excluded.city,bio=excluded.bio,interests_json=excluded.interests_json,avatar=excluded.avatar,photos_json=excluded.photos_json,age_min=excluded.age_min,age_max=excluded.age_max,looking_for=excluded.looking_for,city_pref=excluded.city_pref,interest_pref=excluded.interest_pref,radius_km=excluded.radius_km,updated_at=excluded.updated_at`)
+      .run(userId,name,age,cleanGender(data.gender),cleanShortText(data.ciudad,40),cleanShortText(data.bio,180),JSON.stringify(cleanInterests(data.intereses)),avatar,JSON.stringify(photos),ageMin,ageMax,cleanLooking(pref.lookingFor),cleanShortText(pref.city,40),cleanShortText(pref.interest,30),radiusKm,now());
       const np=getProfile(userId); socket.nombre=np.nombre;socket.avatar=np.avatar;socket.edad=np.edad; done({ok:true,profile:np}); broadcastDiscovery();
     }catch(e){console.error(e);done({ok:false,error:'No se pudo guardar el perfil.'});}
   });
@@ -739,7 +826,7 @@ io.on('connection', socket => {
     if(reciprocal){
       const [u1,u2]=pair(userId,target); const id=matchIdFor(userId,target); const ts=now();
       db.prepare('INSERT INTO matches(id,user1,user2,created_at,active) VALUES(?,?,?,?,1) ON CONFLICT(user1,user2) DO UPDATE SET active=1').run(id,u1,u2,ts);
-      match=getActiveMatch(userId,target); const me=getProfile(userId),other=getProfile(target);
+      match=getActiveMatch(userId,target); const me=publicProfile(getProfile(userId)),other=publicProfile(getProfile(target));
       emitToUser(userId,'dating_match',{...other,matchId:match.id}); emitToUser(target,'dating_match',{...me,matchId:match.id}); emitMatches(userId);emitMatches(target);
     }
     done({ok:true,match:Boolean(match)}); socket.emit('dating_profiles',discoverFor(userId)); broadcastDiscovery();
@@ -767,7 +854,7 @@ io.on('connection', socket => {
     if(!getActiveMatch(userId,target)||blockedEitherWay(userId,target))return done({ok:false,error:'Solo puedes jugar con un match activo.'});
     const targetProfile=getProfile(target); if(targetProfile?.privacy?.allowGameInvites===false)return done({ok:false,error:'Este match ha desactivado las invitaciones a jugar.'});
     if(!opponent)return done({ok:false,error:'Tu match no está conectado ahora mismo.'});
-    const me=getProfile(userId); const mazo=validDeck(data.mazo);
+    const me=publicProfile(getProfile(userId)); const mazo=validDeck(data.mazo);
     pendingGameInvites.set(gameInviteKey(userId,target),{from:userId,to:target,mazo,expiresAt:now()+GAME_INVITE_TTL_MS});
     emitToUser(target,'dating_game_invite',{...me,mazo});done({ok:true});
   });
@@ -808,4 +895,4 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{console.log(`V/R Match v5.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);});
+server.listen(PORT, '0.0.0.0', ()=>{console.log(`V/R Match v6.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);});

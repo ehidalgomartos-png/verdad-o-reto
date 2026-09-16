@@ -358,3 +358,9 @@ textarea { font: inherit; }
 @media(max-width:480px){
   .app-copyright{margin:10px auto 18px;font-size:7px}
 }
+
+
+/* Fase 6 · proximidad y ubicación aproximada */
+.location-card{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px;border:1px solid rgba(255,255,255,.08);border-radius:18px;background:linear-gradient(135deg,rgba(74,105,255,.08),rgba(255,47,120,.05))}
+.location-copy{display:flex;flex-direction:column;gap:4px;min-width:0}.location-copy strong{font-size:12px}.location-copy small{color:#777b8b;font-size:9px;line-height:1.45;max-width:330px}.location-actions{display:flex;flex-direction:column;align-items:flex-end;gap:7px;flex:0 0 auto}.location-button{padding:10px 13px;white-space:nowrap;font-size:10px}.location-button:disabled{opacity:.55;cursor:wait}.filter-row-distance{align-items:end}.filter-distance-note{align-self:center;color:#777b8b;font-size:9px;line-height:1.4;padding:0 4px}.filter-row select{width:100%;padding:10px 11px;border-radius:11px;font-size:11px}
+@media(max-width:560px){.location-card{align-items:flex-start;flex-direction:column}.location-actions{width:100%;align-items:stretch}.location-button{width:100%}.filter-row-distance{grid-template-columns:1fr}.filter-distance-note{padding:0}}

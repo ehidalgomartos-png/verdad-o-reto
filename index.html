@@ -105,6 +105,17 @@
           <label for="ciudadUsuario">Ciudad</label>
           <input type="text" id="ciudadUsuario" placeholder="Ej. Valencia" maxlength="40" autocomplete="address-level2">
         </div>
+        <div class="location-card">
+          <div class="location-copy">
+            <span class="eyebrow">UBICACIÓN APROXIMADA</span>
+            <strong id="locationStatus">Ubicación no activada</strong>
+            <small id="locationHint">Opcional. Solo la usamos para calcular distancias; nunca mostramos tus coordenadas.</small>
+          </div>
+          <div class="location-actions">
+            <button id="locationButton" class="btn btn-secondary location-button" type="button" onclick="usarMiUbicacion()">Usar mi ubicación</button>
+            <button id="locationClearButton" class="mini-link hidden" type="button" onclick="quitarUbicacion()">Quitar ubicación</button>
+          </div>
+        </div>
         <div class="field">
           <label for="bioUsuario">Sobre ti</label>
           <textarea id="bioUsuario" class="profile-textarea" placeholder="Una frase que dé ganas de conocerte…" maxlength="180"></textarea>
@@ -119,6 +130,7 @@
           <div><span class="eyebrow">PREFERENCIAS</span><strong>¿A quién quieres descubrir?</strong></div>
           <div class="field"><label for="lookingForUsuario">Quiero conocer</label><select id="lookingForUsuario" class="profile-select"><option value="all">Personas</option><option value="women">Mujeres</option><option value="men">Hombres</option><option value="nonbinary">Personas no binarias</option></select></div>
           <div class="preference-age-row"><label>Edad mínima<input id="prefAgeMin" type="number" min="18" max="99" value="18"></label><label>Edad máxima<input id="prefAgeMax" type="number" min="18" max="99" value="99"></label></div>
+          <div class="field"><label for="prefRadiusKm">Radio máximo <small>(si activas ubicación)</small></label><select id="prefRadiusKm" class="profile-select"><option value="5">5 km</option><option value="15">15 km</option><option value="30">30 km</option><option value="50" selected>50 km</option><option value="100">100 km</option><option value="200">200 km</option></select></div>
           <div class="field"><label for="prefCity">Ciudad preferida <small>(opcional)</small></label><input id="prefCity" maxlength="40" placeholder="Ej. Valencia"></div>
           <div class="field"><label for="prefInterest">Interés que te gustaría compartir <small>(opcional)</small></label><input id="prefInterest" maxlength="30" placeholder="Ej. fotografía"></div>
         </div>
@@ -148,6 +160,10 @@
         <div class="filter-row">
           <label>Ciudad<input id="filterCity" type="text" maxlength="40" placeholder="Ej. Valencia"></label>
           <label>Interés<input id="filterInterest" type="text" maxlength="30" placeholder="Ej. fotografía"></label>
+        </div>
+        <div class="filter-row filter-row-distance">
+          <label>Distancia máxima<select id="filterDistance" class="profile-select"><option value="">Radio guardado</option><option value="5">5 km</option><option value="15">15 km</option><option value="30">30 km</option><option value="50">50 km</option><option value="100">100 km</option><option value="200">200 km</option></select></label>
+          <div class="filter-distance-note">Solo reduce resultados. Para ampliar el radio, edita tus preferencias.</div>
         </div>
         <div class="filter-actions"><button class="mini-link" type="button" onclick="limpiarDatingFilters()">Limpiar</button><button class="btn btn-primary" type="button" onclick="aplicarDatingFilters()">Aplicar filtros</button></div>
       </div>
@@ -558,7 +574,10 @@
     let origenPartida = 'legacy';
     let fotosJugador = [];
     let datingPhotoIndex = 0;
-    let datingFilters = { ageMin:18, ageMax:99, city:'', interest:'' };
+    let datingFilters = { ageMin:18, ageMax:99, city:'', interest:'', distanceKm:null };
+    let pendingLocation = null;
+    let locationConfigured = false;
+    let locationUpdatedAt = null;
     let currentChatMatch = null;
     const datingChats = new Map();
     let pointerStartX = 0;
@@ -1045,7 +1064,7 @@
       authToken=''; currentUserId=''; currentUserEmail=''; currentUserEmailVerified=false; currentUserAdmin=false;
       localStorage.removeItem('vr_auth_token'); localStorage.removeItem('vr_profile');
       datingProfiles=[]; datingMatches=[]; datingPassed=new Set(); datingChats.clear();
-      currentChatMatch=null; currentMatch=null; nombreJugador=''; edadJugador=0; avatarJugador=''; fotosJugador=[];
+      currentChatMatch=null; currentMatch=null; nombreJugador=''; edadJugador=0; avatarJugador=''; fotosJugador=[]; pendingLocation=null; locationConfigured=false; locationUpdatedAt=null;
       $('authPassword').value=''; actualizarConexion(false); showScreen('pantallaAuth');
     }
 
@@ -1161,6 +1180,63 @@
       return String(valor || '').split(',').map(x => x.trim()).filter(Boolean).slice(0,8);
     }
 
+    function actualizarEstadoUbicacion() {
+      const status = $('locationStatus'), hint = $('locationHint'), clear = $('locationClearButton');
+      if ($('filterDistance')) { $('filterDistance').disabled = !locationConfigured && !(pendingLocation && !pendingLocation.clear); if ($('filterDistance').disabled) $('filterDistance').value = ''; }
+      if (pendingLocation && pendingLocation.clear) {
+        status.textContent = 'Ubicación desactivada al guardar';
+        hint.textContent = 'Al guardar el perfil dejaremos de calcular distancias con tu ubicación.';
+        clear.classList.add('hidden');
+        return;
+      }
+      if (pendingLocation && Number.isFinite(pendingLocation.lat) && Number.isFinite(pendingLocation.lng)) {
+        status.textContent = 'Ubicación lista para guardar';
+        hint.textContent = 'Guardaremos una posición aproximada para calcular distancias. Tus coordenadas nunca se muestran.';
+        clear.classList.remove('hidden');
+        return;
+      }
+      if (locationConfigured) {
+        status.textContent = 'Ubicación activada';
+        hint.textContent = 'La proximidad está activa. Puedes actualizarla cuando quieras.';
+        clear.classList.remove('hidden');
+        return;
+      }
+      status.textContent = 'Ubicación no activada';
+      hint.textContent = 'Opcional. Solo la usamos para calcular distancias; nunca mostramos tus coordenadas.';
+      clear.classList.add('hidden');
+    }
+
+    function usarMiUbicacion() {
+      if (!navigator.geolocation) return mostrarToast('Tu navegador no permite obtener ubicación.','warn');
+      const button = $('locationButton');
+      button.disabled = true; button.textContent = 'Localizando…';
+      navigator.geolocation.getCurrentPosition((pos) => {
+        pendingLocation = { lat:Number(pos.coords.latitude), lng:Number(pos.coords.longitude) };
+        locationConfigured = true;
+        actualizarEstadoUbicacion();
+        mostrarToast('Ubicación aproximada obtenida. Guarda el perfil para aplicarla.','info');
+        button.disabled = false; button.textContent = 'Actualizar ubicación';
+      }, (err) => {
+        button.disabled = false; button.textContent = locationConfigured ? 'Actualizar ubicación' : 'Usar mi ubicación';
+        const msg = err && err.code === 1 ? 'Necesitamos tu permiso para calcular distancias.' : 'No se pudo obtener tu ubicación. Inténtalo de nuevo.';
+        mostrarToast(msg,'warn');
+      }, { enableHighAccuracy:false, timeout:10000, maximumAge:300000 });
+    }
+
+    function quitarUbicacion() {
+      pendingLocation = { clear:true };
+      locationConfigured = false;
+      actualizarEstadoUbicacion();
+      mostrarToast('La ubicación se quitará cuando guardes el perfil.','info');
+    }
+
+    function etiquetaDistancia(km) {
+      const n = Number(km);
+      if (!Number.isFinite(n)) return '';
+      if (n <= .5) return 'a menos de 1 km';
+      return `a ${Math.max(1,Math.round(n))} km`;
+    }
+
     function registrarDating() {
       if (!nombreJugador || edadJugador < 18) return;
       socket.emit('dating_join', {
@@ -1172,7 +1248,7 @@
         bio: bioJugador,
         intereses: interesesJugador,
         gender: $('genderUsuario').value,
-        preferences: { ageMin:Number($('prefAgeMin').value)||18, ageMax:Number($('prefAgeMax').value)||99, lookingFor:$('lookingForUsuario').value, city:$('prefCity').value, interest:$('prefInterest').value }
+        preferences: { ageMin:Number($('prefAgeMin').value)||18, ageMax:Number($('prefAgeMax').value)||99, lookingFor:$('lookingForUsuario').value, city:$('prefCity').value, interest:$('prefInterest').value, radiusKm:Number($('prefRadiusKm').value)||50 }
       }, (res) => {
         if (res && !res.ok) mostrarToast(res.error || 'No se pudo entrar a Descubrir.', 'error');
       });
@@ -1201,19 +1277,23 @@
       if (city && !String(p.ciudad || '').toLowerCase().includes(city)) return false;
       const interest = datingFilters.interest.trim().toLowerCase();
       if (interest && !(Array.isArray(p.intereses) ? p.intereses : []).some(x => String(x).toLowerCase().includes(interest))) return false;
+      if (datingFilters.distanceKm !== null) {
+        const d = Number(p.distanceKm);
+        if (!Number.isFinite(d) || d > datingFilters.distanceKm) return false;
+      }
       return true;
     }
 
     function toggleDatingFilters() { $('datingFilters').classList.toggle('hidden'); }
     function limpiarDatingFilters() {
-      $('filterAgeMin').value = 18; $('filterAgeMax').value = 99; $('filterCity').value = ''; $('filterInterest').value = '';
-      datingFilters = { ageMin:18, ageMax:99, city:'', interest:'' }; renderDatingCard();
+      $('filterAgeMin').value = 18; $('filterAgeMax').value = 99; $('filterCity').value = ''; $('filterInterest').value = ''; $('filterDistance').value = '';
+      datingFilters = { ageMin:18, ageMax:99, city:'', interest:'', distanceKm:null }; renderDatingCard();
     }
     function aplicarDatingFilters() {
       let min = Math.max(18, Math.min(99, Number($('filterAgeMin').value) || 18));
       let max = Math.max(18, Math.min(99, Number($('filterAgeMax').value) || 99));
       if (min > max) [min,max] = [max,min];
-      datingFilters = { ageMin:min, ageMax:max, city:String($('filterCity').value || ''), interest:String($('filterInterest').value || '') };
+      datingFilters = { ageMin:min, ageMax:max, city:String($('filterCity').value || ''), interest:String($('filterInterest').value || ''), distanceKm:$('filterDistance').value ? Number($('filterDistance').value) : null };
       $('datingFilters').classList.add('hidden'); renderDatingCard();
     }
 
@@ -1271,7 +1351,7 @@
         actions.classList.add('is-disabled');
         const filtered = datingProfiles.some(p => !datingPassed.has(p.id) && !perfilEsMatch(p.id));
         empty.querySelector('strong').textContent = filtered ? 'No hay perfiles con estos filtros' : 'No hay más perfiles ahora';
-        empty.querySelector('small').textContent = filtered ? 'Prueba ampliando edad, ciudad o intereses.' : 'Cuando alguien entre, aparecerá aquí automáticamente. Abre otra pestaña para probar el match.';
+        empty.querySelector('small').textContent = filtered ? 'Prueba ampliando edad, distancia, ciudad o intereses.' : 'Cuando alguien entre, aparecerá aquí automáticamente. Abre otra pestaña para probar el match.';
         return;
       }
       empty.classList.add('hidden');
@@ -1284,7 +1364,8 @@
       const p = currentDatingProfile;
       $('datingName').textContent = p.nombre || 'Perfil';
       $('datingAge').textContent = p.edad || '';
-      $('datingCity').textContent = p.ciudad ? `📍 ${p.ciudad}` : '📍 Ciudad no indicada';
+      const distanceText = etiquetaDistancia(p.distanceKm);
+      $('datingCity').textContent = p.ciudad ? `📍 ${p.ciudad}${distanceText ? ` · ${distanceText}` : ''}` : (distanceText ? `📍 ${distanceText}` : '📍 Ciudad no indicada');
       $('datingBio').textContent = p.bio || 'Prefiero que me conozcas jugando.';
       const interestBox = $('datingInterests');
       interestBox.innerHTML = '';
@@ -1655,9 +1736,10 @@
         ciudad:String($('ciudadUsuario').value || '').trim().slice(0,40),
         bio:String($('bioUsuario').value || '').trim().slice(0,180),
         intereses:normalizarIntereses($('interesesUsuario').value),
-        preferences:{ ageMin, ageMax, lookingFor:$('lookingForUsuario').value, city:String($('prefCity').value||'').trim().slice(0,40), interest:String($('prefInterest').value||'').trim().slice(0,30) },
+        preferences:{ ageMin, ageMax, lookingFor:$('lookingForUsuario').value, city:String($('prefCity').value||'').trim().slice(0,40), interest:String($('prefInterest').value||'').trim().slice(0,30), radiusKm:Number($('prefRadiusKm').value)||50 },
         privacy:currentPrivacy
       };
+      if (pendingLocation) payload.location = pendingLocation;
       const res = await api('/api/profile', { method:'PUT', body:payload });
       if (!res.ok) return mostrarToast(res.error || 'No se pudo guardar el perfil.', 'error');
       aplicarPerfilServidor(res.profile);
@@ -1685,8 +1767,14 @@
       $('lookingForUsuario').value = pref.lookingFor || 'all';
       $('prefAgeMin').value = pref.ageMin || 18;
       $('prefAgeMax').value = pref.ageMax || 99;
+      $('prefRadiusKm').value = String(pref.radiusKm || 50);
       $('prefCity').value = pref.city || '';
       $('prefInterest').value = pref.interest || '';
+      locationConfigured = saved.location?.enabled === true;
+      locationUpdatedAt = saved.location?.updatedAt || null;
+      pendingLocation = null;
+      $('locationButton').textContent = locationConfigured ? 'Actualizar ubicación' : 'Usar mi ubicación';
+      actualizarEstadoUbicacion();
       currentPrivacy = { discoverable:saved.privacy?.discoverable!==false, showOnline:saved.privacy?.showOnline!==false, allowGameInvites:saved.privacy?.allowGameInvites!==false };
       $('bioCounter').textContent = String(bioJugador.length);
       $('saludoHeader').textContent = nombreJugador || 'Hola';
