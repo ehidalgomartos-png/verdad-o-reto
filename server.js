@@ -178,6 +178,27 @@ CREATE TABLE IF NOT EXISTS moderation_actions (
   note TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS plus_memberships (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'inactive',
+  plan TEXT NOT NULL DEFAULT 'plus',
+  source TEXT NOT NULL DEFAULT 'admin',
+  started_at INTEGER,
+  expires_at INTEGER,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS plus_settings (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  verified_only INTEGER NOT NULL DEFAULT 0,
+  min_shared_interests INTEGER NOT NULL DEFAULT 0,
+  sort_mode TEXT NOT NULL DEFAULT 'smart',
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS plus_boosts (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  active_until INTEGER,
+  last_used_at INTEGER
+);
 `);
 
 app.disable('x-powered-by');
@@ -391,6 +412,83 @@ function publicDistance(km) {
   return Math.round(km);
 }
 
+
+function sharedInterestsCount(a, b) {
+  const aa = new Set((Array.isArray(a?.intereses) ? a.intereses : []).map(x => String(x).trim().toLowerCase()).filter(Boolean));
+  const bb = new Set((Array.isArray(b?.intereses) ? b.intereses : []).map(x => String(x).trim().toLowerCase()).filter(Boolean));
+  let n = 0;
+  for (const x of aa) if (bb.has(x)) n++;
+  return n;
+}
+function getPlusSettings(userId) {
+  const row = db.prepare('SELECT verified_only,min_shared_interests,sort_mode FROM plus_settings WHERE user_id=?').get(userId);
+  return {
+    verifiedOnly: Boolean(row?.verified_only),
+    minSharedInterests: Math.max(0, Math.min(3, Number(row?.min_shared_interests) || 0)),
+    sortMode: ['smart','distance','interests','recent'].includes(String(row?.sort_mode || '')) ? String(row.sort_mode) : 'smart'
+  };
+}
+function plusIsActive(userId) {
+  const row = db.prepare("SELECT status,expires_at FROM plus_memberships WHERE user_id=?").get(userId);
+  if (!row || row.status !== 'active') return false;
+  if (row.expires_at && Number(row.expires_at) <= now()) {
+    db.prepare("UPDATE plus_memberships SET status='expired',updated_at=? WHERE user_id=?").run(now(),userId);
+    return false;
+  }
+  return true;
+}
+function plusBoostState(userId) {
+  const row = db.prepare('SELECT active_until,last_used_at FROM plus_boosts WHERE user_id=?').get(userId);
+  const activeUntil = Number(row?.active_until) || 0;
+  const lastUsedAt = Number(row?.last_used_at) || 0;
+  const cooldownUntil = lastUsedAt ? lastUsedAt + 24*60*60*1000 : 0;
+  return {
+    active: activeUntil > now(),
+    activeUntil: activeUntil || null,
+    lastUsedAt: lastUsedAt || null,
+    cooldownUntil: cooldownUntil || null,
+    available: !lastUsedAt || cooldownUntil <= now()
+  };
+}
+function getPlusState(userId) {
+  const active = plusIsActive(userId);
+  const row = db.prepare('SELECT status,plan,source,started_at,expires_at FROM plus_memberships WHERE user_id=?').get(userId);
+  return {
+    active,
+    plan: active ? (row?.plan || 'plus') : 'free',
+    status: active ? 'active' : (row?.status || 'inactive'),
+    source: row?.source || null,
+    startedAt: row?.started_at || null,
+    expiresAt: active ? (row?.expires_at || null) : null,
+    settings: getPlusSettings(userId),
+    boost: plusBoostState(userId),
+    billingEnabled: false
+  };
+}
+function requirePlus(req,res,next) {
+  if (!plusIsActive(req.user.id)) return res.status(403).json({ok:false,error:'Esta función requiere V/R+.',plusRequired:true});
+  next();
+}
+function grantPlus(userId, days = 30, source = 'admin') {
+  const ts = now();
+  const current = db.prepare('SELECT expires_at FROM plus_memberships WHERE user_id=?').get(userId);
+  const base = Math.max(ts, Number(current?.expires_at) || 0);
+  const expires = base + Math.max(1,Math.min(365,Number(days)||30))*86400000;
+  db.prepare(`INSERT INTO plus_memberships(user_id,status,plan,source,started_at,expires_at,updated_at)
+    VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET status='active',plan='plus',source=excluded.source,
+    started_at=COALESCE(plus_memberships.started_at,excluded.started_at),expires_at=excluded.expires_at,updated_at=excluded.updated_at`)
+    .run(userId,'active','plus',source,ts,expires,ts);
+  return getPlusState(userId);
+}
+function revokePlus(userId) {
+  const ts = now();
+  db.prepare(`INSERT INTO plus_memberships(user_id,status,plan,source,updated_at)
+    VALUES(?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET status='inactive',expires_at=NULL,updated_at=excluded.updated_at`)
+    .run(userId,'inactive','plus','admin',ts);
+  db.prepare('DELETE FROM plus_boosts WHERE user_id=?').run(userId);
+  return getPlusState(userId);
+}
+
 function profileFromRow(row) {
   if (!row) return null;
   return {
@@ -468,18 +566,37 @@ function discoverFor(userId) {
 
   const useDistance = hasStoredLocation(meRow);
   const radiusKm = cleanRadius(meRow?.radius_km, 50);
-  return db.prepare("SELECT p.* FROM profiles p JOIN users u ON u.id=p.user_id WHERE p.user_id != ? AND u.status='active'").all(userId)
+  const plusActive = plusIsActive(userId);
+  const plusSettings = plusActive ? getPlusSettings(userId) : {verifiedOnly:false,minSharedInterests:0,sortMode:'smart'};
+  const ts = now();
+
+  return db.prepare("SELECT p.*,u.email_verified,u.last_seen_at FROM profiles p JOIN users u ON u.id=p.user_id WHERE p.user_id != ? AND u.status='active'").all(userId)
     .map(row => {
       const fullProfile = profileFromRow(row);
       const distance = distanceKmBetweenRows(meRow, row);
+      const shared = sharedInterestsCount(me, fullProfile);
+      const boost = db.prepare('SELECT active_until FROM plus_boosts WHERE user_id=?').get(row.user_id);
+      const boosted = Boolean(Number(boost?.active_until) > ts);
       const profile = publicProfile(fullProfile);
+      profile.verified = Boolean(row.email_verified);
+      profile.sharedInterests = shared;
+      profile.boosted = boosted;
       if (distance !== null) profile.distanceKm = publicDistance(distance);
-      return { row, fullProfile, profile, distance };
+      return { row, fullProfile, profile, distance, shared, boosted };
     })
     .filter(item => !excluded.has(item.profile.id) && profileAccepts(me,item.fullProfile) && profileAccepts(item.fullProfile,me))
-    // Si el usuario activa ubicación, la proximidad pasa a ser un filtro real.
     .filter(item => !useDistance || (item.distance !== null && item.distance <= radiusKm))
+    .filter(item => !plusSettings.verifiedOnly || item.profile.verified)
+    .filter(item => item.shared >= plusSettings.minSharedInterests)
     .sort((a,b) => {
+      if (a.boosted !== b.boosted) return a.boosted ? -1 : 1;
+      if (plusActive && plusSettings.sortMode === 'interests' && a.shared !== b.shared) return b.shared - a.shared;
+      if (plusActive && plusSettings.sortMode === 'recent') return Number(b.row.last_seen_at || b.row.updated_at || 0) - Number(a.row.last_seen_at || a.row.updated_at || 0);
+      if (plusActive && plusSettings.sortMode === 'distance') {
+        const ad = a.distance ?? Number.POSITIVE_INFINITY, bd = b.distance ?? Number.POSITIVE_INFINITY;
+        if (ad !== bd) return ad - bd;
+      }
+      if (plusActive && plusSettings.sortMode === 'smart' && a.shared !== b.shared) return b.shared - a.shared;
       if (useDistance) {
         const ad = a.distance ?? Number.POSITIVE_INFINITY, bd = b.distance ?? Number.POSITIVE_INFINITY;
         if (ad !== bd) return ad - bd;
@@ -488,6 +605,7 @@ function discoverFor(userId) {
     })
     .map(item => item.profile);
 }
+
 function matchPartnerRow(match, userId) {
   const partnerId = match.user1 === userId ? match.user2 : match.user1;
   const partnerUser = db.prepare('SELECT status FROM users WHERE id=?').get(partnerId);
@@ -574,7 +692,7 @@ app.post('/api/auth/register', rateLimit({limit:8,windowMs:60*60*1000,key:req=>r
     try { emailSent = (await sendVerificationEmail(req,user)).sent; } catch (e) { console.error('Error enviando verificación:',e.message); }
     if (REQUIRE_EMAIL_VERIFICATION) return res.json({ok:true,verificationRequired:true,emailSent,user:{...user,emailVerified:false}});
     const token = createSession(id);
-    res.json({ ok:true, token, user:{ ...user, emailVerified:false, admin:isAdmin(user) }, profile:null, emailVerificationPending:true, emailSent });
+    res.json({ ok:true, token, user:{ ...user, emailVerified:false, admin:isAdmin(user) }, profile:null, plus:getPlusState(id), emailVerificationPending:true, emailSent });
   } catch (e) {
     console.error(e); res.status(500).json({ ok:false, error:'No se pudo crear la cuenta.' });
   }
@@ -589,7 +707,7 @@ app.post('/api/auth/login', rateLimit({limit:25,windowMs:15*60*1000,key:req=>`${
     if (REQUIRE_EMAIL_VERIFICATION && !row.email_verified) return res.status(403).json({ok:false,error:'Primero verifica tu correo.',verificationRequired:true});
     db.prepare('UPDATE users SET last_seen_at=? WHERE id=?').run(now(),row.id);
     const token = createSession(row.id);
-    res.json({ ok:true, token, user:{id:row.id,email:row.email,emailVerified:Boolean(row.email_verified),admin:isAdmin(row)}, profile:getProfile(row.id) });
+    res.json({ ok:true, token, user:{id:row.id,email:row.email,emailVerified:Boolean(row.email_verified),admin:isAdmin(row)}, profile:getProfile(row.id), plus:getPlusState(row.id) });
   } catch (e) {
     console.error(e); res.status(500).json({ ok:false, error:'No se pudo iniciar sesión.' });
   }
@@ -611,7 +729,7 @@ app.post('/api/auth/reset', rateLimit({limit:10,windowMs:60*60*1000,key:req=>req
     db.prepare('DELETE FROM sessions WHERE user_id=?').run(row.user_id);
     const user=db.prepare('SELECT id,email,email_verified FROM users WHERE id=?').get(row.user_id);
     const session=createSession(row.user_id);
-    res.json({ok:true,token:session,user:{id:user.id,email:user.email,emailVerified:Boolean(user.email_verified),admin:isAdmin(user)},profile:getProfile(user.id)});
+    res.json({ok:true,token:session,user:{id:user.id,email:user.email,emailVerified:Boolean(user.email_verified),admin:isAdmin(user)},profile:getProfile(user.id),plus:getPlusState(user.id)});
   } catch(e){console.error(e);res.status(500).json({ok:false,error:'No se pudo restablecer la contraseña.'});}
 });
 
@@ -636,7 +754,7 @@ app.post('/api/auth/logout', requireAuth, (req,res) => {
 
 app.get('/api/me', requireAuth, (req,res) => {
   const full=db.prepare('SELECT email_verified FROM users WHERE id=?').get(req.user.id);
-  res.json({ ok:true, user:{id:req.user.id,email:req.user.email,emailVerified:Boolean(full?.email_verified),admin:isAdmin(req.user)}, profile:getProfile(req.user.id), matches:matchesFor(req.user.id) });
+  res.json({ ok:true, user:{id:req.user.id,email:req.user.email,emailVerified:Boolean(full?.email_verified),admin:isAdmin(req.user)}, profile:getProfile(req.user.id), matches:matchesFor(req.user.id), plus:getPlusState(req.user.id) });
 });
 
 app.put('/api/profile', requireAuth, (req,res) => {
@@ -712,6 +830,39 @@ app.post('/api/account/delete', requireAuth, rateLimit({limit:3,windowMs:24*60*6
   if(!row||!verifyPassword(password,row.password_hash))return res.status(400).json({ok:false,error:'Contraseña incorrecta.'});
   disconnectUserSockets(req.user.id,'account_deleted',{}); deleteUserUploads(req.user.id); db.prepare('DELETE FROM users WHERE id=?').run(req.user.id); onlineUsers.delete(req.user.id); broadcastDiscovery();
   res.json({ok:true});
+});
+
+
+app.get('/api/plus', requireAuth, (req,res) => {
+  res.json({ok:true,plus:getPlusState(req.user.id)});
+});
+
+app.put('/api/plus/settings', requireAuth, requirePlus, (req,res) => {
+  const verifiedOnly = bool01(req.body?.verifiedOnly,false);
+  const minSharedInterests = Math.max(0,Math.min(3,Number(req.body?.minSharedInterests)||0));
+  const sortMode = ['smart','distance','interests','recent'].includes(String(req.body?.sortMode||'')) ? String(req.body.sortMode) : 'smart';
+  db.prepare(`INSERT INTO plus_settings(user_id,verified_only,min_shared_interests,sort_mode,updated_at)
+    VALUES(?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET verified_only=excluded.verified_only,
+    min_shared_interests=excluded.min_shared_interests,sort_mode=excluded.sort_mode,updated_at=excluded.updated_at`)
+    .run(req.user.id,verifiedOnly,minSharedInterests,sortMode,now());
+  const plus=getPlusState(req.user.id);
+  emitToUser(req.user.id,'plus_state',plus);
+  emitToUser(req.user.id,'dating_profiles',discoverFor(req.user.id));
+  res.json({ok:true,plus});
+});
+
+app.post('/api/plus/boost', requireAuth, requirePlus, (req,res) => {
+  const state = plusBoostState(req.user.id);
+  if (state.active) return res.status(409).json({ok:false,error:'Tu Boost ya está activo.',plus:getPlusState(req.user.id)});
+  if (!state.available) return res.status(429).json({ok:false,error:'Tu siguiente Boost estará disponible más tarde.',plus:getPlusState(req.user.id)});
+  const ts=now(), activeUntil=ts+30*60*1000;
+  db.prepare(`INSERT INTO plus_boosts(user_id,active_until,last_used_at) VALUES(?,?,?)
+    ON CONFLICT(user_id) DO UPDATE SET active_until=excluded.active_until,last_used_at=excluded.last_used_at`)
+    .run(req.user.id,activeUntil,ts);
+  const plus=getPlusState(req.user.id);
+  emitToUser(req.user.id,'plus_state',plus);
+  broadcastDiscovery();
+  res.json({ok:true,plus});
 });
 
 app.get('/api/admin/stats', requireAuth, requireAdmin, (req,res) => {
@@ -790,18 +941,21 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req,res) => {
     (SELECT COUNT(*) FROM reports r WHERE r.reported=u.id) reports_received,
     (SELECT COUNT(*) FROM reports r WHERE r.reporter=u.id) reports_sent,
     (SELECT COUNT(*) FROM messages m WHERE m.from_user=u.id) messages_sent,
-    (SELECT COUNT(*) FROM matches mm WHERE mm.active=1 AND (mm.user1=u.id OR mm.user2=u.id)) active_matches
+    (SELECT COUNT(*) FROM matches mm WHERE mm.active=1 AND (mm.user1=u.id OR mm.user2=u.id)) active_matches,
+    (SELECT CASE WHEN pm.status='active' AND (pm.expires_at IS NULL OR pm.expires_at>?) THEN 1 ELSE 0 END FROM plus_memberships pm WHERE pm.user_id=u.id) plus_active,
+    (SELECT pm.expires_at FROM plus_memberships pm WHERE pm.user_id=u.id) plus_expires_at
     FROM users u LEFT JOIN profiles p ON p.user_id=u.id
     ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
     ORDER BY u.last_seen_at DESC LIMIT 120`;
-  res.json({ok:true,users:db.prepare(sql).all(...params)});
+  res.json({ok:true,users:db.prepare(sql).all(now(),...params)});
 });
 
 app.get('/api/admin/users/:id', requireAuth, requireAdmin, (req,res) => {
   const id = String(req.params.id||'');
   const user = db.prepare(`SELECT u.id,u.email,u.status,u.created_at,u.last_seen_at,u.email_verified,
-      p.name,p.age,p.gender,p.city,p.bio,p.interests_json,p.avatar,p.photos_json,p.discoverable,p.show_online,p.allow_game_invites,p.location_updated_at
-      FROM users u LEFT JOIN profiles p ON p.user_id=u.id WHERE u.id=?`).get(id);
+      p.name,p.age,p.gender,p.city,p.bio,p.interests_json,p.avatar,p.photos_json,p.discoverable,p.show_online,p.allow_game_invites,p.location_updated_at,
+      pm.status plus_status,pm.expires_at plus_expires_at
+      FROM users u LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN plus_memberships pm ON pm.user_id=u.id WHERE u.id=?`).get(id);
   if (!user) return res.status(404).json({ok:false,error:'Usuario no encontrado.'});
   const summary = {
     reportsReceived: db.prepare('SELECT COUNT(*) n FROM reports WHERE reported=?').get(id).n,
@@ -836,14 +990,20 @@ app.post('/api/admin/users/:id/action', requireAuth, requireAdmin, (req,res) => 
   const action = String(req.body?.action||'');
   const note = cleanShortText(req.body?.note,500);
   if (target === req.user.id && action === 'suspend') return res.status(400).json({ok:false,error:'No puedes suspender tu propia cuenta administradora.'});
-  if (!['suspend','reactivate','hide_profile','show_profile','clear_photos','clear_bio'].includes(action)) return res.status(400).json({ok:false,error:'Acción no válida.'});
+  if (!['suspend','reactivate','hide_profile','show_profile','clear_photos','clear_bio','grant_plus_30d','revoke_plus'].includes(action)) return res.status(400).json({ok:false,error:'Acción no válida.'});
   if (action === 'suspend') suspendUser(target);
   if (action === 'reactivate') reactivateUser(target);
   if (action === 'hide_profile') db.prepare('UPDATE profiles SET discoverable=0,updated_at=? WHERE user_id=?').run(now(),target);
   if (action === 'show_profile') db.prepare('UPDATE profiles SET discoverable=1,updated_at=? WHERE user_id=?').run(now(),target);
   if (action === 'clear_photos') clearProfilePhotos(target);
   if (action === 'clear_bio') db.prepare("UPDATE profiles SET bio='',updated_at=? WHERE user_id=?").run(now(),target);
+  if (action === 'grant_plus_30d') grantPlus(target,30,'admin');
+  if (action === 'revoke_plus') revokePlus(target);
   logModerationAction(req.user.id,target,action,note,null);
+  if (action === 'grant_plus_30d' || action === 'revoke_plus') {
+    emitToUser(target,'plus_state',getPlusState(target));
+    emitToUser(target,'dating_profiles',discoverFor(target));
+  }
   broadcastDiscovery(); emitMatches(target);
   res.json({ok:true,userStatus:db.prepare('SELECT status FROM users WHERE id=?').get(target)?.status||null});
 });
@@ -906,7 +1066,7 @@ app.post('/api/report', requireAuth, rateLimit({limit:10,windowMs:60*60*1000,key
   res.json({ok:true});
 });
 
-app.get('/healthz', (req,res) => { try { db.prepare('SELECT 1').get(); res.status(200).json({ok:true,db:true,version:'7.0.0'}); } catch { res.status(503).json({ok:false,db:false}); } });
+app.get('/healthz', (req,res) => { try { db.prepare('SELECT 1').get(); res.status(200).json({ok:true,db:true,version:'8.0.0'}); } catch { res.status(503).json({ok:false,db:false}); } });
 app.use('/uploads', express.static(UPLOAD_DIR, { fallthrough:false, maxAge:'7d', dotfiles:'deny' }));
 app.get(['/', '/index.html'], (req,res) => res.sendFile(path.join(ROOT,'index.html')));
 app.get('/styles.css', (req,res) => res.sendFile(path.join(ROOT,'styles.css')));
@@ -971,7 +1131,7 @@ io.on('connection', socket => {
   socketSet(userId).add(socket.id);
   db.prepare('UPDATE users SET last_seen_at=? WHERE id=?').run(now(),userId);
   const p=getProfile(userId); if(p){socket.nombre=p.nombre;socket.avatar=p.avatar;socket.edad=p.edad;}
-  socket.emit('dating_profiles',discoverFor(userId)); socket.emit('dating_matches',matchesFor(userId));
+  socket.emit('dating_profiles',discoverFor(userId)); socket.emit('dating_matches',matchesFor(userId)); socket.emit('plus_state',getPlusState(userId));
   setTimeout(()=>broadcastDiscovery(),20);
 
   socket.on('dating_join',(data={},ack)=>{
@@ -999,6 +1159,24 @@ io.on('connection', socket => {
     const done=typeof ack==='function'?ack:()=>{}; if(!allowAction(`pass:${userId}`,120,60000))return done({ok:false,error:'Vas demasiado rápido. Espera un momento.'}); const target=String(data.oponenteID||'');
     if(!target||target===userId)return done({ok:false,error:'Perfil no válido.'});
     db.prepare('INSERT OR REPLACE INTO passes(from_user,to_user,created_at) VALUES(?,?,?)').run(userId,target,now()); done({ok:true}); socket.emit('dating_profiles',discoverFor(userId));
+  });
+
+  socket.on('dating_rewind',(data={},ack)=>{
+    const done=typeof ack==='function'?ack:()=>{};
+    if(!plusIsActive(userId))return done({ok:false,error:'Rewind requiere V/R+.',plusRequired:true});
+    if(!allowAction(`rewind:${userId}`,12,60000))return done({ok:false,error:'Espera un momento antes de volver a usar Rewind.'});
+    const row=db.prepare('SELECT to_user,created_at FROM passes WHERE from_user=? ORDER BY created_at DESC LIMIT 1').get(userId);
+    if(!row)return done({ok:false,error:'No hay un perfil reciente que puedas recuperar.'});
+    const target=String(row.to_user||'');
+    db.prepare('DELETE FROM passes WHERE from_user=? AND to_user=?').run(userId,target);
+    const list=discoverFor(userId);
+    const profile=list.find(p=>p.id===target);
+    if(!profile){
+      db.prepare('INSERT OR REPLACE INTO passes(from_user,to_user,created_at) VALUES(?,?,?)').run(userId,target,Number(row.created_at)||now());
+      return done({ok:false,error:'Ese perfil ya no está disponible para Rewind.'});
+    }
+    socket.emit('dating_profiles',list);
+    done({ok:true,profile});
   });
 
   socket.on('dating_like',(data={},ack)=>{
@@ -1080,4 +1258,4 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{console.log(`V/R Match v7.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);});
+server.listen(PORT, '0.0.0.0', ()=>{console.log(`V/R Match v8.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);});

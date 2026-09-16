@@ -1,8 +1,8 @@
 {
   "name": "vr-match",
-  "version": "7.0.0",
+  "version": "8.0.0",
   "private": true,
-  "description": "V/R Match dating app with persistent accounts, proximity discovery, email recovery and advanced moderation with SQLite",
+  "description": "V/R Match dating app with proximity, moderation and V/R+ premium feature layer with SQLite",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

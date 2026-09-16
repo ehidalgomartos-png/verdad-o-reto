@@ -887,3 +887,73 @@ Queda para cierre de desarrollo:
 - upgrade de Render;
 - persistencia definitiva;
 - backups y almacenamiento de imágenes.
+
+---
+
+# ACTUALIZACIÓN — 16 DE SEPTIEMBRE DE 2026 · FASE 8
+
+## Fase 7 desplegada
+
+El Centro de moderación fue desplegado y la cuenta administradora quedó reconocida mediante `VR_ADMIN_EMAILS`.
+
+## Fase 8 preparada — V/R+
+
+La siguiente versión preparada es:
+
+**V/R Match 8.0.0 — V/R+**
+
+### Membresía
+
+Se añade una capa persistente de membresía V/R+ en SQLite. Durante la beta la membresía se concede o revoca desde el panel administrador.
+
+No existe todavía cobro real. El checkout/proveedor de pagos se conectará en producción, después de resolver dominio, Render de pago y persistencia definitiva.
+
+### Funciones V/R+
+
+- Rewind del último perfil pasado.
+- Filtro de cuentas con correo confirmado.
+- Mínimo de 0–3 intereses compartidos.
+- Orden premium por compatibilidad, cercanía, intereses o actividad reciente.
+- Boost de 30 minutos.
+- Un Boost disponible cada 24 horas.
+- Perfiles con Boost se priorizan en Descubrir.
+- Pantalla propia de V/R+ y estado Free / Plus.
+
+### Administración de V/R+
+
+Desde Moderación → Usuarios:
+
+- `Conceder V/R+ 30 días`.
+- `Revocar V/R+`.
+- Estado V/R+ visible en la ficha administrativa.
+- Concesión/revocación registrada en historial.
+- Si el usuario está conectado, el estado V/R+ se sincroniza en tiempo real.
+
+### Privacidad
+
+V/R+ no expone:
+
+- coordenadas;
+- preferencias privadas;
+- configuración interna;
+- email del usuario a otros perfiles.
+
+El indicador `Correo confirmado` únicamente refleja verificación de email y no debe presentarse como verificación de identidad.
+
+## Producción pendiente
+
+Dejar para el cierre:
+
+- dominio propio;
+- Render Starter/Persistent Disk o migración de base de datos;
+- almacenamiento persistente de imágenes;
+- checkout real y webhooks del proveedor de pagos;
+- remitente profesional de correo;
+- `VR_REQUIRE_EMAIL_VERIFICATION=true`;
+- copias de seguridad.
+
+## Health check esperado
+
+```json
+{"ok":true,"db":true,"version":"8.0.0"}
+```

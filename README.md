@@ -1,176 +1,96 @@
-# V/R Match · Fase 7 — moderación avanzada
+# V/R Match — Fase 8 · V/R+
 
-Esta versión continúa el MVP de V/R Match ya desplegado en GitHub + Render y conserva el flujo principal:
+Versión: **8.0.0**
 
-**Descubrir → Like → Match → Chat → Juego → volver al Chat**
+Esta versión continúa directamente sobre la Fase 7. Mantiene cuentas, perfiles, descubrimiento por proximidad, matches, chat, juego integrado, email/recuperación y moderación avanzada.
 
-La Fase 7 amplía el panel administrativo para que las denuncias y acciones de moderación puedan gestionarse con trazabilidad real.
+## Qué añade Fase 8
 
-## Novedades de la Fase 7
+### V/R+ como capa real de producto
+- Estado de membresía V/R+ persistente en SQLite.
+- Pantalla propia de V/R+.
+- Estado Free / Plus visible para la propia cuenta.
+- Administración manual de membresías durante la beta.
+- La capa de cobro **NO está activada todavía**. El checkout real se conectará al pasar a producción.
 
-- Centro de moderación con tres áreas:
-  - **Denuncias**
-  - **Usuarios**
-  - **Historial**
-- Estadísticas de:
-  - usuarios activos;
-  - usuarios suspendidos;
-  - matches activos;
-  - denuncias abiertas;
-  - mensajes;
-  - acciones administrativas de las últimas 24 h.
-- Filtros de denuncias por estado, motivo y búsqueda.
-- Las nuevas denuncias guardan como evidencia un contexto limitado de los últimos mensajes de ese match.
-- El administrador puede:
-  - resolver o descartar denuncias;
-  - suspender y reactivar cuentas;
-  - ocultar o volver a mostrar un perfil;
-  - eliminar fotos de perfil;
-  - limpiar una biografía;
-  - eliminar mensajes concretos desde la evidencia de una denuncia.
-- Cuando un mensaje es eliminado por moderación desaparece también del chat conectado mediante Socket.IO.
-- Buscador de usuarios por nombre, correo o ciudad.
-- Ficha de moderación por usuario con actividad, denuncias, matches, mensajes y acciones previas.
-- Historial de acciones administrativas con administrador, usuario afectado, fecha y nota interna.
-- Los usuarios suspendidos dejan de aparecer en Descubrir y en la lista de matches mientras dure la suspensión.
-- Migraciones automáticas: no hace falta borrar la base SQLite existente.
-- `/healthz` pasa a versión **7.0.0**.
+### Rewind
+- Usuarios V/R+ pueden recuperar el último perfil que hayan pasado.
+- Solo revierte el último `pass`; no deshace matches ni likes mutuos.
 
-## Privacidad del panel
+### Filtros avanzados V/R+
+- Solo cuentas con correo confirmado.
+- Mínimo de intereses compartidos: 0–3.
+- Orden de descubrimiento:
+  - Compatibilidad.
+  - Cercanía.
+  - Intereses comunes.
+  - Actividad reciente.
 
-El panel administrativo no muestra coordenadas exactas de geolocalización. Solo indica si el usuario tiene ubicación configurada.
+### Boost V/R+
+- 1 Boost cada 24 horas.
+- Duración: 30 minutos.
+- Los perfiles con Boost se priorizan en Descubrir.
+- No revela ubicación exacta ni datos privados.
 
-La evidencia de chat se limita al contexto asociado a una denuncia y se almacena para revisión de seguridad. No se convierte el panel en un explorador general de conversaciones.
+### Panel administrador
+Desde Moderación → Usuarios el administrador puede:
+- Conceder V/R+ durante 30 días.
+- Revocar V/R+.
+- Ver si una cuenta tiene V/R+ activo.
+- Las acciones quedan registradas en Historial.
 
-## Activar un administrador
+## Pagos
 
-Los administradores se controlan exclusivamente mediante una variable de entorno de Render:
+En esta fase se implementa la **lógica de membresía y ventajas**, pero no se procesa ningún pago real.
 
-```text
-VR_ADMIN_EMAILS=correo-admin@ejemplo.com
-```
+Se deja para el cierre de producción, junto con:
+- dominio propio,
+- upgrade de Render,
+- almacenamiento persistente,
+- proveedor de pagos / checkout,
+- webhooks de suscripción.
 
-Para varios administradores:
+Esto evita cobrar dinero mientras el backend sigue en Render Free con almacenamiento efímero.
 
-```text
-VR_ADMIN_EMAILS=admin1@ejemplo.com,admin2@ejemplo.com
-```
+## Deploy
 
-No escribas esta configuración dentro de `server.js`.
-
-Después de cambiar `VR_ADMIN_EMAILS`, guarda los cambios en Render y deja que el servicio se redespliegue.
-
-La cuenta indicada debe existir en V/R Match. Al iniciar sesión, en **Cuenta y seguridad** aparecerá:
-
-```text
-⚑ Abrir panel de moderación
-```
-
-## Fases anteriores conservadas
-
-- Plataforma +18.
-- Registro, login y sesiones.
-- Perfiles, preferencias, likes, passes y matches.
-- Chat persistente.
-- Verdad o Reto integrado dentro del chat.
-- Regreso al chat al finalizar una partida.
-- Bloqueo, denuncia y deshacer match.
-- Recuperación de contraseña.
-- Verificación de correo.
-- Resend mediante SMTP.
-- Privacidad de cuenta.
-- Geolocalización opcional y descubrimiento por distancia.
-- Consentimiento para contenido +18.
-- Rate limiting y controles anti-spam.
-
-## Archivos principales
+1. Descomprimir el ZIP.
+2. Sustituir los archivos del repositorio GitHub.
+3. Commit y push a `main`.
+4. Render desplegará automáticamente.
+5. Revisar logs.
+6. Comprobar:
 
 ```text
-index.html
-styles.css
-server.js
-package.json
-render.yaml
-.env.example
-VR-MATCH-CONTEXTO-PROYECTO.md
-PRUEBA-FASE7.md
+/healthz
 ```
 
-No subas `.env`, `node_modules`, bases `.db`, fotos reales de usuarios ni claves API al repositorio.
-
-## Desplegar
-
-1. Descomprime este paquete.
-2. Sustituye en GitHub los archivos de la versión anterior.
-3. Commit recomendado:
-
-```text
-Fase 7 - moderación avanzada y panel admin
-```
-
-4. Push a `main`.
-5. Render hará el Auto-Deploy.
-
-En Logs debe aparecer:
-
-```text
-V/R Match v7.0 escuchando en puerto 10000
-Email SMTP: configurado | verificación obligatoria: false
-```
-
-Comprueba:
-
-```text
-https://verdad-o-reto-zz0k.onrender.com/healthz
-```
-
-Resultado esperado:
+Respuesta esperada:
 
 ```json
-{"ok":true,"db":true,"version":"7.0.0"}
+{"ok":true,"db":true,"version":"8.0.0"}
 ```
 
-## Render Free durante desarrollo
-
-Seguimos manteniendo Render Free durante el desarrollo.
-
-No añadas `VR_STORAGE_DIR=/var/data` sin Persistent Disk. SQLite y las fotos locales deben seguir considerándose datos temporales de prueba.
-
-El dominio propio, el upgrade de Render, la persistencia definitiva y `VR_REQUIRE_EMAIL_VERIFICATION=true` siguen aplazados para el cierre de desarrollo.
-
-## Email
-
-La configuración validada continúa siendo compatible con Render Free:
+En logs debe aparecer:
 
 ```text
-SMTP_HOST=smtp.resend.com
-SMTP_PORT=2465
-SMTP_USER=resend
-SMTP_PASS=<API KEY SOLO EN RENDER>
-SMTP_SECURE=true
-VR_REQUIRE_EMAIL_VERIFICATION=false
+V/R Match v8.0 escuchando en puerto 10000
 ```
 
-## Seguridad de moderación
+## Cómo probar V/R+ durante la beta
 
-- Solo un usuario cuyo correo esté incluido en `VR_ADMIN_EMAILS` puede acceder a rutas `/api/admin/*`.
-- Las acciones administrativas quedan registradas.
-- Suspender una cuenta cierra sus sesiones inmediatamente.
-- Reactivar no requiere reconstruir la cuenta.
-- Las acciones destructivas del frontend requieren confirmación.
-- La ubicación precisa no se expone en el panel.
-- La eliminación de mensajes se sincroniza a los usuarios conectados.
+1. Entrar con la cuenta administradora.
+2. Abrir `Cuenta y seguridad` → `Panel de moderación`.
+3. Ir a `Usuarios`.
+4. Abrir un usuario.
+5. Pulsar `Conceder V/R+ 30 días`.
+6. La cuenta recibirá el estado V/R+ automáticamente si está conectada.
+7. Abrir V/R+ desde Descubrir.
+8. Probar Rewind, filtros avanzados y Boost.
 
-## Pendiente para producción
+## Importante
 
-Antes de abrir V/R Match a usuarios reales:
-
-- dominio propio;
-- correo profesional verificado en Resend;
-- `VR_REQUIRE_EMAIL_VERIFICATION=true`;
-- Render de pago + persistencia o migración a base de datos gestionada;
-- almacenamiento persistente de imágenes;
-- backups;
-- términos, privacidad y normativa;
-- moderación de imágenes más avanzada;
-- observabilidad y alertas.
+- `VR_ADMIN_EMAILS` continúa configurado únicamente en Render Environment.
+- No guardar claves SMTP/API en GitHub.
+- `VR_REQUIRE_EMAIL_VERIFICATION` puede seguir en `false` durante la beta.
+- Render Free continúa usando filesystem temporal; los datos son de prueba hasta el upgrade final.

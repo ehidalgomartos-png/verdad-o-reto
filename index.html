@@ -146,7 +146,7 @@
           <h2>Encuentra tu vibra.</h2>
         </div>
         <div class="dating-top-actions">
-          <button class="vr-plus-pill" type="button" onclick="mostrarToast('V/R+ llegará en una siguiente fase. Primero estamos validando el núcleo de la app.','info')">V/R+</button>
+          <button id="vrPlusPill" class="vr-plus-pill" type="button" onclick="abrirPlus()">V/R+</button>
           <button class="filter-button" type="button" onclick="toggleDatingFilters()" aria-label="Filtros">☷</button>
           <button class="dating-profile-button" type="button" onclick="volverPerfil()" aria-label="Editar perfil"><span id="datingAvatarMini">🙂</span></button>
         </div>
@@ -164,6 +164,15 @@
         <div class="filter-row filter-row-distance">
           <label>Distancia máxima<select id="filterDistance" class="profile-select"><option value="">Radio guardado</option><option value="5">5 km</option><option value="15">15 km</option><option value="30">30 km</option><option value="50">50 km</option><option value="100">100 km</option><option value="200">200 km</option></select></label>
           <div class="filter-distance-note">Solo reduce resultados. Para ampliar el radio, edita tus preferencias.</div>
+        </div>
+        <div id="plusFilterBlock" class="plus-filter-block">
+          <div class="plus-filter-title"><span>V/R+</span><strong>Filtros avanzados</strong><button type="button" onclick="abrirPlus()">Ver ventajas</button></div>
+          <label class="setting-switch compact"><span><b>Solo correos confirmados</b><small>Reduce perfiles con cuentas pendientes de verificación.</small></span><input id="filterVerifiedOnly" type="checkbox"></label>
+          <div class="filter-row">
+            <label>Intereses en común<select id="filterSharedInterests" class="profile-select"><option value="0">Sin mínimo</option><option value="1">Al menos 1</option><option value="2">Al menos 2</option><option value="3">Al menos 3</option></select></label>
+            <label>Ordenar por<select id="filterSortMode" class="profile-select"><option value="smart">Compatibilidad</option><option value="distance">Cercanía</option><option value="interests">Intereses comunes</option><option value="recent">Actividad reciente</option></select></label>
+          </div>
+          <small id="plusFilterLock">Activa V/R+ para usar estos filtros.</small>
         </div>
         <div class="filter-actions"><button class="mini-link" type="button" onclick="limpiarDatingFilters()">Limpiar</button><button class="btn btn-primary" type="button" onclick="aplicarDatingFilters()">Aplicar filtros</button></div>
       </div>
@@ -186,6 +195,7 @@
             <div class="dating-card-main">
               <div class="dating-name-row"><h3 id="datingName">Perfil</h3><span id="datingAge">25</span></div>
               <div class="dating-city" id="datingCity">📍 Cerca de ti</div>
+              <div class="dating-premium-meta" id="datingPremiumMeta"></div>
             </div>
           </div>
           <div class="dating-card-copy">
@@ -196,7 +206,7 @@
       </div>
 
       <div class="swipe-actions" id="swipeActions">
-        <button class="swipe-btn rewind" type="button" onclick="mostrarToast('Rewind será una función V/R+.','info')" aria-label="Volver atrás">↶</button>
+        <button id="rewindButton" class="swipe-btn rewind" type="button" onclick="rewindPerfil()" aria-label="Volver atrás">↶</button>
         <button class="swipe-btn pass" type="button" onclick="pasarPerfil()" aria-label="Pasar">✕</button>
         <button class="swipe-btn game" type="button" onclick="retarPerfilActual()" aria-label="Retar">🎲</button>
         <button class="swipe-btn like" type="button" onclick="darLike()" aria-label="Me gusta">♥</button>
@@ -208,6 +218,37 @@
         <button onclick="irAMazos()"><span>🎮</span><small>Jugar</small></button>
         <button onclick="volverPerfil()"><span>👤</span><small>Perfil</small></button>
       </nav>
+    </section>
+
+    <section id="pantallaPlus" class="screen dating-screen plus-screen hidden">
+      <div class="screen-topbar"><button class="link-btn" type="button" onclick="cerrarPlus()">← Volver</button><span class="topbar-title">V/R+</span><span id="plusTopBadge" class="plus-status-badge">FREE</span></div>
+      <div class="plus-hero">
+        <span class="plus-kicker">FASE 8 · V/R+</span>
+        <h2>Más control. Más descubrimiento.</h2>
+        <p>La capa premium ya está integrada en el producto. Los pagos reales se activarán cuando pasemos V/R Match a producción.</p>
+        <div class="plus-membership-card">
+          <div><small>PLAN ACTUAL</small><strong id="plusPlanName">V/R Free</strong><span id="plusExpiryText">Funciones premium bloqueadas.</span></div>
+          <div id="plusPlanIcon" class="plus-plan-icon">V/R+</div>
+        </div>
+      </div>
+
+      <div class="plus-feature-grid">
+        <article><span>↶</span><strong>Rewind</strong><p>Recupera el último perfil que pasaste por error.</p></article>
+        <article><span>☷</span><strong>Filtros avanzados</strong><p>Correo confirmado, intereses compartidos y orden inteligente.</p></article>
+        <article><span>⚡</span><strong>Boost</strong><p>Sube temporalmente tu perfil en Descubrir durante 30 minutos.</p></article>
+        <article><span>✨</span><strong>Ranking inteligente</strong><p>Prioriza compatibilidad, cercanía, intereses o actividad reciente.</p></article>
+      </div>
+
+      <div class="plus-boost-card">
+        <div><span class="eyebrow">BOOST V/R+</span><h3>Hazte visible durante 30 minutos</h3><p id="plusBoostStatus">Disponible cuando V/R+ esté activo.</p></div>
+        <button id="plusBoostButton" class="btn btn-primary" type="button" onclick="activarPlusBoost()">Activar Boost</button>
+      </div>
+
+      <div class="plus-production-note">
+        <strong>Suscripción preparada, cobro pendiente</strong>
+        <p>La app ya reconoce membresías V/R+, aplica ventajas y permite administrarlas. Stripe/checkout y el dominio propio se conectarán en el cierre de producción, junto con el upgrade de Render.</p>
+        <button id="plusUpgradeButton" class="btn btn-secondary" type="button" onclick="solicitarPlusInfo()">Cómo activar V/R+</button>
+      </div>
     </section>
 
     <section id="pantallaMatches" class="screen dating-screen hidden">
@@ -532,6 +573,7 @@
       <button id="resendVerificationButton" class="mini-link account-resend" type="button" onclick="reenviarVerificacion()">Reenviar verificación</button>
       <div class="settings-section"><strong>Privacidad</strong><label class="setting-switch"><span><b>Mostrarme en Descubrir</b><small>Desactívalo para pausar temporalmente tu perfil.</small></span><input id="privacyDiscoverable" type="checkbox" checked></label><label class="setting-switch"><span><b>Mostrar estado online</b><small>Oculta el indicador de conexión a otros usuarios.</small></span><input id="privacyShowOnline" type="checkbox" checked></label><label class="setting-switch"><span><b>Permitir invitaciones a jugar</b><small>Tus matches podrán proponerte una partida.</small></span><input id="privacyGameInvites" type="checkbox" checked></label><button class="btn btn-secondary" type="button" onclick="guardarPrivacidad()">Guardar privacidad</button></div>
       <div class="settings-section"><strong>Cambiar contraseña</strong><div class="field"><input id="currentPassword" type="password" maxlength="72" autocomplete="current-password" placeholder="Contraseña actual"></div><div class="field"><input id="newPassword" type="password" maxlength="72" autocomplete="new-password" placeholder="Nueva contraseña · mínimo 8"></div><button class="btn btn-secondary" type="button" onclick="cambiarPasswordCuenta()">Actualizar contraseña</button></div>
+      <button id="accountPlusButton" class="btn btn-secondary" type="button" onclick="cerrarCuenta();abrirPlus()">✦ Ver V/R+</button>
       <button id="adminPanelButton" class="btn btn-secondary hidden" type="button" onclick="abrirAdmin()">⚑ Abrir panel de moderación</button>
       <div class="danger-zone"><strong>Zona de riesgo</strong><p>Eliminar la cuenta borra perfil, matches, mensajes, fotos y sesiones de forma permanente.</p><button class="btn btn-danger-soft" type="button" onclick="abrirEliminarCuenta()">Eliminar mi cuenta</button></div>
     </div>
@@ -573,6 +615,8 @@
     let currentUserEmail = '';
     let currentUserEmailVerified = false;
     let currentUserAdmin = false;
+    let currentPlus = { active:false, plan:'free', status:'inactive', expiresAt:null, settings:{verifiedOnly:false,minSharedInterests:0,sortMode:'smart'}, boost:{active:false,activeUntil:null,cooldownUntil:null,available:false}, billingEnabled:false };
+    let plusReturnScreen = 'pantallaDescubrir';
     let currentPrivacy = { discoverable:true, showOnline:true, allowGameInvites:true };
     let authMode = 'login';
     let miSala = '';
@@ -1014,7 +1058,7 @@
     const verificationResult = params.get('verification') || '';
 
     const $ = (id) => document.getElementById(id);
-    const screens = ['pantallaAuth','pantallaPerfil','pantallaDescubrir','pantallaMatches','pantallaChat','pantallaAdmin','pantallaMazos','pantallaMenu','pantallaLobby','pantallaJuego'];
+    const screens = ['pantallaAuth','pantallaPerfil','pantallaDescubrir','pantallaPlus','pantallaMatches','pantallaChat','pantallaAdmin','pantallaMazos','pantallaMenu','pantallaLobby','pantallaJuego'];
 
     function showScreen(id) {
       screens.forEach(x => $(x).classList.toggle('hidden', x !== id));
@@ -1061,6 +1105,109 @@
       socket.connect();
     }
 
+    function normalizarPlus(data={}) {
+      const settings=data.settings||{}, boost=data.boost||{};
+      return {
+        active:Boolean(data.active),
+        plan:data.active?'plus':'free',
+        status:data.status||'inactive',
+        source:data.source||null,
+        startedAt:data.startedAt||null,
+        expiresAt:data.expiresAt||null,
+        billingEnabled:Boolean(data.billingEnabled),
+        settings:{
+          verifiedOnly:Boolean(settings.verifiedOnly),
+          minSharedInterests:Math.max(0,Math.min(3,Number(settings.minSharedInterests)||0)),
+          sortMode:['smart','distance','interests','recent'].includes(String(settings.sortMode||''))?String(settings.sortMode):'smart'
+        },
+        boost:{
+          active:Boolean(boost.active),
+          activeUntil:boost.activeUntil||null,
+          cooldownUntil:boost.cooldownUntil||null,
+          available:Boolean(boost.available)
+        }
+      };
+    }
+    function aplicarPlusState(data={}) {
+      currentPlus=normalizarPlus(data);
+      const pill=$('vrPlusPill');
+      if(pill){pill.classList.toggle('is-active',currentPlus.active);pill.textContent=currentPlus.active?'V/R+ ✓':'V/R+';}
+      const controls=[$('filterVerifiedOnly'),$('filterSharedInterests'),$('filterSortMode')].filter(Boolean);
+      controls.forEach(el=>el.disabled=!currentPlus.active);
+      if($('filterVerifiedOnly'))$('filterVerifiedOnly').checked=currentPlus.settings.verifiedOnly;
+      if($('filterSharedInterests'))$('filterSharedInterests').value=String(currentPlus.settings.minSharedInterests);
+      if($('filterSortMode'))$('filterSortMode').value=currentPlus.settings.sortMode;
+      if($('plusFilterLock'))$('plusFilterLock').textContent=currentPlus.active?'Filtros V/R+ activos y sincronizados con tu cuenta.':'Activa V/R+ para usar estos filtros.';
+      if($('plusFilterBlock'))$('plusFilterBlock').classList.toggle('locked',!currentPlus.active);
+      if($('rewindButton'))$('rewindButton').classList.toggle('plus-locked',!currentPlus.active);
+      if($('accountPlusButton'))$('accountPlusButton').textContent=currentPlus.active?'✦ Gestionar V/R+':'✦ Ver V/R+';
+      renderPlusScreen();
+    }
+    function plusFecha(ts) {
+      return ts?new Date(Number(ts)).toLocaleString('es-ES',{dateStyle:'medium',timeStyle:'short'}):'—';
+    }
+    async function abrirPlus() {
+      if(!$('pantallaDescubrir').classList.contains('hidden'))plusReturnScreen='pantallaDescubrir';
+      else if(!$('pantallaPerfil').classList.contains('hidden'))plusReturnScreen='pantallaPerfil';
+      else if(!$('pantallaMatches').classList.contains('hidden'))plusReturnScreen='pantallaMatches';
+      const res=await api('/api/plus');
+      if(res.ok)aplicarPlusState(res.plus||{});
+      showScreen('pantallaPlus');
+      renderPlusScreen();
+    }
+    function cerrarPlus(){showScreen(plusReturnScreen||'pantallaDescubrir');}
+    function renderPlusScreen() {
+      if(!$('plusPlanName'))return;
+      $('plusTopBadge').textContent=currentPlus.active?'PLUS':'FREE';
+      $('plusTopBadge').classList.toggle('active',currentPlus.active);
+      $('plusPlanName').textContent=currentPlus.active?'V/R+ activo':'V/R Free';
+      $('plusPlanIcon').classList.toggle('active',currentPlus.active);
+      $('plusExpiryText').textContent=currentPlus.active
+        ? (currentPlus.expiresAt?`Activo hasta ${plusFecha(currentPlus.expiresAt)}`:'Membresía activa')
+        : 'Funciones premium bloqueadas.';
+      const boost=currentPlus.boost||{};
+      if(currentPlus.active){
+        if(boost.active)$('plusBoostStatus').textContent=`Boost activo hasta ${plusFecha(boost.activeUntil)}.`;
+        else if(boost.available)$('plusBoostStatus').textContent='Tienes 1 Boost disponible. Dura 30 minutos.';
+        else $('plusBoostStatus').textContent=`Siguiente Boost disponible ${plusFecha(boost.cooldownUntil)}.`;
+      } else $('plusBoostStatus').textContent='Disponible cuando V/R+ esté activo.';
+      $('plusBoostButton').disabled=!currentPlus.active || Boolean(boost.active) || !Boolean(boost.available);
+      $('plusBoostButton').textContent=boost.active?'Boost activo':(!currentPlus.active?'Requiere V/R+':(boost.available?'Activar Boost':'En cooldown'));
+      $('plusUpgradeButton').textContent=currentPlus.active?'V/R+ activo':'Cómo activar V/R+';
+    }
+    async function activarPlusBoost() {
+      if(!currentPlus.active)return solicitarPlusInfo();
+      const res=await api('/api/plus/boost',{method:'POST',body:{}});
+      if(!res.ok){if(res.plus)aplicarPlusState(res.plus);return mostrarToast(res.error||'No se pudo activar el Boost.','warn');}
+      aplicarPlusState(res.plus||{});
+      mostrarToast('Boost activado durante 30 minutos.','info');
+    }
+    function solicitarPlusInfo() {
+      if(currentPlus.active)return mostrarToast('Tu V/R+ ya está activo.','info');
+      mostrarToast('V/R+ se habilita manualmente durante la beta. El checkout real llegará al pasar a producción.','info');
+    }
+    async function guardarFiltrosPlus() {
+      if(!currentPlus.active)return {ok:true};
+      const res=await api('/api/plus/settings',{method:'PUT',body:{
+        verifiedOnly:$('filterVerifiedOnly').checked,
+        minSharedInterests:Number($('filterSharedInterests').value)||0,
+        sortMode:$('filterSortMode').value
+      }});
+      if(!res.ok){mostrarToast(res.error||'No se pudieron guardar los filtros V/R+.','warn');return res;}
+      aplicarPlusState(res.plus||{});
+      return res;
+    }
+    function rewindPerfil() {
+      if(!currentPlus.active){abrirPlus();return;}
+      socket.emit('dating_rewind',{},(res)=>{
+        if(!res||!res.ok)return mostrarToast((res&&res.error)||'No hay un perfil para recuperar.','warn');
+        const p=res.profile;
+        if(p&&p.id){datingPassed.delete(p.id);if(!datingProfiles.some(x=>x.id===p.id))datingProfiles.unshift(p);}
+        mostrarToast('Perfil recuperado con Rewind.','info');
+        renderDatingCard();
+      });
+    }
+
     function aplicarCuenta(user) {
       currentUserId = user?.id || '';
       currentUserEmail = user?.email || '';
@@ -1074,6 +1221,7 @@
       authToken = result.token || authToken;
       if (authToken) localStorage.setItem('vr_auth_token', authToken);
       aplicarCuenta(result.user || {});
+      aplicarPlusState(result.plus || currentPlus);
       if (result.profile) aplicarPerfilServidor(result.profile);
       if (Array.isArray(result.matches)) datingMatches = result.matches;
       conectarSocket();
@@ -1103,7 +1251,7 @@
       const oldToken = authToken;
       if (callApi && oldToken) await api('/api/auth/logout', { method:'POST', body:{} });
       if (socket.connected) socket.disconnect();
-      authToken=''; currentUserId=''; currentUserEmail=''; currentUserEmailVerified=false; currentUserAdmin=false;
+      authToken=''; currentUserId=''; currentUserEmail=''; currentUserEmailVerified=false; currentUserAdmin=false; currentPlus=normalizarPlus({});
       localStorage.removeItem('vr_auth_token'); localStorage.removeItem('vr_profile');
       datingProfiles=[]; datingMatches=[]; datingPassed=new Set(); datingChats.clear();
       currentChatMatch=null; currentMatch=null; nombreJugador=''; edadJugador=0; avatarJugador=''; fotosJugador=[]; pendingLocation=null; locationConfigured=false; locationUpdatedAt=null;
@@ -1159,7 +1307,7 @@
       if(adminCurrentTab==='history')await cargarAdminHistory();
     }
     const adminReasonLabels={harassment:'Acoso',fake:'Perfil falso',spam:'Spam / estafa',sexual:'Contenido sexual no consentido',underage:'Posible menor de edad',other:'Otro'};
-    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',suspend:'Cuenta suspendida',reactivate:'Cuenta reactivada',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_message:'Mensaje eliminado'};
+    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',suspend:'Cuenta suspendida',reactivate:'Cuenta reactivada',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado'};
     function adminFecha(ts){return ts?new Date(Number(ts)).toLocaleString('es-ES'):'—';}
     async function cargarAdminReports() {
       if(!currentUserAdmin)return;
@@ -1224,7 +1372,7 @@
         const card=document.createElement('article');card.className='admin-user-card';
         const avatar=document.createElement('div');avatar.className='admin-user-avatar';pintarAvatar(avatar,u.avatar||'',u.name||u.email||'U');
         const copy=document.createElement('div');copy.className='admin-user-copy';
-        copy.innerHTML=`<div class="admin-user-title"><strong>${escapeHtml(u.name||'Sin perfil')}</strong><span class="${u.status==='suspended'?'suspended':'active'}">${escapeHtml(u.status)}</span></div><small>${escapeHtml(u.email||'')}</small><p>${escapeHtml(u.city||'Sin ciudad')} · ${u.age?`${Number(u.age)} años · `:''}${u.reports_received||0} denuncias recibidas</p><div class="admin-user-metrics"><span>💬 ${u.messages_sent||0}</span><span>💕 ${u.active_matches||0}</span><span>⚑ ${u.reports_sent||0}</span></div>`;
+        copy.innerHTML=`<div class="admin-user-title"><strong>${escapeHtml(u.name||'Sin perfil')}</strong><span class="${u.status==='suspended'?'suspended':'active'}">${escapeHtml(u.status)}</span>${u.plus_active?'<span class="plus-admin-chip">V/R+</span>':''}</div><small>${escapeHtml(u.email||'')}</small><p>${escapeHtml(u.city||'Sin ciudad')} · ${u.age?`${Number(u.age)} años · `:''}${u.reports_received||0} denuncias recibidas</p><div class="admin-user-metrics"><span>💬 ${u.messages_sent||0}</span><span>💕 ${u.active_matches||0}</span><span>⚑ ${u.reports_sent||0}</span></div>`;
         const btn=document.createElement('button');btn.className='btn btn-secondary';btn.type='button';btn.textContent='Revisar';btn.onclick=()=>verAdminUsuario(u.id);
         card.append(avatar,copy,btn);list.appendChild(card);
       });
@@ -1244,7 +1392,7 @@
       const photos=Array.isArray(u.photos)?u.photos:[];
       $('adminUserDetail').innerHTML=`<div class="admin-user-detail-head"><div><span class="security-badge ${u.status==='active'?'verified':''}">${escapeHtml(u.status||'')}</span><h3>${escapeHtml(u.name||'Sin perfil')}${u.age?`, ${Number(u.age)}`:''}</h3><p>${escapeHtml(u.email||'')}</p></div><small>Última actividad<br><b>${escapeHtml(adminFecha(u.last_seen_at))}</b></small></div>
         <div class="admin-user-detail-grid"><div><strong>${s.reportsReceived||0}</strong><span>denuncias recibidas</span></div><div><strong>${s.messagesSent||0}</strong><span>mensajes</span></div><div><strong>${s.activeMatches||0}</strong><span>matches activos</span></div><div><strong>${s.blocksMade||0}</strong><span>bloqueos hechos</span></div></div>
-        <div class="admin-user-profile-preview"><b>${escapeHtml(u.city||'Sin ciudad')}</b><span>${u.email_verified?'Correo verificado':'Correo pendiente'} · ${u.discoverable===0?'Perfil oculto':'Visible en Descubrir'} · ${u.locationEnabled?'Ubicación configurada':'Sin ubicación'}</span><p>${escapeHtml(u.bio||'Sin biografía')}</p><small>${(u.interests||[]).map(x=>escapeHtml(x)).join(' · ')||'Sin intereses'}</small></div>
+        <div class="admin-user-profile-preview"><b>${escapeHtml(u.city||'Sin ciudad')}</b><span>${u.email_verified?'Correo verificado':'Correo pendiente'} · ${u.discoverable===0?'Perfil oculto':'Visible en Descubrir'} · ${u.locationEnabled?'Ubicación configurada':'Sin ubicación'} · ${u.plus_status==='active' && (!u.plus_expires_at || Number(u.plus_expires_at)>Date.now())?'V/R+ activo':'V/R Free'}</span><p>${escapeHtml(u.bio||'Sin biografía')}</p><small>${(u.interests||[]).map(x=>escapeHtml(x)).join(' · ')||'Sin intereses'}</small></div>
         ${photos.length?`<div class="admin-photo-strip">${photos.slice(0,4).map(src=>`<img src="${escapeHtml(src)}" alt="">`).join('')}</div>`:''}
         <div class="admin-user-mini-history"><strong>Últimas denuncias</strong>${reports.length?reports.slice(0,5).map(r=>`<div><span>${escapeHtml(adminReasonLabels[r.reason]||r.reason)} · ${escapeHtml(r.status)}</span><small>${escapeHtml(adminFecha(r.created_at))}</small></div>`).join(''):'<small>No tiene denuncias recibidas.</small>'}</div>
         <div class="admin-user-mini-history"><strong>Últimas acciones</strong>${actions.length?actions.slice(0,5).map(a=>`<div><span>${escapeHtml(adminActionLabels[a.action]||a.action)}</span><small>${escapeHtml(adminFecha(a.created_at))}</small></div>`).join(''):'<small>Sin acciones previas.</small>'}</div>`;
@@ -1254,12 +1402,14 @@
         :[['suspend','Suspender cuenta','danger']];
       defs.push([u.discoverable===0?'show_profile':'hide_profile',u.discoverable===0?'Mostrar perfil':'Ocultar perfil','']);
       defs.push(['clear_photos','Eliminar fotos','danger-soft'],['clear_bio','Limpiar biografía','danger-soft']);
+      const plusActive=u.plus_status==='active' && (!u.plus_expires_at || Number(u.plus_expires_at)>Date.now());
+      defs.push([plusActive?'revoke_plus':'grant_plus_30d',plusActive?'Revocar V/R+':'Conceder V/R+ 30 días',plusActive?'danger-soft':'success']);
       defs.forEach(([action,label,cls])=>{const b=document.createElement('button');b.type='button';b.className=`btn btn-secondary ${cls||''}`;b.textContent=label;b.onclick=()=>accionAdminUsuario(action);actionsBox.appendChild(b);});
     }
     function cerrarAdminUsuario(){adminSelectedUserId=null;$('adminUserModal')?.classList.add('hidden');$('adminUserModal')?.setAttribute('aria-hidden','true');}
     async function accionAdminUsuario(action) {
       if(!adminSelectedUserId)return;
-      const destructive=['suspend','clear_photos','clear_bio'].includes(action);
+      const destructive=['suspend','clear_photos','clear_bio','revoke_plus'].includes(action);
       if(destructive&&!confirm('¿Aplicar esta acción de moderación? Quedará registrada en el historial.'))return;
       const note=String($('adminUserNote').value||'').trim();
       const res=await api(`/api/admin/users/${encodeURIComponent(adminSelectedUserId)}/action`,{method:'POST',body:{action,note}});
@@ -1466,15 +1616,21 @@
     }
 
     function toggleDatingFilters() { $('datingFilters').classList.toggle('hidden'); }
-    function limpiarDatingFilters() {
+    async function limpiarDatingFilters() {
       $('filterAgeMin').value = 18; $('filterAgeMax').value = 99; $('filterCity').value = ''; $('filterInterest').value = ''; $('filterDistance').value = '';
-      datingFilters = { ageMin:18, ageMax:99, city:'', interest:'', distanceKm:null }; renderDatingCard();
+      datingFilters = { ageMin:18, ageMax:99, city:'', interest:'', distanceKm:null };
+      if(currentPlus.active){
+        $('filterVerifiedOnly').checked=false;$('filterSharedInterests').value='0';$('filterSortMode').value='smart';
+        await guardarFiltrosPlus();
+      }
+      renderDatingCard();
     }
-    function aplicarDatingFilters() {
+    async function aplicarDatingFilters() {
       let min = Math.max(18, Math.min(99, Number($('filterAgeMin').value) || 18));
       let max = Math.max(18, Math.min(99, Number($('filterAgeMax').value) || 99));
       if (min > max) [min,max] = [max,min];
       datingFilters = { ageMin:min, ageMax:max, city:String($('filterCity').value || ''), interest:String($('filterInterest').value || ''), distanceKm:$('filterDistance').value ? Number($('filterDistance').value) : null };
+      if(currentPlus.active)await guardarFiltrosPlus();
       $('datingFilters').classList.add('hidden'); renderDatingCard();
     }
 
@@ -1548,6 +1704,10 @@
       const distanceText = etiquetaDistancia(p.distanceKm);
       $('datingCity').textContent = p.ciudad ? `📍 ${p.ciudad}${distanceText ? ` · ${distanceText}` : ''}` : (distanceText ? `📍 ${distanceText}` : '📍 Ciudad no indicada');
       $('datingBio').textContent = p.bio || 'Prefiero que me conozcas jugando.';
+      const premiumMeta=$('datingPremiumMeta'); premiumMeta.innerHTML='';
+      if(p.boosted){const x=document.createElement('span');x.className='boosted';x.textContent='⚡ Destacado';premiumMeta.appendChild(x);}
+      if(p.verified){const x=document.createElement('span');x.textContent='✓ Correo confirmado';premiumMeta.appendChild(x);}
+      if(Number(p.sharedInterests)>0){const x=document.createElement('span');x.textContent=`✨ ${Number(p.sharedInterests)} en común`;premiumMeta.appendChild(x);}
       const interestBox = $('datingInterests');
       interestBox.innerHTML = '';
       (Array.isArray(p.intereses) ? p.intereses : []).forEach(item => {
@@ -1761,6 +1921,10 @@
         row.append(avatar, copy, btn); box.appendChild(row);
       });
     }
+
+    socket.on('plus_state', (data = {}) => {
+      aplicarPlusState(data);
+    });
 
     socket.on('dating_profiles', (lista = []) => {
       datingProfiles = Array.isArray(lista) ? lista : [];
