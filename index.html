@@ -258,10 +258,40 @@
 
     <section id="pantallaAdmin" class="screen admin-screen hidden">
       <div class="screen-topbar"><button class="link-btn" onclick="cerrarAdmin()">← Volver</button><span class="topbar-title">MODERACIÓN</span><span class="live-pill"><i></i> ADMIN</span></div>
-      <div class="section-heading"><span class="eyebrow">SEGURIDAD</span><h2>Panel de moderación</h2><p>Revisa denuncias y actúa sobre las cuentas cuando sea necesario.</p></div>
-      <div id="adminStats" class="admin-stats"><div><strong>—</strong><span>usuarios</span></div><div><strong>—</strong><span>matches</span></div><div><strong>—</strong><span>denuncias</span></div><div><strong>—</strong><span>mensajes</span></div></div>
-      <div class="admin-toolbar"><label>Estado<select id="adminReportStatus" class="profile-select" onchange="cargarAdminReports()"><option value="open">Abiertas</option><option value="resolved">Resueltas</option><option value="dismissed">Descartadas</option></select></label><button class="btn btn-secondary" type="button" onclick="cargarAdminReports()">↻ Actualizar</button></div>
-      <div id="adminReportList" class="admin-report-list"><div class="empty-state"><span class="spinner"></span><strong>Cargando denuncias…</strong></div></div>
+      <div class="section-heading"><span class="eyebrow">SEGURIDAD · FASE 7</span><h2>Centro de moderación</h2><p>Denuncias, usuarios, contenido y trazabilidad de acciones en un solo panel.</p></div>
+      <div id="adminStats" class="admin-stats admin-stats-six">
+        <div><strong>—</strong><span>activos</span></div><div><strong>—</strong><span>suspendidos</span></div><div><strong>—</strong><span>matches</span></div>
+        <div><strong>—</strong><span>denuncias abiertas</span></div><div><strong>—</strong><span>mensajes</span></div><div><strong>—</strong><span>acciones 24h</span></div>
+      </div>
+      <div class="admin-tabs" role="tablist">
+        <button id="adminTabReports" class="active" type="button" onclick="cambiarAdminTab('reports')">⚑ Denuncias</button>
+        <button id="adminTabUsers" type="button" onclick="cambiarAdminTab('users')">👤 Usuarios</button>
+        <button id="adminTabHistory" type="button" onclick="cambiarAdminTab('history')">🕘 Historial</button>
+      </div>
+
+      <div id="adminPaneReports" class="admin-pane">
+        <div class="admin-toolbar admin-toolbar-reports">
+          <label>Estado<select id="adminReportStatus" class="profile-select" onchange="cargarAdminReports()"><option value="open">Abiertas</option><option value="all">Todas</option><option value="resolved">Resueltas</option><option value="dismissed">Descartadas</option></select></label>
+          <label>Motivo<select id="adminReportReason" class="profile-select" onchange="cargarAdminReports()"><option value="">Todos</option><option value="harassment">Acoso</option><option value="fake">Perfil falso</option><option value="spam">Spam / estafa</option><option value="sexual">Contenido sexual no consentido</option><option value="underage">Posible menor</option><option value="other">Otro</option></select></label>
+          <label>Buscar<input id="adminReportSearch" class="profile-input" type="search" maxlength="80" placeholder="nombre, email o detalle" onkeydown="if(event.key==='Enter'){event.preventDefault();cargarAdminReports();}"></label>
+          <button class="btn btn-secondary" type="button" onclick="cargarAdminReports()">↻ Actualizar</button>
+        </div>
+        <div id="adminReportList" class="admin-report-list"><div class="empty-state"><span class="spinner"></span><strong>Cargando denuncias…</strong></div></div>
+      </div>
+
+      <div id="adminPaneUsers" class="admin-pane hidden">
+        <div class="admin-toolbar admin-toolbar-users">
+          <label>Buscar<input id="adminUserSearch" class="profile-input" type="search" maxlength="80" placeholder="nombre, email o ciudad" onkeydown="if(event.key==='Enter'){event.preventDefault();cargarAdminUsers();}"></label>
+          <label>Estado<select id="adminUserStatus" class="profile-select" onchange="cargarAdminUsers()"><option value="all">Todos</option><option value="active">Activos</option><option value="suspended">Suspendidos</option></select></label>
+          <button class="btn btn-secondary" type="button" onclick="cargarAdminUsers()">Buscar</button>
+        </div>
+        <div id="adminUserList" class="admin-user-list"><div class="empty-state"><span>👤</span><strong>Busca o revisa usuarios</strong></div></div>
+      </div>
+
+      <div id="adminPaneHistory" class="admin-pane hidden">
+        <div class="admin-history-head"><div><strong>Historial de moderación</strong><small>Cada acción administrativa queda registrada.</small></div><button class="btn btn-secondary" type="button" onclick="cargarAdminHistory()">↻ Actualizar</button></div>
+        <div id="adminHistoryList" class="admin-history-list"><div class="empty-state"><span>🕘</span><strong>Sin cargar</strong></div></div>
+      </div>
     </section>
 
     <section id="pantallaMazos" class="screen hidden">
@@ -464,6 +494,16 @@
     </div>
   </div>
 
+  <div id="adminUserModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card account-modal-card admin-user-modal-card">
+      <button class="modal-close" onclick="cerrarAdminUsuario()">×</button>
+      <span class="eyebrow">MODERACIÓN DE CUENTA</span>
+      <div id="adminUserDetail"><div class="empty-state"><span class="spinner"></span><strong>Cargando usuario…</strong></div></div>
+      <div class="field admin-note-field"><label for="adminUserNote">Nota interna <small>(opcional)</small></label><textarea id="adminUserNote" class="profile-textarea" maxlength="500" placeholder="Motivo o contexto de la acción"></textarea></div>
+      <div id="adminUserActions" class="admin-user-actions"></div>
+    </div>
+  </div>
+
   <div id="forgotModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card account-modal-card">
       <button class="modal-close" onclick="cerrarRecuperacion()">×</button>
@@ -583,6 +623,8 @@
     let pointerStartX = 0;
     let pointerDeltaX = 0;
     let pointerDragging = false;
+    let adminCurrentTab = 'reports';
+    let adminSelectedUserId = null;
 
     const baseDeDatos = {
       rompehielos: {
@@ -1089,12 +1131,151 @@
     function cerrarEliminarCuenta() { $('deleteAccountModal').classList.add('hidden'); $('deleteAccountModal').setAttribute('aria-hidden','true'); }
     async function eliminarCuentaDefinitiva() { const password=$('deleteAccountPassword').value;if(!password)return mostrarToast('Escribe tu contraseña.','warn'); const res=await api('/api/account/delete',{method:'POST',body:{password}});if(!res.ok)return mostrarToast(res.error||'No se pudo eliminar la cuenta.','error'); cerrarEliminarCuenta();cerrarCuenta();await cerrarSesion(false);mostrarToast('Cuenta eliminada.','info'); }
 
-    async function abrirAdmin() { if(!currentUserAdmin)return; cerrarCuenta(); showScreen('pantallaAdmin'); await cargarAdminStats(); await cargarAdminReports(); }
-    function cerrarAdmin() { showScreen('pantallaPerfil'); }
-    async function cargarAdminStats() { const res=await api('/api/admin/stats'); if(!res.ok)return; const s=res.stats||{}; const vals=[s.users,s.matches,s.openReports,s.messages]; [...$('adminStats').querySelectorAll('strong')].forEach((el,i)=>el.textContent=String(vals[i]??'—')); }
-    async function cargarAdminReports() { if(!currentUserAdmin)return; const status=$('adminReportStatus').value; const res=await api(`/api/admin/reports?status=${encodeURIComponent(status)}`); if(!res.ok)return mostrarToast(res.error||'No se pudieron cargar denuncias.','error'); renderAdminReports(res.reports||[]); }
-    function renderAdminReports(reports) { const list=$('adminReportList'); list.innerHTML=''; if(!reports.length){list.innerHTML='<div class="empty-state"><span>✓</span><strong>No hay denuncias en este estado</strong><small>La cola está limpia.</small></div>';return;} reports.forEach(r=>{const card=document.createElement('article');card.className='admin-report-card';const date=new Date(r.created_at).toLocaleString('es-ES');card.innerHTML=`<div class="admin-report-head"><div><small>${escapeHtml(r.reason)} · ${escapeHtml(date)}</small><strong>${escapeHtml(r.reported_name||r.reported_email||'Usuario')}</strong></div><span>${escapeHtml(r.status)}</span></div><p>${escapeHtml(r.details||'Sin detalles adicionales.')}</p><div class="admin-report-meta">Reporta: ${escapeHtml(r.reporter_name||r.reporter_email||'Usuario')}<br>Cuenta denunciada: ${escapeHtml(r.reported_email||'')}</div><textarea maxlength="500" placeholder="Nota interna para moderación"></textarea><div class="admin-report-actions"><button data-a="dismiss">Descartar</button><button data-a="resolve">Resolver</button><button class="danger" data-a="suspend">Suspender cuenta</button></div>`;card.querySelectorAll('[data-a]').forEach(btn=>btn.onclick=()=>accionAdminReporte(r.id,btn.dataset.a,card.querySelector('textarea').value));list.appendChild(card);}); }
-    async function accionAdminReporte(id,action,note) { if(action==='suspend'&&!confirm('¿Suspender esta cuenta y cerrar sus sesiones?'))return; const res=await api(`/api/admin/reports/${encodeURIComponent(id)}/action`,{method:'POST',body:{action,note}});if(!res.ok)return mostrarToast(res.error||'No se pudo aplicar la acción.','error');mostrarToast('Acción de moderación guardada.','info');await cargarAdminStats();await cargarAdminReports(); }
+    async function abrirAdmin() {
+      if(!currentUserAdmin)return;
+      cerrarCuenta();
+      showScreen('pantallaAdmin');
+      await cargarAdminStats();
+      await cambiarAdminTab(adminCurrentTab || 'reports');
+    }
+    function cerrarAdmin() { cerrarAdminUsuario(); showScreen('pantallaPerfil'); }
+    async function cargarAdminStats() {
+      const res=await api('/api/admin/stats');
+      if(!res.ok)return mostrarToast(res.error||'No se pudieron cargar las estadísticas.','error');
+      const s=res.stats||{};
+      const vals=[s.activeUsers,s.suspendedUsers,s.matches,s.openReports,s.messages,s.actions24h];
+      [...$('adminStats').querySelectorAll('strong')].forEach((el,i)=>el.textContent=String(vals[i]??'—'));
+    }
+    async function cambiarAdminTab(tab='reports') {
+      adminCurrentTab=['reports','users','history'].includes(tab)?tab:'reports';
+      $('adminPaneReports').classList.toggle('hidden',adminCurrentTab!=='reports');
+      $('adminPaneUsers').classList.toggle('hidden',adminCurrentTab!=='users');
+      $('adminPaneHistory').classList.toggle('hidden',adminCurrentTab!=='history');
+      $('adminTabReports').classList.toggle('active',adminCurrentTab==='reports');
+      $('adminTabUsers').classList.toggle('active',adminCurrentTab==='users');
+      $('adminTabHistory').classList.toggle('active',adminCurrentTab==='history');
+      if(adminCurrentTab==='reports')await cargarAdminReports();
+      if(adminCurrentTab==='users')await cargarAdminUsers();
+      if(adminCurrentTab==='history')await cargarAdminHistory();
+    }
+    const adminReasonLabels={harassment:'Acoso',fake:'Perfil falso',spam:'Spam / estafa',sexual:'Contenido sexual no consentido',underage:'Posible menor de edad',other:'Otro'};
+    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',suspend:'Cuenta suspendida',reactivate:'Cuenta reactivada',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_message:'Mensaje eliminado'};
+    function adminFecha(ts){return ts?new Date(Number(ts)).toLocaleString('es-ES'):'—';}
+    async function cargarAdminReports() {
+      if(!currentUserAdmin)return;
+      const status=$('adminReportStatus').value;
+      const reason=$('adminReportReason').value;
+      const q=String($('adminReportSearch').value||'').trim();
+      const params=new URLSearchParams({status});
+      if(reason)params.set('reason',reason);
+      if(q)params.set('q',q);
+      const res=await api(`/api/admin/reports?${params.toString()}`);
+      if(!res.ok)return mostrarToast(res.error||'No se pudieron cargar denuncias.','error');
+      renderAdminReports(res.reports||[]);
+    }
+    function renderAdminReports(reports) {
+      const list=$('adminReportList'); list.innerHTML='';
+      if(!reports.length){list.innerHTML='<div class="empty-state"><span>✓</span><strong>No hay denuncias con estos filtros</strong><small>La cola está limpia.</small></div>';return;}
+      reports.forEach(r=>{
+        const card=document.createElement('article');card.className='admin-report-card';
+        const evidence=Array.isArray(r.evidence)?r.evidence:[];
+        const evidenceHtml=evidence.length?`<div class="admin-evidence"><div class="admin-evidence-title"><strong>Contexto guardado</strong><small>${evidence.length} mensajes anteriores a la denuncia</small></div>${evidence.map(m=>`<div class="admin-evidence-message"><div><b>${m.from===r.reported?'Denunciado':'Reportante'}</b><small>${escapeHtml(adminFecha(m.ts))}</small></div><p>${escapeHtml(m.text||'')}</p>${m.id?`<button type="button" data-delete-message="${escapeHtml(m.id)}">Eliminar mensaje</button>`:''}</div>`).join('')}</div>`:'<div class="admin-no-evidence">Sin mensajes asociados a esta denuncia.</div>';
+        card.innerHTML=`<div class="admin-report-head"><div><small>${escapeHtml(adminReasonLabels[r.reason]||r.reason)} · ${escapeHtml(adminFecha(r.created_at))}</small><strong>${escapeHtml(r.reported_name||r.reported_email||'Usuario')}</strong></div><span class="${r.status==='open'?'open':''}">${escapeHtml(r.status)}</span></div>
+          <p>${escapeHtml(r.details||'Sin detalles adicionales.')}</p>
+          <div class="admin-report-meta"><b>Reporta:</b> ${escapeHtml(r.reporter_name||r.reporter_email||'Usuario')}<br><b>Cuenta denunciada:</b> ${escapeHtml(r.reported_email||'')} · ${escapeHtml(r.reported_status||'')}</div>
+          ${evidenceHtml}
+          ${r.moderator_note?`<div class="admin-existing-note"><b>Nota:</b> ${escapeHtml(r.moderator_note)}</div>`:''}
+          <textarea maxlength="500" placeholder="Nota interna para moderación"></textarea>
+          <div class="admin-report-actions"><button data-a="dismiss">Descartar</button><button data-a="resolve">Resolver</button><button data-user="${escapeHtml(r.reported)}">Ver cuenta</button>${r.reported_status==='suspended'?'<button class="success" data-a="reactivate">Reactivar</button>':'<button class="danger" data-a="suspend">Suspender</button>'}</div>`;
+        card.querySelectorAll('[data-a]').forEach(btn=>btn.onclick=()=>accionAdminReporte(r.id,btn.dataset.a,card.querySelector('textarea').value));
+        const userBtn=card.querySelector('[data-user]'); if(userBtn)userBtn.onclick=()=>verAdminUsuario(r.reported);
+        card.querySelectorAll('[data-delete-message]').forEach(btn=>btn.onclick=()=>eliminarMensajeAdmin(btn.dataset.deleteMessage,r.id,card.querySelector('textarea').value));
+        list.appendChild(card);
+      });
+    }
+    async function accionAdminReporte(id,action,note) {
+      if(action==='suspend'&&!confirm('¿Suspender esta cuenta y cerrar todas sus sesiones?'))return;
+      if(action==='reactivate'&&!confirm('¿Reactivar esta cuenta?'))return;
+      const res=await api(`/api/admin/reports/${encodeURIComponent(id)}/action`,{method:'POST',body:{action,note}});
+      if(!res.ok)return mostrarToast(res.error||'No se pudo aplicar la acción.','error');
+      mostrarToast('Acción de moderación guardada.','info');
+      await cargarAdminStats(); await cargarAdminReports();
+    }
+    async function eliminarMensajeAdmin(messageId,reportId,note='') {
+      if(!confirm('¿Eliminar este mensaje de la conversación? Esta acción quedará registrada.'))return;
+      const res=await api(`/api/admin/messages/${encodeURIComponent(messageId)}/delete`,{method:'POST',body:{reportId,note}});
+      if(!res.ok)return mostrarToast(res.error||'No se pudo eliminar el mensaje.','error');
+      mostrarToast('Mensaje eliminado y acción registrada.','info');
+      await cargarAdminStats(); await cargarAdminReports();
+    }
+    async function cargarAdminUsers() {
+      if(!currentUserAdmin)return;
+      const q=String($('adminUserSearch').value||'').trim();
+      const status=$('adminUserStatus').value;
+      const params=new URLSearchParams({status}); if(q)params.set('q',q);
+      const res=await api(`/api/admin/users?${params.toString()}`);
+      if(!res.ok)return mostrarToast(res.error||'No se pudieron cargar usuarios.','error');
+      renderAdminUsers(res.users||[]);
+    }
+    function renderAdminUsers(users) {
+      const list=$('adminUserList');list.innerHTML='';
+      if(!users.length){list.innerHTML='<div class="empty-state"><span>👤</span><strong>No hay usuarios con esos filtros</strong></div>';return;}
+      users.forEach(u=>{
+        const card=document.createElement('article');card.className='admin-user-card';
+        const avatar=document.createElement('div');avatar.className='admin-user-avatar';pintarAvatar(avatar,u.avatar||'',u.name||u.email||'U');
+        const copy=document.createElement('div');copy.className='admin-user-copy';
+        copy.innerHTML=`<div class="admin-user-title"><strong>${escapeHtml(u.name||'Sin perfil')}</strong><span class="${u.status==='suspended'?'suspended':'active'}">${escapeHtml(u.status)}</span></div><small>${escapeHtml(u.email||'')}</small><p>${escapeHtml(u.city||'Sin ciudad')} · ${u.age?`${Number(u.age)} años · `:''}${u.reports_received||0} denuncias recibidas</p><div class="admin-user-metrics"><span>💬 ${u.messages_sent||0}</span><span>💕 ${u.active_matches||0}</span><span>⚑ ${u.reports_sent||0}</span></div>`;
+        const btn=document.createElement('button');btn.className='btn btn-secondary';btn.type='button';btn.textContent='Revisar';btn.onclick=()=>verAdminUsuario(u.id);
+        card.append(avatar,copy,btn);list.appendChild(card);
+      });
+    }
+    async function verAdminUsuario(id) {
+      adminSelectedUserId=id;
+      $('adminUserNote').value='';
+      $('adminUserDetail').innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Cargando usuario…</strong></div>';
+      $('adminUserActions').innerHTML='';
+      $('adminUserModal').classList.remove('hidden');$('adminUserModal').setAttribute('aria-hidden','false');
+      const res=await api(`/api/admin/users/${encodeURIComponent(id)}`);
+      if(!res.ok){$('adminUserDetail').innerHTML=`<div class="empty-state"><span>!</span><strong>${escapeHtml(res.error||'No se pudo cargar.')}</strong></div>`;return;}
+      renderAdminUserDetail(res);
+    }
+    function renderAdminUserDetail(data) {
+      const u=data.user||{},s=data.summary||{},reports=data.reports||[],actions=data.actions||[];
+      const photos=Array.isArray(u.photos)?u.photos:[];
+      $('adminUserDetail').innerHTML=`<div class="admin-user-detail-head"><div><span class="security-badge ${u.status==='active'?'verified':''}">${escapeHtml(u.status||'')}</span><h3>${escapeHtml(u.name||'Sin perfil')}${u.age?`, ${Number(u.age)}`:''}</h3><p>${escapeHtml(u.email||'')}</p></div><small>Última actividad<br><b>${escapeHtml(adminFecha(u.last_seen_at))}</b></small></div>
+        <div class="admin-user-detail-grid"><div><strong>${s.reportsReceived||0}</strong><span>denuncias recibidas</span></div><div><strong>${s.messagesSent||0}</strong><span>mensajes</span></div><div><strong>${s.activeMatches||0}</strong><span>matches activos</span></div><div><strong>${s.blocksMade||0}</strong><span>bloqueos hechos</span></div></div>
+        <div class="admin-user-profile-preview"><b>${escapeHtml(u.city||'Sin ciudad')}</b><span>${u.email_verified?'Correo verificado':'Correo pendiente'} · ${u.discoverable===0?'Perfil oculto':'Visible en Descubrir'} · ${u.locationEnabled?'Ubicación configurada':'Sin ubicación'}</span><p>${escapeHtml(u.bio||'Sin biografía')}</p><small>${(u.interests||[]).map(x=>escapeHtml(x)).join(' · ')||'Sin intereses'}</small></div>
+        ${photos.length?`<div class="admin-photo-strip">${photos.slice(0,4).map(src=>`<img src="${escapeHtml(src)}" alt="">`).join('')}</div>`:''}
+        <div class="admin-user-mini-history"><strong>Últimas denuncias</strong>${reports.length?reports.slice(0,5).map(r=>`<div><span>${escapeHtml(adminReasonLabels[r.reason]||r.reason)} · ${escapeHtml(r.status)}</span><small>${escapeHtml(adminFecha(r.created_at))}</small></div>`).join(''):'<small>No tiene denuncias recibidas.</small>'}</div>
+        <div class="admin-user-mini-history"><strong>Últimas acciones</strong>${actions.length?actions.slice(0,5).map(a=>`<div><span>${escapeHtml(adminActionLabels[a.action]||a.action)}</span><small>${escapeHtml(adminFecha(a.created_at))}</small></div>`).join(''):'<small>Sin acciones previas.</small>'}</div>`;
+      const actionsBox=$('adminUserActions');actionsBox.innerHTML='';
+      const defs=u.status==='suspended'
+        ?[['reactivate','Reactivar cuenta','success']]
+        :[['suspend','Suspender cuenta','danger']];
+      defs.push([u.discoverable===0?'show_profile':'hide_profile',u.discoverable===0?'Mostrar perfil':'Ocultar perfil','']);
+      defs.push(['clear_photos','Eliminar fotos','danger-soft'],['clear_bio','Limpiar biografía','danger-soft']);
+      defs.forEach(([action,label,cls])=>{const b=document.createElement('button');b.type='button';b.className=`btn btn-secondary ${cls||''}`;b.textContent=label;b.onclick=()=>accionAdminUsuario(action);actionsBox.appendChild(b);});
+    }
+    function cerrarAdminUsuario(){adminSelectedUserId=null;$('adminUserModal')?.classList.add('hidden');$('adminUserModal')?.setAttribute('aria-hidden','true');}
+    async function accionAdminUsuario(action) {
+      if(!adminSelectedUserId)return;
+      const destructive=['suspend','clear_photos','clear_bio'].includes(action);
+      if(destructive&&!confirm('¿Aplicar esta acción de moderación? Quedará registrada en el historial.'))return;
+      const note=String($('adminUserNote').value||'').trim();
+      const res=await api(`/api/admin/users/${encodeURIComponent(adminSelectedUserId)}/action`,{method:'POST',body:{action,note}});
+      if(!res.ok)return mostrarToast(res.error||'No se pudo aplicar la acción.','error');
+      mostrarToast('Acción aplicada y registrada.','info');
+      const id=adminSelectedUserId; await cargarAdminStats(); await cargarAdminUsers(); await verAdminUsuario(id);
+    }
+    async function cargarAdminHistory() {
+      if(!currentUserAdmin)return;
+      const res=await api('/api/admin/actions');
+      if(!res.ok)return mostrarToast(res.error||'No se pudo cargar el historial.','error');
+      const list=$('adminHistoryList');list.innerHTML='';
+      const rows=res.actions||[];
+      if(!rows.length){list.innerHTML='<div class="empty-state"><span>🕘</span><strong>Aún no hay acciones de moderación</strong></div>';return;}
+      rows.forEach(a=>{const item=document.createElement('article');item.className='admin-history-item';item.innerHTML=`<div><strong>${escapeHtml(adminActionLabels[a.action]||a.action)}</strong><small>${escapeHtml(adminFecha(a.created_at))}</small></div><p>${escapeHtml(a.target_name||a.target_email||'Usuario')} ${a.note?`· ${escapeHtml(a.note)}`:''}</p><span>Admin: ${escapeHtml(a.admin_name||a.admin_email||'Administrador')}</span>`;list.appendChild(item);});
+    }
 
     function toggleChatSafety() { $('chatSafetyTray').classList.toggle('hidden'); }
     function abrirReporte() {
@@ -1611,6 +1792,16 @@
         const match = datingMatches.find(m => m.id === partnerId);
         mostrarToast(`${match?.nombre || 'Tu match'} te ha escrito.`, 'info');
       }
+    });
+
+    socket.on('dating_message_removed', (data = {}) => {
+      const id=String(data.id||'');
+      if(!id)return;
+      for(const [partnerId,list] of datingChats.entries()){
+        const next=list.filter(m=>m.id!==id);
+        if(next.length!==list.length)datingChats.set(partnerId,next);
+      }
+      if(currentChatMatch && !$('pantallaChat').classList.contains('hidden'))renderChat();
     });
 
     socket.on('dating_game_invite', (data = {}) => {

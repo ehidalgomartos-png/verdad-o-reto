@@ -1,7 +1,7 @@
 # V/R MATCH — CONTEXTO MAESTRO DEL PROYECTO
 
 **Última actualización:** 16 de septiembre de 2026  
-**Estado:** MVP funcional publicado + Fase 4 preparada para desplegar  
+**Estado:** Fases 4, 5 y 6 validadas; Fase 7 preparada para desplegar  
 **Proyecto:** V/R Match  
 **Concepto:** App de citas donde, después de hacer match, dos personas pueden conversar y jugar dinámicas tipo Verdad o Reto / Rompehielos dentro de la propia experiencia de dating.
 
@@ -817,3 +817,73 @@ La finalidad es que el proyecto pueda retomarse rápidamente incluso meses despu
 ## Render durante desarrollo
 
 El servicio continúa en Render Free. No se debe añadir `VR_STORAGE_DIR=/var/data` hasta contar con Persistent Disk o una estrategia de persistencia equivalente. Los usuarios/datos actuales deben considerarse de prueba.
+
+
+---
+
+# ACTUALIZACIÓN — 16 DE SEPTIEMBRE DE 2026 · FASE 7
+
+## Fase 6 validada
+
+La geolocalización y el descubrimiento por proximidad fueron desplegados y probados correctamente.
+
+`/healthz` confirmó:
+
+```json
+{"ok":true,"db":true,"version":"6.0.0"}
+```
+
+## Fase 7 preparada — Moderación avanzada
+
+La siguiente versión preparada es:
+
+**V/R Match 7.0.0 — Centro de moderación**
+
+Funciones añadidas:
+
+- panel administrativo dividido en Denuncias, Usuarios e Historial;
+- estadísticas de usuarios activos/suspendidos, matches, denuncias, mensajes y acciones recientes;
+- filtros de denuncias por estado, motivo y búsqueda;
+- nuevas denuncias guardan un contexto limitado de los últimos mensajes del match como evidencia;
+- suspensión y reactivación de cuentas;
+- usuarios suspendidos no aparecen en Descubrir ni como matches disponibles;
+- búsqueda administrativa de usuarios;
+- ficha de moderación por cuenta;
+- ocultar/mostrar perfiles;
+- eliminar fotos de perfil;
+- limpiar biografía;
+- eliminar mensajes concretos desde una denuncia;
+- sincronización en tiempo real cuando moderación elimina un mensaje;
+- historial persistente de acciones administrativas;
+- ubicación precisa nunca expuesta al panel.
+
+## Administración
+
+Para habilitar una cuenta administradora se utiliza exclusivamente:
+
+```text
+VR_ADMIN_EMAILS=correo-admin@ejemplo.com
+```
+
+en **Render → Environment**.
+
+No introducir correos administrativos directamente en el código.
+
+## Estado de infraestructura
+
+Se mantiene durante desarrollo:
+
+```text
+VR_REQUIRE_EMAIL_VERIFICATION=false
+```
+
+y Render Free sin Persistent Disk.
+
+Queda para cierre de desarrollo:
+
+- dominio propio;
+- remitente profesional en Resend;
+- verificación obligatoria;
+- upgrade de Render;
+- persistencia definitiva;
+- backups y almacenamiento de imágenes.

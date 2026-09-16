@@ -33,6 +33,7 @@ const SESSION_DAYS = 30;
 const VALID_MAZOS = new Set(['rompehielos', 'parejas', 'seccionXX']);
 const VALID_GENDERS = new Set(['man', 'woman', 'nonbinary', 'other']);
 const VALID_LOOKING = new Set(['all', 'men', 'women', 'nonbinary']);
+const VALID_REPORT_REASONS = new Set(['harassment','fake','spam','sexual','underage','other']);
 const EMAIL_VERIFY_HOURS = 24;
 const PASSWORD_RESET_MINUTES = 45;
 const REQUIRE_EMAIL_VERIFICATION = String(process.env.VR_REQUIRE_EMAIL_VERIFICATION || 'false').toLowerCase() === 'true';
@@ -154,6 +155,8 @@ ensureColumn('profiles', 'location_lng', 'REAL');
 ensureColumn('profiles', 'location_updated_at', 'INTEGER');
 ensureColumn('reports', 'updated_at', 'INTEGER');
 ensureColumn('reports', 'moderator_note', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('reports', 'match_id', 'TEXT');
+ensureColumn('reports', 'evidence_json', "TEXT NOT NULL DEFAULT '[]'");
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS auth_tokens (
@@ -449,7 +452,9 @@ function blockedEitherWay(a, b) {
 }
 function getActiveMatch(a, b) {
   const [u1,u2] = pair(a,b);
-  return db.prepare('SELECT * FROM matches WHERE user1=? AND user2=? AND active=1').get(u1,u2) || null;
+  return db.prepare(`SELECT m.* FROM matches m
+    JOIN users ua ON ua.id=m.user1 JOIN users ub ON ub.id=m.user2
+    WHERE m.user1=? AND m.user2=? AND m.active=1 AND ua.status='active' AND ub.status='active'`).get(u1,u2) || null;
 }
 function discoverFor(userId) {
   const meRow = db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(userId);
@@ -463,7 +468,7 @@ function discoverFor(userId) {
 
   const useDistance = hasStoredLocation(meRow);
   const radiusKm = cleanRadius(meRow?.radius_km, 50);
-  return db.prepare('SELECT * FROM profiles WHERE user_id != ?').all(userId)
+  return db.prepare("SELECT p.* FROM profiles p JOIN users u ON u.id=p.user_id WHERE p.user_id != ? AND u.status='active'").all(userId)
     .map(row => {
       const fullProfile = profileFromRow(row);
       const distance = distanceKmBetweenRows(meRow, row);
@@ -485,6 +490,8 @@ function discoverFor(userId) {
 }
 function matchPartnerRow(match, userId) {
   const partnerId = match.user1 === userId ? match.user2 : match.user1;
+  const partnerUser = db.prepare('SELECT status FROM users WHERE id=?').get(partnerId);
+  if (!partnerUser || partnerUser.status !== 'active') return null;
   const partner = publicProfile(getProfile(partnerId));
   if (!partner) return null;
   const last = db.prepare('SELECT text, created_at, from_user FROM messages WHERE match_id=? ORDER BY created_at DESC LIMIT 1').get(match.id);
@@ -519,6 +526,33 @@ function requireAuth(req,res,next) {
 function requireAdmin(req,res,next) {
   if (!isAdmin(req.user)) return res.status(403).json({ok:false,error:'Acceso de administración no autorizado.'});
   next();
+}
+function logModerationAction(adminUserId, targetUserId, action, note = '', reportId = null) {
+  db.prepare('INSERT INTO moderation_actions(id,report_id,admin_user,target_user,action,note,created_at) VALUES(?,?,?,?,?,?,?)')
+    .run(safeId('mod'), reportId || null, adminUserId, targetUserId || null, action, cleanShortText(note,500), now());
+}
+function parseEvidence(value) {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed.slice(-20).map(item => ({
+      id: cleanShortText(item?.id,80),
+      from: cleanShortText(item?.from,80),
+      text: cleanShortText(item?.text,500),
+      ts: Number(item?.ts) || 0
+    })) : [];
+  } catch { return []; }
+}
+function suspendUser(userId) {
+  db.prepare("UPDATE users SET status='suspended' WHERE id=?").run(userId);
+  db.prepare('DELETE FROM sessions WHERE user_id=?').run(userId);
+  disconnectUserSockets(userId,'account_suspended',{});
+}
+function reactivateUser(userId) {
+  db.prepare("UPDATE users SET status='active' WHERE id=?").run(userId);
+}
+function clearProfilePhotos(userId) {
+  deleteUserUploads(userId);
+  db.prepare("UPDATE profiles SET avatar='',photos_json='[]',updated_at=? WHERE user_id=?").run(now(),userId);
 }
 function cleanupSessions() { db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now()); db.prepare('DELETE FROM auth_tokens WHERE expires_at <= ? OR used_at IS NOT NULL').run(now()); }
 cleanupSessions();
@@ -681,20 +715,165 @@ app.post('/api/account/delete', requireAuth, rateLimit({limit:3,windowMs:24*60*6
 });
 
 app.get('/api/admin/stats', requireAuth, requireAdmin, (req,res) => {
-  const stats={users:db.prepare("SELECT COUNT(*) n FROM users WHERE status='active'").get().n,matches:db.prepare('SELECT COUNT(*) n FROM matches WHERE active=1').get().n,openReports:db.prepare("SELECT COUNT(*) n FROM reports WHERE status='open'").get().n,messages:db.prepare('SELECT COUNT(*) n FROM messages').get().n};
+  const since24 = now() - 24*60*60*1000;
+  const stats = {
+    activeUsers: db.prepare("SELECT COUNT(*) n FROM users WHERE status='active'").get().n,
+    suspendedUsers: db.prepare("SELECT COUNT(*) n FROM users WHERE status='suspended'").get().n,
+    matches: db.prepare('SELECT COUNT(*) n FROM matches WHERE active=1').get().n,
+    openReports: db.prepare("SELECT COUNT(*) n FROM reports WHERE status='open'").get().n,
+    messages: db.prepare('SELECT COUNT(*) n FROM messages').get().n,
+    actions24h: db.prepare('SELECT COUNT(*) n FROM moderation_actions WHERE created_at>=?').get(since24).n
+  };
   res.json({ok:true,stats});
 });
+
 app.get('/api/admin/reports', requireAuth, requireAdmin, (req,res) => {
-  const status=['open','resolved','dismissed'].includes(String(req.query.status))?String(req.query.status):'open';
-  const rows=db.prepare(`SELECT r.*, ru.email reporter_email, tu.email reported_email, rp.name reporter_name, tp.name reported_name FROM reports r JOIN users ru ON ru.id=r.reporter JOIN users tu ON tu.id=r.reported LEFT JOIN profiles rp ON rp.user_id=r.reporter LEFT JOIN profiles tp ON tp.user_id=r.reported WHERE r.status=? ORDER BY r.created_at DESC LIMIT 200`).all(status);
+  const requestedStatus = String(req.query.status || 'open');
+  const status = ['open','resolved','dismissed','all'].includes(requestedStatus) ? requestedStatus : 'open';
+  const reason = VALID_REPORT_REASONS.has(String(req.query.reason || '')) ? String(req.query.reason) : '';
+  const q = cleanShortText(req.query.q,80).toLowerCase();
+  const where = [], params = [];
+  if (status !== 'all') { where.push('r.status=?'); params.push(status); }
+  if (reason) { where.push('r.reason=?'); params.push(reason); }
+  if (q) {
+    where.push(`(
+      LOWER(ru.email) LIKE ? OR LOWER(tu.email) LIKE ? OR
+      LOWER(COALESCE(rp.name,'')) LIKE ? OR LOWER(COALESCE(tp.name,'')) LIKE ? OR
+      LOWER(COALESCE(r.details,'')) LIKE ?
+    )`);
+    const like = `%${q}%`; params.push(like,like,like,like,like);
+  }
+  const sql = `SELECT r.*,
+    ru.email reporter_email, tu.email reported_email, tu.status reported_status,
+    rp.name reporter_name, tp.name reported_name
+    FROM reports r
+    JOIN users ru ON ru.id=r.reporter
+    JOIN users tu ON tu.id=r.reported
+    LEFT JOIN profiles rp ON rp.user_id=r.reporter
+    LEFT JOIN profiles tp ON tp.user_id=r.reported
+    ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+    ORDER BY CASE WHEN r.status='open' THEN 0 ELSE 1 END, r.created_at DESC LIMIT 200`;
+  const rows = db.prepare(sql).all(...params).map(row => {
+    const evidence = parseEvidence(row.evidence_json);
+    delete row.evidence_json;
+    return {...row,evidence};
+  });
   res.json({ok:true,reports:rows});
 });
+
 app.post('/api/admin/reports/:id/action', requireAuth, requireAdmin, (req,res) => {
-  const report=db.prepare('SELECT * FROM reports WHERE id=?').get(String(req.params.id||'')); if(!report)return res.status(404).json({ok:false,error:'Denuncia no encontrada.'});
-  const action=String(req.body?.action||''), note=cleanShortText(req.body?.note,500); if(!['resolve','dismiss','suspend'].includes(action))return res.status(400).json({ok:false,error:'Acción no válida.'});
-  const status=action==='dismiss'?'dismissed':'resolved'; db.prepare('UPDATE reports SET status=?,updated_at=?,moderator_note=? WHERE id=?').run(status,now(),note,report.id);
-  if(action==='suspend'){db.prepare("UPDATE users SET status='suspended' WHERE id=?").run(report.reported);db.prepare('DELETE FROM sessions WHERE user_id=?').run(report.reported);db.prepare('UPDATE matches SET active=0 WHERE user1=? OR user2=?').run(report.reported,report.reported);disconnectUserSockets(report.reported,'account_suspended',{});}
-  db.prepare('INSERT INTO moderation_actions(id,report_id,admin_user,target_user,action,note,created_at) VALUES(?,?,?,?,?,?,?)').run(safeId('mod'),report.id,req.user.id,report.reported,action,note,now()); broadcastDiscovery();res.json({ok:true});
+  const report = db.prepare('SELECT * FROM reports WHERE id=?').get(String(req.params.id||''));
+  if (!report) return res.status(404).json({ok:false,error:'Denuncia no encontrada.'});
+  const action = String(req.body?.action||'');
+  const note = cleanShortText(req.body?.note,500);
+  if (!['resolve','dismiss','suspend','reactivate'].includes(action)) return res.status(400).json({ok:false,error:'Acción no válida.'});
+  const status = action === 'dismiss' ? 'dismissed' : 'resolved';
+  db.prepare('UPDATE reports SET status=?,updated_at=?,moderator_note=? WHERE id=?').run(status,now(),note,report.id);
+  if (action === 'suspend') suspendUser(report.reported);
+  if (action === 'reactivate') reactivateUser(report.reported);
+  logModerationAction(req.user.id,report.reported,action,note,report.id);
+  broadcastDiscovery(); emitMatches(report.reported);
+  res.json({ok:true,status,userStatus:db.prepare('SELECT status FROM users WHERE id=?').get(report.reported)?.status||null});
+});
+
+app.get('/api/admin/users', requireAuth, requireAdmin, (req,res) => {
+  const q = cleanShortText(req.query.q,80).toLowerCase();
+  const status = ['active','suspended','all'].includes(String(req.query.status||'all')) ? String(req.query.status||'all') : 'all';
+  const where = [], params = [];
+  if (status !== 'all') { where.push('u.status=?'); params.push(status); }
+  if (q) {
+    where.push("(LOWER(u.email) LIKE ? OR LOWER(COALESCE(p.name,'')) LIKE ? OR LOWER(COALESCE(p.city,'')) LIKE ?)");
+    const like = `%${q}%`; params.push(like,like,like);
+  }
+  const sql = `SELECT u.id,u.email,u.status,u.created_at,u.last_seen_at,u.email_verified,
+    p.name,p.age,p.city,p.avatar,p.discoverable,
+    (SELECT COUNT(*) FROM reports r WHERE r.reported=u.id) reports_received,
+    (SELECT COUNT(*) FROM reports r WHERE r.reporter=u.id) reports_sent,
+    (SELECT COUNT(*) FROM messages m WHERE m.from_user=u.id) messages_sent,
+    (SELECT COUNT(*) FROM matches mm WHERE mm.active=1 AND (mm.user1=u.id OR mm.user2=u.id)) active_matches
+    FROM users u LEFT JOIN profiles p ON p.user_id=u.id
+    ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+    ORDER BY u.last_seen_at DESC LIMIT 120`;
+  res.json({ok:true,users:db.prepare(sql).all(...params)});
+});
+
+app.get('/api/admin/users/:id', requireAuth, requireAdmin, (req,res) => {
+  const id = String(req.params.id||'');
+  const user = db.prepare(`SELECT u.id,u.email,u.status,u.created_at,u.last_seen_at,u.email_verified,
+      p.name,p.age,p.gender,p.city,p.bio,p.interests_json,p.avatar,p.photos_json,p.discoverable,p.show_online,p.allow_game_invites,p.location_updated_at
+      FROM users u LEFT JOIN profiles p ON p.user_id=u.id WHERE u.id=?`).get(id);
+  if (!user) return res.status(404).json({ok:false,error:'Usuario no encontrado.'});
+  const summary = {
+    reportsReceived: db.prepare('SELECT COUNT(*) n FROM reports WHERE reported=?').get(id).n,
+    reportsSent: db.prepare('SELECT COUNT(*) n FROM reports WHERE reporter=?').get(id).n,
+    messagesSent: db.prepare('SELECT COUNT(*) n FROM messages WHERE from_user=?').get(id).n,
+    activeMatches: db.prepare('SELECT COUNT(*) n FROM matches WHERE active=1 AND (user1=? OR user2=?)').get(id,id).n,
+    blocksMade: db.prepare('SELECT COUNT(*) n FROM blocks WHERE blocker=?').get(id).n
+  };
+  const reports = db.prepare(`SELECT r.id,r.reason,r.details,r.status,r.created_at,r.updated_at,r.moderator_note,
+      ru.email reporter_email,rp.name reporter_name
+      FROM reports r JOIN users ru ON ru.id=r.reporter LEFT JOIN profiles rp ON rp.user_id=r.reporter
+      WHERE r.reported=? ORDER BY r.created_at DESC LIMIT 20`).all(id);
+  const actions = db.prepare(`SELECT ma.id,ma.action,ma.note,ma.created_at,au.email admin_email
+      FROM moderation_actions ma LEFT JOIN users au ON au.id=ma.admin_user
+      WHERE ma.target_user=? ORDER BY ma.created_at DESC LIMIT 30`).all(id);
+  const resultUser = {
+    ...user,
+    interests:safeJsonArray(user.interests_json),
+    photos:safeJsonArray(user.photos_json),
+    locationEnabled:Boolean(user.location_updated_at)
+  };
+  delete resultUser.interests_json;
+  delete resultUser.photos_json;
+  delete resultUser.location_updated_at;
+  res.json({ok:true,user:resultUser,summary,reports,actions});
+});
+
+app.post('/api/admin/users/:id/action', requireAuth, requireAdmin, (req,res) => {
+  const target = String(req.params.id||'');
+  const user = db.prepare('SELECT id,email,status FROM users WHERE id=?').get(target);
+  if (!user) return res.status(404).json({ok:false,error:'Usuario no encontrado.'});
+  const action = String(req.body?.action||'');
+  const note = cleanShortText(req.body?.note,500);
+  if (target === req.user.id && action === 'suspend') return res.status(400).json({ok:false,error:'No puedes suspender tu propia cuenta administradora.'});
+  if (!['suspend','reactivate','hide_profile','show_profile','clear_photos','clear_bio'].includes(action)) return res.status(400).json({ok:false,error:'Acción no válida.'});
+  if (action === 'suspend') suspendUser(target);
+  if (action === 'reactivate') reactivateUser(target);
+  if (action === 'hide_profile') db.prepare('UPDATE profiles SET discoverable=0,updated_at=? WHERE user_id=?').run(now(),target);
+  if (action === 'show_profile') db.prepare('UPDATE profiles SET discoverable=1,updated_at=? WHERE user_id=?').run(now(),target);
+  if (action === 'clear_photos') clearProfilePhotos(target);
+  if (action === 'clear_bio') db.prepare("UPDATE profiles SET bio='',updated_at=? WHERE user_id=?").run(now(),target);
+  logModerationAction(req.user.id,target,action,note,null);
+  broadcastDiscovery(); emitMatches(target);
+  res.json({ok:true,userStatus:db.prepare('SELECT status FROM users WHERE id=?').get(target)?.status||null});
+});
+
+app.post('/api/admin/messages/:id/delete', requireAuth, requireAdmin, (req,res) => {
+  const id = String(req.params.id||'');
+  const row = db.prepare(`SELECT m.id,m.match_id,m.from_user,m.text,ma.user1,ma.user2
+    FROM messages m JOIN matches ma ON ma.id=m.match_id WHERE m.id=?`).get(id);
+  if (!row) return res.status(404).json({ok:false,error:'Mensaje no encontrado o ya eliminado.'});
+  const note = cleanShortText(req.body?.note,500);
+  const requestedReportId = cleanShortText(req.body?.reportId,80) || null;
+  const reportId = requestedReportId && db.prepare('SELECT 1 FROM reports WHERE id=?').get(requestedReportId) ? requestedReportId : null;
+  db.prepare('DELETE FROM messages WHERE id=?').run(id);
+  logModerationAction(req.user.id,row.from_user,'delete_message',note,reportId);
+  const payload={id:row.id,matchId:row.match_id};
+  emitToUser(row.user1,'dating_message_removed',payload);
+  emitToUser(row.user2,'dating_message_removed',payload);
+  emitMatches(row.user1); emitMatches(row.user2);
+  res.json({ok:true});
+});
+
+app.get('/api/admin/actions', requireAuth, requireAdmin, (req,res) => {
+  const rows = db.prepare(`SELECT ma.id,ma.report_id,ma.target_user,ma.action,ma.note,ma.created_at,
+      au.email admin_email, ap.name admin_name,
+      tu.email target_email, tp.name target_name
+    FROM moderation_actions ma
+    LEFT JOIN users au ON au.id=ma.admin_user LEFT JOIN profiles ap ON ap.user_id=ma.admin_user
+    LEFT JOIN users tu ON tu.id=ma.target_user LEFT JOIN profiles tp ON tp.user_id=ma.target_user
+    ORDER BY ma.created_at DESC LIMIT 250`).all();
+  res.json({ok:true,actions:rows});
 });
 
 app.get('/api/discover', requireAuth, (req,res) => res.json({ok:true,profiles:discoverFor(req.user.id)}));
@@ -716,12 +895,18 @@ app.post('/api/report', requireAuth, rateLimit({limit:10,windowMs:60*60*1000,key
   const target = String(req.body?.userId || '');
   const reason = cleanShortText(req.body?.reason,60);
   const details = cleanShortText(req.body?.details,600);
-  if (!target || target === req.user.id || !reason || !db.prepare('SELECT 1 FROM users WHERE id=?').get(target)) return res.status(400).json({ok:false,error:'Selecciona un motivo válido.'});
-  db.prepare('INSERT INTO reports(id,reporter,reported,reason,details,created_at) VALUES(?,?,?,?,?,?)').run(safeId('rep'),req.user.id,target,reason,details,now());
+  if (!target || target === req.user.id || !VALID_REPORT_REASONS.has(reason) || !db.prepare('SELECT 1 FROM users WHERE id=?').get(target)) return res.status(400).json({ok:false,error:'Selecciona un motivo válido.'});
+  const [u1,u2] = pair(req.user.id,target);
+  const match = db.prepare('SELECT id FROM matches WHERE user1=? AND user2=? ORDER BY created_at DESC LIMIT 1').get(u1,u2);
+  const evidence = match ? db.prepare(`SELECT id,from_user AS "from",text,created_at AS ts FROM
+    (SELECT id,from_user,text,created_at FROM messages WHERE match_id=? ORDER BY created_at DESC LIMIT 12)
+    ORDER BY ts ASC`).all(match.id) : [];
+  db.prepare('INSERT INTO reports(id,reporter,reported,reason,details,match_id,evidence_json,created_at) VALUES(?,?,?,?,?,?,?,?)')
+    .run(safeId('rep'),req.user.id,target,reason,details,match?.id||null,JSON.stringify(evidence),now());
   res.json({ok:true});
 });
 
-app.get('/healthz', (req,res) => { try { db.prepare('SELECT 1').get(); res.status(200).json({ok:true,db:true,version:'6.0.0'}); } catch { res.status(503).json({ok:false,db:false}); } });
+app.get('/healthz', (req,res) => { try { db.prepare('SELECT 1').get(); res.status(200).json({ok:true,db:true,version:'7.0.0'}); } catch { res.status(503).json({ok:false,db:false}); } });
 app.use('/uploads', express.static(UPLOAD_DIR, { fallthrough:false, maxAge:'7d', dotfiles:'deny' }));
 app.get(['/', '/index.html'], (req,res) => res.sendFile(path.join(ROOT,'index.html')));
 app.get('/styles.css', (req,res) => res.sendFile(path.join(ROOT,'styles.css')));
@@ -895,4 +1080,4 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{console.log(`V/R Match v6.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);});
+server.listen(PORT, '0.0.0.0', ()=>{console.log(`V/R Match v7.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);});

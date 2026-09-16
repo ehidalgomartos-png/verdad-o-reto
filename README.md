@@ -1,43 +1,87 @@
-# V/R Match · Fase 6 — proximidad y descubrimiento
+# V/R Match · Fase 7 — moderación avanzada
 
-Esta versión continúa el MVP ya desplegado en GitHub + Render y conserva el flujo principal:
+Esta versión continúa el MVP de V/R Match ya desplegado en GitHub + Render y conserva el flujo principal:
 
 **Descubrir → Like → Match → Chat → Juego → volver al Chat**
 
-La Fase 6 añade proximidad opcional sin revelar coordenadas exactas entre usuarios.
+La Fase 7 amplía el panel administrativo para que las denuncias y acciones de moderación puedan gestionarse con trazabilidad real.
 
-## Novedades de la Fase 6
+## Novedades de la Fase 7
 
-- Botón **Usar mi ubicación** dentro del perfil.
-- La ubicación es **opcional** y puede eliminarse posteriormente.
-- El navegador solicita permiso antes de obtenerla.
-- El servidor redondea latitud/longitud a 3 decimales antes de guardarlas.
-- Las coordenadas nunca se envían a otros perfiles.
-- Tampoco se comparten con otros usuarios las preferencias privadas, el radio configurado ni la fecha de actualización de ubicación.
-- En las tarjetas solo aparece una distancia aproximada, por ejemplo:
-  - `a menos de 1 km`
-  - `a 8 km`
-  - `a 42 km`
-- Radio permanente configurable: **5, 15, 30, 50, 100 o 200 km**.
-- Cuando el usuario tiene ubicación activada, Descubrir filtra por ese radio y ordena por proximidad.
-- Filtro rápido de distancia en Descubrir para reducir aún más los resultados.
-- Si no se activa ubicación, la app continúa funcionando con ciudad y los filtros existentes.
-- `Permissions-Policy` habilita geolocalización únicamente para el propio sitio.
-- Migraciones automáticas: no es necesario borrar la base SQLite existente.
+- Centro de moderación con tres áreas:
+  - **Denuncias**
+  - **Usuarios**
+  - **Historial**
+- Estadísticas de:
+  - usuarios activos;
+  - usuarios suspendidos;
+  - matches activos;
+  - denuncias abiertas;
+  - mensajes;
+  - acciones administrativas de las últimas 24 h.
+- Filtros de denuncias por estado, motivo y búsqueda.
+- Las nuevas denuncias guardan como evidencia un contexto limitado de los últimos mensajes de ese match.
+- El administrador puede:
+  - resolver o descartar denuncias;
+  - suspender y reactivar cuentas;
+  - ocultar o volver a mostrar un perfil;
+  - eliminar fotos de perfil;
+  - limpiar una biografía;
+  - eliminar mensajes concretos desde la evidencia de una denuncia.
+- Cuando un mensaje es eliminado por moderación desaparece también del chat conectado mediante Socket.IO.
+- Buscador de usuarios por nombre, correo o ciudad.
+- Ficha de moderación por usuario con actividad, denuncias, matches, mensajes y acciones previas.
+- Historial de acciones administrativas con administrador, usuario afectado, fecha y nota interna.
+- Los usuarios suspendidos dejan de aparecer en Descubrir y en la lista de matches mientras dure la suspensión.
+- Migraciones automáticas: no hace falta borrar la base SQLite existente.
+- `/healthz` pasa a versión **7.0.0**.
+
+## Privacidad del panel
+
+El panel administrativo no muestra coordenadas exactas de geolocalización. Solo indica si el usuario tiene ubicación configurada.
+
+La evidencia de chat se limita al contexto asociado a una denuncia y se almacena para revisión de seguridad. No se convierte el panel en un explorador general de conversaciones.
+
+## Activar un administrador
+
+Los administradores se controlan exclusivamente mediante una variable de entorno de Render:
+
+```text
+VR_ADMIN_EMAILS=correo-admin@ejemplo.com
+```
+
+Para varios administradores:
+
+```text
+VR_ADMIN_EMAILS=admin1@ejemplo.com,admin2@ejemplo.com
+```
+
+No escribas esta configuración dentro de `server.js`.
+
+Después de cambiar `VR_ADMIN_EMAILS`, guarda los cambios en Render y deja que el servicio se redespliegue.
+
+La cuenta indicada debe existir en V/R Match. Al iniciar sesión, en **Cuenta y seguridad** aparecerá:
+
+```text
+⚑ Abrir panel de moderación
+```
 
 ## Fases anteriores conservadas
 
-- Cuentas +18, login y sesiones persistentes.
+- Plataforma +18.
+- Registro, login y sesiones.
 - Perfiles, preferencias, likes, passes y matches.
 - Chat persistente.
-- Juego integrado en el chat.
-- Bloqueo, denuncia, deshacer match y privacidad.
-- Moderación y administración.
+- Verdad o Reto integrado dentro del chat.
+- Regreso al chat al finalizar una partida.
+- Bloqueo, denuncia y deshacer match.
 - Recuperación de contraseña.
 - Verificación de correo.
+- Resend mediante SMTP.
+- Privacidad de cuenta.
+- Geolocalización opcional y descubrimiento por distancia.
+- Consentimiento para contenido +18.
 - Rate limiting y controles anti-spam.
-- Validación de propiedad de fotos subidas.
-- Invitaciones de juego con consentimiento y caducidad.
 
 ## Archivos principales
 
@@ -48,128 +92,85 @@ server.js
 package.json
 render.yaml
 .env.example
+VR-MATCH-CONTEXTO-PROYECTO.md
+PRUEBA-FASE7.md
 ```
 
 No subas `.env`, `node_modules`, bases `.db`, fotos reales de usuarios ni claves API al repositorio.
 
-## Ejecutar en local
+## Desplegar
 
-Requiere Node.js 22.
-
-```bash
-npm install
-npm start
-```
-
-Abre:
+1. Descomprime este paquete.
+2. Sustituye en GitHub los archivos de la versión anterior.
+3. Commit recomendado:
 
 ```text
-http://localhost:3000
+Fase 7 - moderación avanzada y panel admin
 ```
 
-## Actualizar GitHub + Render
+4. Push a `main`.
+5. Render hará el Auto-Deploy.
 
-Servicio actual:
-
-```text
-https://verdad-o-reto-zz0k.onrender.com
-```
-
-1. Sustituye en GitHub los archivos anteriores por los de esta carpeta.
-2. Haz commit y push a `main`.
-3. Render realizará el Auto-Deploy.
-4. En Logs debe aparecer aproximadamente:
+En Logs debe aparecer:
 
 ```text
-V/R Match v6.0 escuchando en puerto 10000
+V/R Match v7.0 escuchando en puerto 10000
 Email SMTP: configurado | verificación obligatoria: false
 ```
 
-5. Comprueba:
+Comprueba:
 
 ```text
-/healthz
+https://verdad-o-reto-zz0k.onrender.com/healthz
 ```
 
 Resultado esperado:
 
 ```json
-{"ok":true,"db":true,"version":"6.0.0"}
+{"ok":true,"db":true,"version":"7.0.0"}
 ```
 
 ## Render Free durante desarrollo
 
-Esta copia de `render.yaml` **no solicita Persistent Disk** porque el proyecto sigue usando Render Free durante desarrollo.
+Seguimos manteniendo Render Free durante el desarrollo.
 
-En Free, SQLite y las fotos del filesystem deben considerarse temporales: pueden perderse con reinicios o redeploys. El upgrade de Render y la persistencia definitiva se han pospuesto para el cierre de la etapa de desarrollo.
+No añadas `VR_STORAGE_DIR=/var/data` sin Persistent Disk. SQLite y las fotos locales deben seguir considerándose datos temporales de prueba.
 
-Cuando se pase a un plan compatible con disco persistente podrá volver a configurarse:
+El dominio propio, el upgrade de Render, la persistencia definitiva y `VR_REQUIRE_EMAIL_VERIFICATION=true` siguen aplazados para el cierre de desarrollo.
 
-```text
-VR_STORAGE_DIR=/var/data
-```
+## Email
 
-con un Persistent Disk montado en:
-
-```text
-/var/data
-```
-
-## Email actual
-
-La Fase 5 ya fue validada con Resend.
-
-En Render Free se usa el puerto alternativo:
+La configuración validada continúa siendo compatible con Render Free:
 
 ```text
 SMTP_HOST=smtp.resend.com
 SMTP_PORT=2465
 SMTP_USER=resend
-SMTP_PASS=<API KEY EN RENDER, NUNCA EN GITHUB>
+SMTP_PASS=<API KEY SOLO EN RENDER>
 SMTP_SECURE=true
-```
-
-Por ahora se mantiene:
-
-```text
 VR_REQUIRE_EMAIL_VERIFICATION=false
 ```
 
-El dominio propio, el remitente profesional y la verificación obligatoria se dejan para la etapa final junto con el upgrade de Render.
+## Seguridad de moderación
 
-## Probar la geolocalización
-
-Usa dos cuentas de prueba.
-
-1. En Cuenta A entra a **Editar perfil**.
-2. Pulsa **Usar mi ubicación** y acepta el permiso del navegador.
-3. Elige un radio, por ejemplo `50 km`.
-4. Guarda el perfil.
-5. Repite el proceso en Cuenta B.
-6. Abre Descubrir.
-7. Comprueba que la tarjeta muestra ciudad + distancia aproximada.
-8. Cambia el radio a uno menor y verifica que el filtrado responde.
-9. Prueba **Quitar ubicación**, guarda y verifica que la app vuelve a funcionar mediante los filtros tradicionales.
-
-### Privacidad de ubicación
-
-- La ubicación nunca se activa automáticamente.
-- El usuario debe pulsar el botón y aceptar el permiso del navegador.
-- El servidor redondea las coordenadas antes de almacenarlas.
-- Los clientes de otros usuarios no reciben latitud ni longitud ni metadatos de ubicación.
-- Solo reciben `distanceKm`, ya redondeada, además de los datos públicos del perfil.
-- El usuario puede eliminar la ubicación desde su perfil.
+- Solo un usuario cuyo correo esté incluido en `VR_ADMIN_EMAILS` puede acceder a rutas `/api/admin/*`.
+- Las acciones administrativas quedan registradas.
+- Suspender una cuenta cierra sus sesiones inmediatamente.
+- Reactivar no requiere reconstruir la cuenta.
+- Las acciones destructivas del frontend requieren confirmación.
+- La ubicación precisa no se expone en el panel.
+- La eliminación de mensajes se sincroniza a los usuarios conectados.
 
 ## Pendiente para producción
 
-Antes de una apertura pública grande:
+Antes de abrir V/R Match a usuarios reales:
 
 - dominio propio;
-- remitente de correo propio en Resend;
+- correo profesional verificado en Resend;
 - `VR_REQUIRE_EMAIL_VERIFICATION=true`;
-- upgrade de Render o migración a infraestructura persistente;
-- almacenamiento externo para imágenes;
+- Render de pago + persistencia o migración a base de datos gestionada;
+- almacenamiento persistente de imágenes;
 - backups;
-- políticas legales y privacidad definitivas;
-- moderación reforzada de imágenes/contenido;
-- observabilidad y auditoría.
+- términos, privacidad y normativa;
+- moderación de imágenes más avanzada;
+- observabilidad y alertas.
