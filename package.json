@@ -1,8 +1,8 @@
 {
   "name": "vr-match",
-  "version": "11.0.0",
+  "version": "12.0.0",
   "private": true,
-  "description": "V/R Match dating app - preproduction polish, onboarding, legal beta, security readiness, PWA and notifications",
+  "description": "V/R Match dating app - beta observability, product metrics, feedback, diagnostics, PWA and moderation",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

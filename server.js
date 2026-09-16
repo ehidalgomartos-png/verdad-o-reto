@@ -22,7 +22,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '11.0.0';
+const APP_VERSION = '12.0.0';
 const LEGAL_VERSION = 'beta-2026-09-16';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -253,6 +253,32 @@ CREATE TABLE IF NOT EXISTS legal_acceptances (
   accepted_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_legal_acceptances_user ON legal_acceptances(user_id, accepted_at DESC);
+CREATE TABLE IF NOT EXISTS beta_feedback (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  message TEXT NOT NULL,
+  page TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  admin_note TEXT NOT NULL DEFAULT '',
+  updated_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_beta_feedback_status_created ON beta_feedback(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_beta_feedback_user ON beta_feedback(user_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS client_errors (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  message TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT '',
+  line INTEGER,
+  column_no INTEGER,
+  page TEXT NOT NULL DEFAULT '',
+  app_version TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_client_errors_created ON client_errors(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_client_errors_user ON client_errors(user_id, created_at DESC);
 `);
 
 app.disable('x-powered-by');
@@ -279,6 +305,21 @@ const onlineUsers = new Map(); // userId -> Set(socket.id)
 
 function now() { return Date.now(); }
 function safeId(prefix) { return `${prefix}_${crypto.randomBytes(12).toString('hex')}`; }
+function clampInt(value,min,max,fallback=0){const n=Number(value);return Number.isFinite(n)?Math.max(min,Math.min(max,Math.trunc(n))):fallback;}
+function fileSizeSafe(filePath){try{return fs.statSync(filePath).size||0;}catch{return 0;}}
+function folderStatsSafe(dirPath){
+  let files=0,bytes=0;
+  try {
+    for(const entry of fs.readdirSync(dirPath,{withFileTypes:true})){
+      const full=path.join(dirPath,entry.name);
+      if(entry.isFile()){files++;bytes+=fileSizeSafe(full);}
+      else if(entry.isDirectory()){
+        const child=folderStatsSafe(full); files+=child.files; bytes+=child.bytes;
+      }
+    }
+  } catch {}
+  return {files,bytes};
+}
 function hashToken(token) { return crypto.createHash('sha256').update(String(token || '')).digest('hex'); }
 function hashPassword(password) {
   const salt = crypto.randomBytes(16);
@@ -1090,6 +1131,30 @@ app.post('/api/plus/boost', requireAuth, requirePlus, (req,res) => {
   res.json({ok:true,plus});
 });
 
+app.post('/api/feedback', requireAuth, rateLimit({limit:8,windowMs:24*60*60*1000,key:req=>req.user.id}), (req,res) => {
+  const kind = ['bug','idea','ux','other'].includes(String(req.body?.kind||'')) ? String(req.body.kind) : 'other';
+  const message = cleanShortText(req.body?.message,1200);
+  const page = cleanShortText(req.body?.page,120).split('?')[0];
+  if (message.length < 10) return res.status(400).json({ok:false,error:'Cuéntanos un poco más para poder revisarlo.'});
+  const id = safeId('fb');
+  db.prepare('INSERT INTO beta_feedback(id,user_id,kind,message,page,created_at,status,admin_note,updated_at) VALUES(?,?,?,?,?,?,\'open\',\'\',NULL)')
+    .run(id,req.user.id,kind,message,page,now());
+  res.json({ok:true,id,message:'Gracias. Tu comentario quedó enviado al equipo de la beta.'});
+});
+
+app.post('/api/telemetry/client-error', requireAuth, rateLimit({limit:20,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  const message = cleanShortText(req.body?.message,300);
+  if (!message) return res.json({ok:true});
+  const source = cleanShortText(req.body?.source,120);
+  const page = cleanShortText(req.body?.page,120).split('?')[0];
+  const line = clampInt(req.body?.line,0,1000000,0);
+  const column = clampInt(req.body?.column,0,1000000,0);
+  const duplicate = db.prepare('SELECT 1 FROM client_errors WHERE user_id=? AND message=? AND created_at>=? LIMIT 1').get(req.user.id,message,now()-5*60*1000);
+  if (!duplicate) db.prepare('INSERT INTO client_errors(id,user_id,message,source,line,column_no,page,app_version,created_at) VALUES(?,?,?,?,?,?,?,?,?)')
+    .run(safeId('err'),req.user.id,message,source,line,column,page,APP_VERSION,now());
+  res.json({ok:true});
+});
+
 app.get('/api/admin/stats', requireAuth, requireAdmin, (req,res) => {
   const since24 = now() - 24*60*60*1000;
   const stats = {
@@ -1101,6 +1166,80 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, (req,res) => {
     actions24h: db.prepare('SELECT COUNT(*) n FROM moderation_actions WHERE created_at>=?').get(since24).n
   };
   res.json({ok:true,stats});
+});
+
+app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
+  const days = [1,7,30].includes(Number(req.query.days)) ? Number(req.query.days) : 7;
+  const until = now();
+  const since = until - days*24*60*60*1000;
+  const metric = {
+    registered: db.prepare('SELECT COUNT(*) n FROM users WHERE created_at>=?').get(since).n,
+    activeUsers: db.prepare("SELECT COUNT(*) n FROM users WHERE status='active' AND last_seen_at>=?").get(since).n,
+    likes: db.prepare('SELECT COUNT(*) n FROM likes WHERE created_at>=?').get(since).n,
+    matches: db.prepare('SELECT COUNT(*) n FROM matches WHERE created_at>=?').get(since).n,
+    messages: db.prepare('SELECT COUNT(*) n FROM messages WHERE created_at>=?').get(since).n,
+    reports: db.prepare('SELECT COUNT(*) n FROM reports WHERE created_at>=?').get(since).n,
+    feedback: db.prepare('SELECT COUNT(*) n FROM beta_feedback WHERE created_at>=?').get(since).n,
+    clientErrors: db.prepare('SELECT COUNT(*) n FROM client_errors WHERE created_at>=?').get(since).n,
+    verifiedTotal: db.prepare('SELECT COUNT(*) n FROM users WHERE email_verified=1').get().n,
+    activePlus: db.prepare("SELECT COUNT(*) n FROM plus_memberships WHERE status='active' AND (expires_at IS NULL OR expires_at>?)").get(until).n
+  };
+  const funnel = {
+    registered: metric.registered,
+    profile: db.prepare('SELECT COUNT(*) n FROM users u WHERE u.created_at>=? AND EXISTS(SELECT 1 FROM profiles p WHERE p.user_id=u.id)').get(since).n,
+    matched: db.prepare('SELECT COUNT(*) n FROM users u WHERE u.created_at>=? AND EXISTS(SELECT 1 FROM matches m WHERE m.user1=u.id OR m.user2=u.id)').get(since).n,
+    messaged: db.prepare('SELECT COUNT(*) n FROM users u WHERE u.created_at>=? AND EXISTS(SELECT 1 FROM messages m WHERE m.from_user=u.id)').get(since).n
+  };
+  function grouped(table,col){
+    const rows=db.prepare(`SELECT date(${col}/1000,'unixepoch') day,COUNT(*) n FROM ${table} WHERE ${col}>=? GROUP BY day`).all(since);
+    return new Map(rows.map(r=>[r.day,Number(r.n)||0]));
+  }
+  const registrations=grouped('users','created_at'), matches=grouped('matches','created_at'), messages=grouped('messages','created_at');
+  const daily=[];
+  const first = new Date(since); first.setUTCHours(0,0,0,0);
+  const last = new Date(until); last.setUTCHours(0,0,0,0);
+  for(let t=first.getTime();t<=last.getTime();t+=24*60*60*1000){
+    const day=new Date(t).toISOString().slice(0,10);
+    daily.push({day,registered:registrations.get(day)||0,matches:matches.get(day)||0,messages:messages.get(day)||0});
+  }
+  const uploads=folderStatsSafe(UPLOAD_DIR), mem=process.memoryUsage();
+  const system={
+    uptimeSeconds:Math.round(process.uptime()),
+    rssMb:Math.round(mem.rss/1024/1024),
+    heapUsedMb:Math.round(mem.heapUsed/1024/1024),
+    onlineUsers:onlineUsers.size,
+    sockets:Number(io.engine?.clientsCount||0),
+    dbBytes:fileSizeSafe(DB_PATH),
+    uploadFiles:uploads.files,
+    uploadBytes:uploads.bytes
+  };
+  const recentErrors=db.prepare(`SELECT ce.id,ce.message,ce.source,ce.line,ce.column_no,ce.page,ce.app_version,ce.created_at,u.email,p.name
+    FROM client_errors ce LEFT JOIN users u ON u.id=ce.user_id LEFT JOIN profiles p ON p.user_id=ce.user_id
+    ORDER BY ce.created_at DESC LIMIT 20`).all();
+  res.json({ok:true,days,metric,funnel,daily,system,recentErrors});
+});
+
+app.get('/api/admin/feedback', requireAuth, requireAdmin, (req,res) => {
+  const status = ['open','resolved','dismissed','all'].includes(String(req.query.status||'open')) ? String(req.query.status||'open') : 'open';
+  const kind = ['bug','idea','ux','other',''].includes(String(req.query.kind||'')) ? String(req.query.kind||'') : '';
+  const where=[],params=[];
+  if(status!=='all'){where.push('f.status=?');params.push(status);}
+  if(kind){where.push('f.kind=?');params.push(kind);}
+  const rows=db.prepare(`SELECT f.*,u.email,p.name FROM beta_feedback f JOIN users u ON u.id=f.user_id LEFT JOIN profiles p ON p.user_id=f.user_id
+    ${where.length?`WHERE ${where.join(' AND ')}`:''} ORDER BY CASE WHEN f.status='open' THEN 0 ELSE 1 END,f.created_at DESC LIMIT 250`).all(...params);
+  res.json({ok:true,feedback:rows});
+});
+
+app.post('/api/admin/feedback/:id/action', requireAuth, requireAdmin, (req,res) => {
+  const row=db.prepare('SELECT * FROM beta_feedback WHERE id=?').get(String(req.params.id||''));
+  if(!row)return res.status(404).json({ok:false,error:'Comentario no encontrado.'});
+  const action=String(req.body?.action||'');
+  if(!['resolve','dismiss','reopen'].includes(action))return res.status(400).json({ok:false,error:'Acción no válida.'});
+  const status=action==='resolve'?'resolved':action==='dismiss'?'dismissed':'open';
+  const note=cleanShortText(req.body?.note,500);
+  db.prepare('UPDATE beta_feedback SET status=?,admin_note=?,updated_at=? WHERE id=?').run(status,note,now(),row.id);
+  logModerationAction(req.user.id,row.user_id,`feedback_${action}`,note,null);
+  res.json({ok:true,status});
 });
 
 app.get('/api/admin/reports', requireAuth, requireAdmin, (req,res) => {
@@ -1539,4 +1678,4 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v11.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);});
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v12.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad beta: métricas internas + feedback + diagnóstico cliente');});

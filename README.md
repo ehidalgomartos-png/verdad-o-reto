@@ -1,49 +1,53 @@
-# V/R Match — Fase 11 · Preproducción
+# V/R Match — Fase 12 · Observabilidad y feedback beta
 
-Versión: **11.0.0**
+Versión: **12.0.0**
 
-Esta fase no añade un nuevo modelo de negocio ni cambia el núcleo dating → chat → juego. Su objetivo es **pulir la beta y preparar el salto posterior a producción**.
+Esta fase prepara V/R Match para una beta más seria antes de pagar infraestructura o conectar dominio/pagos. No añade trackers externos: las métricas se calculan dentro del propio backend con los datos que la app ya necesita para funcionar.
 
 ## Qué añade
 
-- onboarding persistente de bienvenida;
-- confirmación +18 y aceptación explícita de condiciones/privacidad al registrar cuentas nuevas;
-- borradores beta de Condiciones, Privacidad y Normas de comunidad;
-- enlaces legales desde login, cuenta y footer;
-- panel admin **Producción** con checklist técnico;
-- endpoint admin `/api/admin/production-readiness`;
-- cabeceras de seguridad adicionales (CSP, COOP, CORP, no-store en API);
-- `index.html` sin caché HTTP para reducir versiones visuales obsoletas tras deploy;
-- Service Worker actualizado a caché `v11`;
-- health check `11.0.0`.
+- panel admin **Métricas** con periodos 24 h / 7 días / 30 días;
+- embudo registro → perfil → match → mensaje;
+- actividad agregada de altas, likes, matches, mensajes, denuncias y feedback;
+- diagnóstico de instancia: uptime, memoria, sockets, usuarios online, tamaño SQLite y uploads;
+- registro limitado de errores JavaScript de usuarios autenticados, sin stack completo ni contenido de chats;
+- apartado **Beta y soporte** dentro de Cuenta;
+- formulario de feedback para errores, ideas y experiencia de uso;
+- panel admin **Feedback** para resolver, descartar o reabrir comentarios;
+- auditoría de acciones sobre feedback;
+- Service Worker v12;
+- health check `12.0.0`.
 
-## Importante
+## Privacidad
 
-Los textos legales son **borradores de beta, no una revisión jurídica final**. Antes del lanzamiento comercial deben adaptarse a la entidad responsable, política real de conservación, proveedores, jurisdicción y cumplimiento aplicable.
+No se instala Google Analytics, Meta Pixel ni un servicio de analítica de terceros. Las métricas son internas y agregadas. El feedback no adjunta chats, fotos ni coordenadas. La telemetría de errores guarda únicamente un mensaje técnico limitado, página y posición aproximada del error.
 
-## Pendiente para cierre de producción
+## Producción pendiente
+
+Se mantiene para el cierre:
 
 - dominio propio;
-- Render de pago + almacenamiento persistente o migración de base de datos/objetos;
-- remitente de correo en dominio propio;
-- activar `VR_REQUIRE_EMAIL_VERIFICATION=true`;
-- VAPID si se quiere push real en segundo plano;
-- checkout real de V/R+;
+- Render de pago + persistencia definitiva / base administrada;
+- almacenamiento persistente de imágenes;
+- remitente profesional;
+- `VR_REQUIRE_EMAIL_VERIFICATION=true`;
+- VAPID si se activa push de fondo;
+- checkout real V/R+;
 - revisión jurídica final.
 
 ## Deploy
 
-No requiere nuevas variables obligatorias. Sustituye los archivos del repositorio y deja que Render despliegue.
+No requiere variables nuevas. Sustituye los archivos del repositorio y deja que Render despliegue.
 
 Esperado:
 
 ```text
-V/R Match v11.0 escuchando en puerto 10000
-Preproducción: pendiente | legal beta-2026-09-16
+V/R Match v12.0 escuchando en puerto 10000
+Observabilidad beta: métricas internas + feedback + diagnóstico cliente
 ```
 
 ```json
-{"ok":true,"db":true,"version":"11.0.0"}
+{"ok":true,"db":true,"version":"12.0.0"}
 ```
 
-Consulta `PRUEBA-FASE11.md`.
+Consulta `PRUEBA-FASE12.md`.

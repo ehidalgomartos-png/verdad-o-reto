@@ -324,6 +324,8 @@
         <button id="adminTabReports" class="active" type="button" onclick="cambiarAdminTab('reports')">⚑ Denuncias</button>
         <button id="adminTabUsers" type="button" onclick="cambiarAdminTab('users')">👤 Usuarios</button>
         <button id="adminTabHistory" type="button" onclick="cambiarAdminTab('history')">🕘 Historial</button>
+        <button id="adminTabMetrics" type="button" onclick="cambiarAdminTab('metrics')">📈 Métricas</button>
+        <button id="adminTabFeedback" type="button" onclick="cambiarAdminTab('feedback')">💬 Feedback</button>
         <button id="adminTabProduction" type="button" onclick="cambiarAdminTab('production')">🚀 Producción</button>
       </div>
 
@@ -349,6 +351,20 @@
       <div id="adminPaneHistory" class="admin-pane hidden">
         <div class="admin-history-head"><div><strong>Historial de moderación</strong><small>Cada acción administrativa queda registrada.</small></div><button class="btn btn-secondary" type="button" onclick="cargarAdminHistory()">↻ Actualizar</button></div>
         <div id="adminHistoryList" class="admin-history-list"><div class="empty-state"><span>🕘</span><strong>Sin cargar</strong></div></div>
+      </div>
+
+      <div id="adminPaneMetrics" class="admin-pane hidden">
+        <div class="admin-history-head"><div><strong>Métricas internas de producto</strong><small>Sin píxeles de terceros ni contenido privado de chats.</small></div><div class="metrics-toolbar"><select id="adminMetricsDays" class="profile-select" onchange="cargarAdminMetrics()"><option value="1">24 horas</option><option value="7" selected>7 días</option><option value="30">30 días</option></select><button class="btn btn-secondary" type="button" onclick="cargarAdminMetrics()">↻ Actualizar</button></div></div>
+        <div id="adminMetrics" class="admin-metrics"><div class="empty-state"><span>📈</span><strong>Cargando métricas…</strong></div></div>
+      </div>
+
+      <div id="adminPaneFeedback" class="admin-pane hidden">
+        <div class="admin-toolbar admin-feedback-toolbar">
+          <label>Estado<select id="adminFeedbackStatus" class="profile-select" onchange="cargarAdminFeedback()"><option value="open">Abiertos</option><option value="all">Todos</option><option value="resolved">Resueltos</option><option value="dismissed">Descartados</option></select></label>
+          <label>Tipo<select id="adminFeedbackKind" class="profile-select" onchange="cargarAdminFeedback()"><option value="">Todos</option><option value="bug">Error</option><option value="idea">Idea</option><option value="ux">Experiencia</option><option value="other">Otro</option></select></label>
+          <button class="btn btn-secondary" type="button" onclick="cargarAdminFeedback()">↻ Actualizar</button>
+        </div>
+        <div id="adminFeedbackList" class="admin-feedback-list"><div class="empty-state"><span>💬</span><strong>Sin cargar</strong></div></div>
       </div>
 
       <div id="adminPaneProduction" class="admin-pane hidden">
@@ -612,9 +628,21 @@
       <div id="pwaInstallSection" class="settings-section"><strong>Aplicación</strong><div class="pwa-install-card"><div class="pwa-install-icon">V/R</div><div><b>Instalar V/R Match</b><small id="pwaInstallStatus">Añade V/R Match a tu pantalla de inicio y ábrelo como una app.</small></div></div><button id="pwaInstallButton" class="btn btn-secondary" type="button" onclick="instalarPWA()">⇩ Instalar aplicación</button></div>
       <div class="settings-section"><strong>Cambiar contraseña</strong><div class="field"><input id="currentPassword" type="password" maxlength="72" autocomplete="current-password" placeholder="Contraseña actual"></div><div class="field"><input id="newPassword" type="password" maxlength="72" autocomplete="new-password" placeholder="Nueva contraseña · mínimo 8"></div><button class="btn btn-secondary" type="button" onclick="cambiarPasswordCuenta()">Actualizar contraseña</button></div>
       <button id="accountPlusButton" class="btn btn-secondary" type="button" onclick="cerrarCuenta();abrirPlus()">✦ Ver V/R+</button>
+      <div class="settings-section"><strong>Beta y soporte</strong><p class="account-legal-copy">¿Encontraste un error o tienes una idea? Envíala desde aquí. No adjuntamos chats ni ubicación a tu comentario.</p><button class="btn btn-secondary" type="button" onclick="abrirFeedback()">💬 Enviar comentario beta</button></div>
       <div class="settings-section"><strong>Legal y seguridad</strong><p class="account-legal-copy">V/R Match está en beta. Los textos legales actuales son borradores de producto y deben revisarse profesionalmente antes del lanzamiento comercial.</p><div class="account-legal-links"><a href="/terms.html" target="_blank" rel="noopener">Condiciones beta</a><a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a><a href="/community.html" target="_blank" rel="noopener">Normas de comunidad</a></div></div>
       <button id="adminPanelButton" class="btn btn-secondary hidden" type="button" onclick="abrirAdmin()">⚑ Abrir panel de moderación</button>
       <div class="danger-zone"><strong>Zona de riesgo</strong><p>Eliminar la cuenta borra perfil, matches, mensajes, fotos y sesiones de forma permanente.</p><button class="btn btn-danger-soft" type="button" onclick="abrirEliminarCuenta()">Eliminar mi cuenta</button></div>
+    </div>
+  </div>
+
+  <div id="feedbackModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card account-modal-card feedback-modal-card">
+      <button class="modal-close" type="button" onclick="cerrarFeedback()">×</button>
+      <span class="eyebrow">BETA · FASE 12</span><h3>Ayúdanos a mejorar V/R Match</h3>
+      <p>Recibimos el tipo de comentario, tu texto y la pantalla desde la que lo envías. No se adjuntan conversaciones ni coordenadas.</p>
+      <div class="field"><label for="feedbackKind">Tipo</label><select id="feedbackKind" class="profile-select"><option value="bug">Encontré un error</option><option value="idea">Tengo una idea</option><option value="ux">Experiencia / diseño</option><option value="other">Otro</option></select></div>
+      <div class="field"><label for="feedbackMessage">Comentario</label><textarea id="feedbackMessage" class="profile-textarea" maxlength="1200" placeholder="Cuéntanos qué ocurrió o qué mejorarías…"></textarea><small id="feedbackCounter">0 / 1200</small></div>
+      <div class="modal-actions"><button class="btn btn-ghost" type="button" onclick="cerrarFeedback()">Cancelar</button><button class="btn btn-primary" type="button" onclick="enviarFeedbackBeta()">Enviar comentario</button></div>
     </div>
   </div>
 
@@ -1461,6 +1489,16 @@
       }catch{}
     }
 
+    let lastClientErrorReportAt=0;
+    async function reportarErrorCliente(message,source='',line=0,column=0){
+      if(!authToken)return;
+      const ts=Date.now();if(ts-lastClientErrorReportAt<10000)return;lastClientErrorReportAt=ts;
+      const clean=String(message||'Error de cliente').slice(0,300);
+      await api('/api/telemetry/client-error',{method:'POST',body:{message:clean,source:String(source||'').slice(0,120),line:Number(line)||0,column:Number(column)||0,page:location.pathname}});
+    }
+    window.addEventListener('error',e=>{void reportarErrorCliente(e?.message||'Error JavaScript',(()=>{try{return new URL(e?.filename||'',location.href).pathname}catch{return ''}})(),e?.lineno,e?.colno);});
+    window.addEventListener('unhandledrejection',e=>{const reason=e?.reason;void reportarErrorCliente(reason?.message||'Promesa rechazada sin gestionar','promise',0,0);});
+
     function cambiarAuthMode(mode) {
       authMode = mode === 'register' ? 'register' : 'login';
       $('authTabLogin').classList.toggle('active', authMode === 'login');
@@ -1659,6 +1697,18 @@
       $('adminPanelButton').classList.toggle('hidden',!currentUserAdmin); $('accountModal').classList.remove('hidden'); $('accountModal').setAttribute('aria-hidden','false');
     }
     function cerrarCuenta() { $('accountModal').classList.add('hidden'); $('accountModal').setAttribute('aria-hidden','true'); }
+    function abrirFeedback(){
+      $('feedbackKind').value='bug'; $('feedbackMessage').value=''; $('feedbackCounter').textContent='0 / 1200';
+      $('feedbackModal').classList.remove('hidden'); $('feedbackModal').setAttribute('aria-hidden','false');
+    }
+    function cerrarFeedback(){ $('feedbackModal').classList.add('hidden'); $('feedbackModal').setAttribute('aria-hidden','true'); }
+    async function enviarFeedbackBeta(){
+      const message=String($('feedbackMessage').value||'').trim();
+      if(message.length<10)return mostrarToast('Cuéntanos un poco más para poder revisarlo.','warn');
+      const res=await api('/api/feedback',{method:'POST',body:{kind:$('feedbackKind').value,message,page:location.pathname}});
+      if(!res.ok)return mostrarToast(res.error||'No se pudo enviar el comentario.','error');
+      cerrarFeedback(); mostrarToast(res.message||'Comentario enviado. Gracias.','info');
+    }
     async function reenviarVerificacion() { const res=await api('/api/auth/resend-verification',{method:'POST',body:{email:currentUserEmail}}); mostrarToast(res.message||'Solicitud enviada.','info'); }
     async function guardarPrivacidad() { const body={discoverable:$('privacyDiscoverable').checked,showOnline:$('privacyShowOnline').checked,allowGameInvites:$('privacyGameInvites').checked}; const res=await api('/api/account/privacy',{method:'PUT',body}); if(!res.ok)return mostrarToast(res.error||'No se pudo guardar.','error'); currentPrivacy=res.privacy||body; mostrarToast('Privacidad actualizada.','info'); if(socket.connected) registrarDating(); }
     async function cambiarPasswordCuenta() { const currentPassword=$('currentPassword').value,newPassword=$('newPassword').value; if(newPassword.length<8)return mostrarToast('La nueva contraseña debe tener al menos 8 caracteres.','warn'); const res=await api('/api/account/change-password',{method:'POST',body:{currentPassword,newPassword}}); if(!res.ok)return mostrarToast(res.error||'No se pudo cambiar la contraseña.','error'); $('currentPassword').value='';$('newPassword').value='';mostrarToast('Contraseña actualizada. Las otras sesiones se cerraron.','info'); }
@@ -1692,22 +1742,28 @@
       [...$('adminStats').querySelectorAll('strong')].forEach((el,i)=>el.textContent=String(vals[i]??'—'));
     }
     async function cambiarAdminTab(tab='reports') {
-      adminCurrentTab=['reports','users','history','production'].includes(tab)?tab:'reports';
+      adminCurrentTab=['reports','users','history','metrics','feedback','production'].includes(tab)?tab:'reports';
       $('adminPaneReports').classList.toggle('hidden',adminCurrentTab!=='reports');
       $('adminPaneUsers').classList.toggle('hidden',adminCurrentTab!=='users');
       $('adminPaneHistory').classList.toggle('hidden',adminCurrentTab!=='history');
+      $('adminPaneMetrics').classList.toggle('hidden',adminCurrentTab!=='metrics');
+      $('adminPaneFeedback').classList.toggle('hidden',adminCurrentTab!=='feedback');
       $('adminPaneProduction').classList.toggle('hidden',adminCurrentTab!=='production');
       $('adminTabReports').classList.toggle('active',adminCurrentTab==='reports');
       $('adminTabUsers').classList.toggle('active',adminCurrentTab==='users');
       $('adminTabHistory').classList.toggle('active',adminCurrentTab==='history');
+      $('adminTabMetrics').classList.toggle('active',adminCurrentTab==='metrics');
+      $('adminTabFeedback').classList.toggle('active',adminCurrentTab==='feedback');
       $('adminTabProduction').classList.toggle('active',adminCurrentTab==='production');
       if(adminCurrentTab==='reports')await cargarAdminReports();
       if(adminCurrentTab==='users')await cargarAdminUsers();
       if(adminCurrentTab==='history')await cargarAdminHistory();
+      if(adminCurrentTab==='metrics')await cargarAdminMetrics();
+      if(adminCurrentTab==='feedback')await cargarAdminFeedback();
       if(adminCurrentTab==='production')await cargarProductionReadiness();
     }
     const adminReasonLabels={harassment:'Acoso',fake:'Perfil falso',spam:'Spam / estafa',sexual:'Contenido sexual no consentido',underage:'Posible menor de edad',other:'Otro'};
-    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',suspend:'Cuenta suspendida',reactivate:'Cuenta reactivada',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado'};
+    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',suspend:'Cuenta suspendida',reactivate:'Cuenta reactivada',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado',feedback_resolve:'Feedback resuelto',feedback_dismiss:'Feedback descartado',feedback_reopen:'Feedback reabierto'};
     function adminFecha(ts){return ts?new Date(Number(ts)).toLocaleString('es-ES'):'—';}
     async function cargarAdminReports() {
       if(!currentUserAdmin)return;
@@ -1825,6 +1881,41 @@
       const rows=res.actions||[];
       if(!rows.length){list.innerHTML='<div class="empty-state"><span>🕘</span><strong>Aún no hay acciones de moderación</strong></div>';return;}
       rows.forEach(a=>{const item=document.createElement('article');item.className='admin-history-item';item.innerHTML=`<div><strong>${escapeHtml(adminActionLabels[a.action]||a.action)}</strong><small>${escapeHtml(adminFecha(a.created_at))}</small></div><p>${escapeHtml(a.target_name||a.target_email||'Usuario')} ${a.note?`· ${escapeHtml(a.note)}`:''}</p><span>Admin: ${escapeHtml(a.admin_name||a.admin_email||'Administrador')}</span>`;list.appendChild(item);});
+    }
+
+    function bytesLegibles(bytes){const n=Number(bytes)||0;if(n<1024)return `${n} B`;if(n<1024*1024)return `${(n/1024).toFixed(1)} KB`;return `${(n/1024/1024).toFixed(1)} MB`;}
+    function porcentaje(a,b){return b?Math.round((Number(a)||0)*100/Number(b)):0;}
+    async function cargarAdminMetrics(){
+      if(!currentUserAdmin)return;
+      const box=$('adminMetrics'); box.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Calculando métricas…</strong></div>';
+      const days=Number($('adminMetricsDays').value||7);
+      const res=await api(`/api/admin/metrics?days=${encodeURIComponent(days)}`);
+      if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudieron cargar.')}</strong></div>`;return;}
+      const m=res.metric||{},f=res.funnel||{},sys=res.system||{},daily=res.daily||[],errors=res.recentErrors||[];
+      const cards=[['Altas',m.registered,'cuentas nuevas'],['Activos',m.activeUsers,`últimos ${days===1?'24 h':days+' días'}`],['Likes',m.likes,'acciones'],['Matches',m.matches,'creados'],['Mensajes',m.messages,'enviados'],['Denuncias',m.reports,'creadas'],['Feedback',m.feedback,'comentarios'],['Errores cliente',m.clientErrors,'registrados']];
+      const funnel=[['Registro',f.registered,100],['Perfil',f.profile,porcentaje(f.profile,f.registered)],['Match',f.matched,porcentaje(f.matched,f.registered)],['Mensaje',f.messaged,porcentaje(f.messaged,f.registered)]];
+      const maxDaily=Math.max(1,...daily.map(d=>Math.max(Number(d.registered)||0,Number(d.matches)||0,Number(d.messages)||0)));
+      box.innerHTML=`<div class="metrics-summary">${cards.map(([label,val,sub])=>`<article><strong>${Number(val)||0}</strong><span>${escapeHtml(label)}</span><small>${escapeHtml(sub)}</small></article>`).join('')}</div>
+        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Embudo de nuevas cuentas</strong><small>Conversión de las cuentas registradas durante el periodo.</small></div><span>${days===1?'24 h':days+' días'}</span></div><div class="funnel-grid">${funnel.map(([label,val,pct])=>`<div><div><b>${escapeHtml(label)}</b><span>${Number(val)||0} · ${Number(pct)||0}%</span></div><i><em style="width:${Math.max(2,Number(pct)||0)}%"></em></i></div>`).join('')}</div></section>
+        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Actividad diaria</strong><small>Altas, matches y mensajes. Datos agregados.</small></div></div><div class="daily-chart">${daily.map(d=>`<div class="daily-row"><small>${escapeHtml(d.day.slice(5))}</small><div title="Altas: ${d.registered}"><i class="reg" style="width:${Math.max(2,Number(d.registered)*100/maxDaily)}%"></i></div><div title="Matches: ${d.matches}"><i class="match" style="width:${Math.max(2,Number(d.matches)*100/maxDaily)}%"></i></div><div title="Mensajes: ${d.messages}"><i class="msg" style="width:${Math.max(2,Number(d.messages)*100/maxDaily)}%"></i></div></div>`).join('')}</div><div class="chart-legend"><span><i class="reg"></i>Altas</span><span><i class="match"></i>Matches</span><span><i class="msg"></i>Mensajes</span></div></section>
+        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Salud de la beta</strong><small>Diagnóstico técnico de esta instancia. No contiene secretos.</small></div></div><div class="system-grid"><div><b>${sys.onlineUsers||0}</b><span>usuarios online</span></div><div><b>${sys.sockets||0}</b><span>sockets</span></div><div><b>${sys.rssMb||0} MB</b><span>memoria RSS</span></div><div><b>${sys.heapUsedMb||0} MB</b><span>heap usado</span></div><div><b>${bytesLegibles(sys.dbBytes)}</b><span>SQLite</span></div><div><b>${sys.uploadFiles||0}</b><span>archivos · ${bytesLegibles(sys.uploadBytes)}</span></div></div></section>
+        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Errores recientes del cliente</strong><small>Solo mensaje técnico, pantalla y posición. No se guardan chats ni coordenadas.</small></div></div><div class="error-list">${errors.length?errors.map(e=>`<article><div><strong>${escapeHtml(e.message||'Error')}</strong><small>${escapeHtml(adminFecha(e.created_at))}</small></div><p>${escapeHtml(e.name||e.email||'Usuario')} · ${escapeHtml(e.page||'/')} ${e.source?`· ${escapeHtml(e.source)}:${Number(e.line)||0}`:''}</p></article>`).join(''):'<div class="empty-state compact"><span>✓</span><strong>Sin errores registrados</strong></div>'}</div></section>`;
+    }
+    const feedbackKindLabels={bug:'Error',idea:'Idea',ux:'Experiencia',other:'Otro'};
+    async function cargarAdminFeedback(){
+      if(!currentUserAdmin)return;
+      const list=$('adminFeedbackList');list.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Cargando feedback…</strong></div>';
+      const params=new URLSearchParams({status:$('adminFeedbackStatus').value});const kind=$('adminFeedbackKind').value;if(kind)params.set('kind',kind);
+      const res=await api(`/api/admin/feedback?${params.toString()}`);
+      if(!res.ok){list.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudo cargar.')}</strong></div>`;return;}
+      const rows=res.feedback||[];list.innerHTML='';
+      if(!rows.length){list.innerHTML='<div class="empty-state"><span>💬</span><strong>No hay comentarios con estos filtros</strong></div>';return;}
+      rows.forEach(row=>{const card=document.createElement('article');card.className='admin-feedback-card';card.innerHTML=`<div class="admin-feedback-head"><div><span>${escapeHtml(feedbackKindLabels[row.kind]||row.kind)}</span><strong>${escapeHtml(row.name||row.email||'Usuario')}</strong></div><small>${escapeHtml(adminFecha(row.created_at))}</small></div><p>${escapeHtml(row.message||'')}</p><div class="admin-feedback-meta"><span>${escapeHtml(row.page||'/')}</span><b class="${row.status==='open'?'open':''}">${escapeHtml(row.status)}</b></div>${row.admin_note?`<div class="admin-existing-note"><b>Nota interna:</b> ${escapeHtml(row.admin_note)}</div>`:''}<textarea class="profile-textarea" maxlength="500" placeholder="Nota interna opcional"></textarea><div class="admin-feedback-actions">${row.status==='open'?'<button data-a="dismiss">Descartar</button><button class="success" data-a="resolve">Resolver</button>':'<button data-a="reopen">Reabrir</button>'}</div>`;card.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>accionAdminFeedback(row.id,b.dataset.a,card.querySelector('textarea').value));list.appendChild(card);});
+    }
+    async function accionAdminFeedback(id,action,note=''){
+      const res=await api(`/api/admin/feedback/${encodeURIComponent(id)}/action`,{method:'POST',body:{action,note}});
+      if(!res.ok)return mostrarToast(res.error||'No se pudo actualizar el comentario.','error');
+      mostrarToast('Feedback actualizado.','info');await cargarAdminFeedback();
     }
 
     function toggleChatSafety() { $('chatSafetyTray').classList.toggle('hidden'); }
@@ -3190,6 +3281,7 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
 
     $('nombreUsuario').addEventListener('input', () => { $('nombreUsuario').value = limpiarNombre($('nombreUsuario').value); });
     $('bioUsuario').addEventListener('input', () => { $('bioCounter').textContent = String($('bioUsuario').value.length); });
+    $('feedbackMessage').addEventListener('input',()=>{$('feedbackCounter').textContent=`${$('feedbackMessage').value.length} / 1200`;});
     $('inputAvatar').addEventListener('change', async (e) => { await procesarFotosPerfil(e.target.files); e.target.value = ''; });
     $('chatForm').addEventListener('submit', (e) => { e.preventDefault(); const input=$('chatInput'); enviarChat(input.value); input.value=''; });
     if('serviceWorker' in navigator) {

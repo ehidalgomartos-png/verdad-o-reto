@@ -1,6 +1,6 @@
 # V/R MATCH — CONTEXTO MAESTRO DEL PROYECTO
 
-**Última actualización:** 16 de septiembre de 2026 · Fase 11 preproducción preparada  
+**Última actualización:** 16 de septiembre de 2026 · Fase 12 observabilidad beta preparada
 **Estado:** Fases 4, 5 y 6 validadas; Fase 7 preparada para desplegar  
 **Proyecto:** V/R Match  
 **Concepto:** App de citas donde, después de hacer match, dos personas pueden conversar y jugar dinámicas tipo Verdad o Reto / Rompehielos dentro de la propia experiencia de dating.
@@ -1046,4 +1046,28 @@ Health check esperado:
 
 ```json
 {"ok":true,"db":true,"version":"11.0.0"}
+```
+
+
+# ACTUALIZACIÓN — FASE 12 · OBSERVABILIDAD Y FEEDBACK BETA
+
+**Versión preparada:** 12.0.0
+
+Se añade instrumentación interna orientada a validar la beta sin incorporar analítica publicitaria de terceros:
+
+- panel admin de métricas 24 h / 7 d / 30 d;
+- embudo registro → perfil → match → mensaje;
+- actividad agregada;
+- salud técnica de la instancia;
+- feedback beta desde Cuenta;
+- cola administrativa de feedback;
+- telemetría limitada de errores del cliente para usuarios autenticados;
+- Service Worker v12.
+
+Privacidad: no se adjuntan chats ni coordenadas al feedback y no se guarda el stack completo de errores.
+
+Health check esperado:
+
+```json
+{"ok":true,"db":true,"version":"12.0.0"}
 ```
