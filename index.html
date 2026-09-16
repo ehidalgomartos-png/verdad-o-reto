@@ -456,7 +456,11 @@
       prepararMesa('Sala privada');
       $('roomState').textContent = 'Uniéndote…';
       actualizarCartaAnimada('Conectando con la sala…', 'ESPERANDO');
-      socket.emit('unirse_sala', miSala, (resultado) => {
+      socket.emit('unirse_sala', {
+        salaID: miSala,
+        nombre: nombreJugador,
+        mazo: mazoElegido
+      }, (resultado) => {
         if (resultado && !resultado.ok) {
           mostrarToast(resultado.error || 'No se pudo entrar en la sala.', 'error');
           abandonarPartidaLocal();
@@ -606,7 +610,11 @@
 
     function crearSalaWhatsApp() {
       miSala = `sala_${crypto.getRandomValues(new Uint32Array(2)).join('').slice(0,10)}`;
-      socket.emit('unirse_sala', miSala, (res) => {
+      socket.emit('unirse_sala', {
+        salaID: miSala,
+        nombre: nombreJugador,
+        mazo: mazoElegido
+      }, (res) => {
         if (res && !res.ok) return mostrarToast(res.error || 'No se pudo crear la sala.', 'error');
         showScreen('pantallaJuego');
         prepararMesa('Sala privada');

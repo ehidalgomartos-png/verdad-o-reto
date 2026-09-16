@@ -100,10 +100,16 @@ io.on('connection', socket => {
     });
   });
 
-  socket.on('unirse_sala', (salaID, ack) => {
+  socket.on('unirse_sala', (payload, ack) => {
     const done = typeof ack === 'function' ? ack : () => {};
-    const roomId = String(salaID || '').slice(0, 64);
+    const data = (payload && typeof payload === 'object') ? payload : { salaID: payload };
+    const roomId = String(data.salaID || '').slice(0, 64);
     if (!roomId) return done({ ok: false, error: 'Sala no válida.' });
+
+    // En salas privadas necesitamos conocer el nombre del jugador desde el
+    // mismo momento en que entra para poder mostrárselo a su rival.
+    if (data.nombre) socket.nombre = cleanName(data.nombre);
+    if (data.mazo) socket.mazo = validDeck(data.mazo);
 
     removeFromLobby(socket.id);
     const room = rooms.get(roomId);
