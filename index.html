@@ -41,6 +41,7 @@
         <small>HAZ MATCH. ROMPE EL HIELO.</small>
       </div>
       <div class="brand-actions">
+        <a class="help-chip" href="/como-funciona.html" target="_blank" rel="noopener" aria-label="Cómo funciona V/R Match" title="Cómo funciona">?</a>
         <button id="installAppButton" class="pwa-install-chip hidden" type="button" onclick="instalarPWA()" aria-label="Instalar V/R Match">⇩ <span>Instalar</span></button>
         <button id="notificationBell" class="notification-bell hidden" type="button" onclick="abrirNotificaciones()" aria-label="Notificaciones">🔔<i id="notificationBadge" class="notification-count hidden">0</i></button>
         <div id="connectionBadge" class="connection-badge offline"><span class="connection-dot"></span><span id="connectionText">Conectando</span></div>
@@ -52,6 +53,10 @@
       <span class="eyebrow">V/R MATCH</span>
       <h1>Conecta de verdad.</h1>
       <p class="subtitle">Crea tu cuenta o vuelve a entrar. Tus matches y conversaciones se guardarán.</p>
+      <div class="launch-free-card">
+        <span class="launch-free-icon">🎉</span>
+        <div><strong>Todo incluido gratis durante el lanzamiento</strong><p>V/R Match seguirá teniendo una modalidad gratuita. Más adelante, solo algunos extras Premium serán de pago y siempre serán opcionales.</p><div class="launch-free-links"><a href="/como-funciona.html" target="_blank" rel="noopener">Cómo funciona</a><a href="/premium.html" target="_blank" rel="noopener">Gratis y Premium</a></div></div>
+      </div>
       <div class="auth-tabs">
         <button id="authTabLogin" class="active" type="button" onclick="cambiarAuthMode('login')">Entrar</button>
         <button id="authTabRegister" type="button" onclick="cambiarAuthMode('register')">Crear cuenta</button>
@@ -66,7 +71,7 @@
         <button id="authSubmit" class="btn btn-primary btn-xl" type="submit"><span>Entrar</span><b>→</b></button>
       </form>
       <button id="forgotPasswordButton" class="auth-forgot" type="button" onclick="abrirRecuperacion()">¿Olvidaste tu contraseña?</button>
-      <p class="legal-note">Solo +18. Consulta nuestras <a href="/terms.html" target="_blank" rel="noopener">Condiciones beta</a>, <a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a> y <a href="/community.html" target="_blank" rel="noopener">Normas de comunidad</a>.</p>
+      <p class="legal-note">Solo +18. Consulta <a href="/como-funciona.html" target="_blank" rel="noopener">Cómo funciona</a>, <a href="/premium.html" target="_blank" rel="noopener">Gratis y Premium</a>, nuestras <a href="/terms.html" target="_blank" rel="noopener">Condiciones beta</a>, <a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a> y <a href="/community.html" target="_blank" rel="noopener">Normas de comunidad</a>.</p>
     </section>
 
     <section id="pantallaPerfil" class="screen screen-profile hidden">
@@ -239,11 +244,11 @@
     <section id="pantallaPlus" class="screen dating-screen plus-screen hidden">
       <div class="screen-topbar"><button class="link-btn" type="button" onclick="cerrarPlus()">← Volver</button><span class="topbar-title">V/R+</span><span id="plusTopBadge" class="plus-status-badge">FREE</span></div>
       <div class="plus-hero">
-        <span class="plus-kicker">V/R+ · SUSCRIPCIÓN</span>
-        <h2>Más control. Más descubrimiento.</h2>
-        <p>V/R+ ya está integrado. El checkout se habilita únicamente cuando Stripe y el modo de cobro estén configurados en el servidor.</p>
+        <span class="plus-kicker">V/R+ · INCLUIDO DURANTE EL LANZAMIENTO</span>
+        <h2>Más control. Más descubrimiento. Sin pagar ahora.</h2>
+        <p>Durante esta primera etapa, los extras V/R+ están incluidos sin coste. No necesitas tarjeta ni se activará una suscripción automáticamente.</p>
         <div class="plus-membership-card">
-          <div><small>PLAN ACTUAL</small><strong id="plusPlanName">V/R Free</strong><span id="plusExpiryText">Funciones premium bloqueadas.</span></div>
+          <div><small>PLAN ACTUAL</small><strong id="plusPlanName">V/R+ incluido</strong><span id="plusExpiryText">Gratis durante el lanzamiento.</span></div>
           <div id="plusPlanIcon" class="plus-plan-icon">V/R+</div>
         </div>
       </div>
@@ -261,10 +266,10 @@
       </div>
 
       <div class="plus-production-note">
-        <strong id="plusBillingTitle">V/R+ en beta</strong>
-        <p id="plusBillingCopy">El acceso premium puede administrarse manualmente mientras preparamos el lanzamiento comercial.</p>
-        <div class="plus-billing-actions"><button id="plusUpgradeButton" class="btn btn-primary" type="button" onclick="solicitarPlusInfo()">Ver estado V/R+</button><button id="plusManageButton" class="btn btn-secondary hidden" type="button" onclick="abrirPortalBilling()">Gestionar suscripción</button></div>
-        <small id="plusBillingMeta" class="plus-billing-meta">Cobro no activado.</small>
+        <strong id="plusBillingTitle">Premium incluido durante el lanzamiento</strong>
+        <p id="plusBillingCopy">Ahora puedes usar estos extras gratuitamente. Cuando existan opciones de pago, serán servicios Premium opcionales y V/R Match seguirá teniendo una modalidad gratuita.</p>
+        <div class="plus-billing-actions"><button id="plusUpgradeButton" class="btn btn-primary" type="button" onclick="solicitarPlusInfo()">Incluido gratis</button><button id="plusManageButton" class="btn btn-secondary hidden" type="button" onclick="abrirPortalBilling()">Gestionar suscripción</button></div>
+        <small id="plusBillingMeta" class="plus-billing-meta">Sin tarjeta · Sin suscripción automática.</small>
       </div>
     </section>
 
@@ -641,7 +646,7 @@
       <div class="settings-section account-control-section"><strong>Control de cuenta y datos</strong><p class="account-legal-copy">Gestiona sesiones abiertas, personas bloqueadas y una copia de la información asociada a tu cuenta.</p><div class="account-control-grid"><button class="account-control-card" type="button" onclick="abrirCentroCuenta('sessions')"><span>🔐</span><b>Sesiones</b><small>Revisa y cierra accesos abiertos.</small></button><button class="account-control-card" type="button" onclick="abrirCentroCuenta('blocked')"><span>⊘</span><b>Bloqueados</b><small>Consulta o desbloquea perfiles.</small></button></div><button id="exportDataButton" class="btn btn-secondary" type="button" onclick="descargarMisDatos()">⇩ Descargar mis datos</button></div>
       <button id="accountPlusButton" class="btn btn-secondary" type="button" onclick="cerrarCuenta();abrirPlus()">✦ Ver V/R+</button>
       <div class="settings-section"><strong>Beta y soporte</strong><p class="account-legal-copy">¿Encontraste un error o tienes una idea? Envíala desde aquí. No adjuntamos chats ni ubicación a tu comentario.</p><button class="btn btn-secondary" type="button" onclick="abrirFeedback()">💬 Enviar comentario beta</button></div>
-      <div class="settings-section"><strong>Legal y seguridad</strong><p class="account-legal-copy">V/R Match está en beta. Los textos legales actuales son borradores de producto y deben revisarse profesionalmente antes del lanzamiento comercial.</p><div class="account-legal-links"><a href="/terms.html" target="_blank" rel="noopener">Condiciones beta</a><a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a><a href="/community.html" target="_blank" rel="noopener">Normas de comunidad</a></div></div>
+      <div class="settings-section"><strong>Información, legal y seguridad</strong><p class="account-legal-copy">Consulta cómo funciona la plataforma, qué seguirá siendo gratis y los documentos de la beta.</p><div class="account-legal-links"><a href="/como-funciona.html" target="_blank" rel="noopener">Cómo funciona</a><a href="/premium.html" target="_blank" rel="noopener">Gratis y Premium</a><a href="/terms.html" target="_blank" rel="noopener">Condiciones beta</a><a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a><a href="/community.html" target="_blank" rel="noopener">Normas de comunidad</a></div></div>
       <button id="adminPanelButton" class="btn btn-secondary hidden" type="button" onclick="abrirAdmin()">⚑ Abrir panel de moderación</button>
       <div class="danger-zone"><strong>Zona de riesgo</strong><p>Eliminar la cuenta borra perfil, matches, mensajes, fotos y sesiones de forma permanente.</p><button class="btn btn-danger-soft" type="button" onclick="abrirEliminarCuenta()">Eliminar mi cuenta</button></div>
     </div>
@@ -751,7 +756,7 @@
     let currentUserEmailVerified = false;
     let currentUserAdmin = false;
     let currentOnboardingCompleted = true;
-    let currentPlus = { active:false, plan:'free', status:'inactive', expiresAt:null, settings:{verifiedOnly:false,minSharedInterests:0,sortMode:'smart'}, boost:{active:false,activeUntil:null,cooldownUntil:null,available:false}, billingEnabled:false };
+    let currentPlus = { active:false, plan:'free', status:'inactive', launchFree:false, expiresAt:null, settings:{verifiedOnly:false,minSharedInterests:0,sortMode:'smart'}, boost:{active:false,activeUntil:null,cooldownUntil:null,available:false}, billingEnabled:false };
     let currentBilling = {enabled:false,prepared:false,mode:'off',launchMode:'beta',customer:false,subscription:null};
     let plusReturnScreen = 'pantallaDescubrir';
     let currentPrivacy = { discoverable:true, showOnline:true, allowGameInvites:true };
@@ -1557,6 +1562,7 @@
         startedAt:data.startedAt||null,
         expiresAt:data.expiresAt||null,
         billingEnabled:Boolean(data.billingEnabled),
+        launchFree:Boolean(data.launchFree),
         settings:{
           verifiedOnly:Boolean(settings.verifiedOnly),
           minSharedInterests:Math.max(0,Math.min(3,Number(settings.minSharedInterests)||0)),
@@ -1573,16 +1579,16 @@
     function aplicarPlusState(data={}) {
       currentPlus=normalizarPlus(data);
       const pill=$('vrPlusPill');
-      if(pill){pill.classList.toggle('is-active',currentPlus.active);pill.textContent=currentPlus.active?'V/R+ ✓':'V/R+';}
+      if(pill){pill.classList.toggle('is-active',currentPlus.active);pill.textContent=currentPlus.launchFree?'V/R+ GRATIS':(currentPlus.active?'V/R+ ✓':'V/R+');}
       const controls=[$('filterVerifiedOnly'),$('filterSharedInterests'),$('filterSortMode')].filter(Boolean);
       controls.forEach(el=>el.disabled=!currentPlus.active);
       if($('filterVerifiedOnly'))$('filterVerifiedOnly').checked=currentPlus.settings.verifiedOnly;
       if($('filterSharedInterests'))$('filterSharedInterests').value=String(currentPlus.settings.minSharedInterests);
       if($('filterSortMode'))$('filterSortMode').value=currentPlus.settings.sortMode;
-      if($('plusFilterLock'))$('plusFilterLock').textContent=currentPlus.active?'Filtros V/R+ activos y sincronizados con tu cuenta.':'Activa V/R+ para usar estos filtros.';
+      if($('plusFilterLock'))$('plusFilterLock').textContent=currentPlus.launchFree?'Filtros Premium incluidos gratis durante el lanzamiento.':(currentPlus.active?'Filtros V/R+ activos y sincronizados con tu cuenta.':'Activa V/R+ para usar estos filtros.');
       if($('plusFilterBlock'))$('plusFilterBlock').classList.toggle('locked',!currentPlus.active);
       if($('rewindButton'))$('rewindButton').classList.toggle('plus-locked',!currentPlus.active);
-      if($('accountPlusButton'))$('accountPlusButton').textContent=currentPlus.active?'✦ Gestionar V/R+':'✦ Ver V/R+';
+      if($('accountPlusButton'))$('accountPlusButton').textContent=currentPlus.launchFree?'✦ Premium incluido gratis':(currentPlus.active?'✦ Gestionar V/R+':'✦ Ver V/R+');
       renderPlusScreen();
     }
     function plusFecha(ts) {
@@ -1601,13 +1607,13 @@
     function cerrarPlus(){showScreen(plusReturnScreen||'pantallaDescubrir');}
     function renderPlusScreen() {
       if(!$('plusPlanName'))return;
-      $('plusTopBadge').textContent=currentPlus.active?'PLUS':'FREE';
+      $('plusTopBadge').textContent=currentPlus.launchFree?'INCLUIDO':(currentPlus.active?'PLUS':'FREE');
       $('plusTopBadge').classList.toggle('active',currentPlus.active);
-      $('plusPlanName').textContent=currentPlus.active?'V/R+ activo':'V/R Free';
+      $('plusPlanName').textContent=currentPlus.launchFree?'V/R+ incluido':(currentPlus.active?'V/R+ activo':'V/R Free');
       $('plusPlanIcon').classList.toggle('active',currentPlus.active);
-      $('plusExpiryText').textContent=currentPlus.active
-        ? (currentPlus.expiresAt?`Activo hasta ${plusFecha(currentPlus.expiresAt)}`:'Membresía activa')
-        : 'Funciones premium bloqueadas.';
+      $('plusExpiryText').textContent=currentPlus.launchFree
+        ? 'Gratis durante el periodo de lanzamiento · sin tarjeta.'
+        : (currentPlus.active ? (currentPlus.expiresAt?`Activo hasta ${plusFecha(currentPlus.expiresAt)}`:'Membresía activa') : 'Funciones premium bloqueadas.');
       const boost=currentPlus.boost||{};
       if(currentPlus.active){
         if(boost.active)$('plusBoostStatus').textContent=`Boost activo hasta ${plusFecha(boost.activeUntil)}.`;
@@ -1619,7 +1625,12 @@
       const bill=currentBilling||{}; const paid=currentPlus.source==='stripe';
       const title=$('plusBillingTitle'),copy=$('plusBillingCopy'),meta=$('plusBillingMeta'),manage=$('plusManageButton'),upgrade=$('plusUpgradeButton');
       manage.classList.add('hidden');
-      if(bill.enabled){
+      if(currentPlus.launchFree || bill.freePremiumDuringLaunch){
+        title.textContent='Premium incluido durante el lanzamiento';
+        copy.textContent='Todos los extras V/R+ están disponibles ahora sin coste. En el futuro, Premium será opcional y V/R Match seguirá teniendo una modalidad gratuita.';
+        meta.textContent='Sin tarjeta · Sin suscripción automática · Sin cobro durante esta etapa';
+        upgrade.disabled=true; upgrade.textContent='Incluido gratis';
+      }else if(bill.enabled){
         title.textContent=paid?'Suscripción V/R+ activa':'V/R+ disponible';
         copy.textContent=paid?'Tu membresía se sincroniza con Stripe. Puedes gestionar cancelación y método de pago desde el portal seguro.':'Completa la suscripción en el checkout seguro de Stripe. V/R Match no almacena los datos de tu tarjeta.';
         meta.textContent=`Stripe ${bill.mode==='live'?'producción':(bill.mode==='test'?'sandbox':'configurado')} · ${bill.launchMode==='production'?'modo producción':'modo beta'}`;
@@ -1640,6 +1651,7 @@
       mostrarToast('Boost activado durante 30 minutos.','info');
     }
     async function solicitarPlusInfo() {
+      if(currentPlus.launchFree)return mostrarToast('V/R+ está incluido gratis durante el lanzamiento. No necesitas pagar ni añadir una tarjeta.','info');
       if(currentPlus.active){
         if(currentPlus.source==='stripe')return abrirPortalBilling();
         return mostrarToast('Tu V/R+ beta ya está activo y no genera cobro.','info');
@@ -1846,8 +1858,10 @@
       const res=await api('/api/admin/production-readiness');
       if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudo comprobar')}</strong></div>`;return;}
       const r=res.readiness||{};
-      const items=[['Modo producción',r.productionMode],['Dominio propio',r.customDomain],['Persistencia de datos',r.persistentStorage],['SMTP',r.smtpConfigured],['Verificación obligatoria',r.emailVerificationRequired],['Administrador',r.adminConfigured],['Stripe preparado',r.billingPrepared],['Checkout V/R+',r.billingConfigured],['Stripe LIVE',r.billingLive],['Web Push',r.webPushConfigured]];
-      box.innerHTML=`<div class="production-hero ${r.productionReady?'ready':'pending'}"><span>${r.productionReady?'✓':'⚙'}</span><div><strong>${r.productionReady?'Técnicamente listo para lanzamiento':'Beta funcional · activación comercial pendiente'}</strong><small>Versión ${escapeHtml(r.version||'')} · modo ${escapeHtml(r.launchMode||'beta')} · Stripe ${escapeHtml(r.billingMode||'off')}</small></div></div><div class="production-grid">${items.map(([label,ok])=>`<div><span class="production-dot ${ok?'ok':'pending'}"></span><strong>${escapeHtml(label)}</strong><small>${ok?'Configurado':'Pendiente'}</small></div>`).join('')}</div><div class="production-pending"><strong>Antes de cobrar a usuarios reales</strong><ul>${(r.pending||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`;
+      const items=[['Modo producción',r.productionMode],['Dominio propio',r.customDomain],['Persistencia de datos',r.persistentStorage],['SMTP',r.smtpConfigured],['Verificación obligatoria',r.emailVerificationRequired],['Administrador',r.adminConfigured],['Premium gratis lanzamiento',r.freePremiumDuringLaunch],['Cobro bloqueado',!r.billingConfigured],['Web Push',r.webPushConfigured]];
+      if(!r.freePremiumDuringLaunch){items.splice(6,2,['Proveedor pago preparado',r.billingPrepared],['Checkout Premium',r.billingConfigured],['Pagos LIVE',r.billingLive]);}
+      const billingLabel=r.freePremiumDuringLaunch?'Premium incluido · sin cobro':`Pagos ${escapeHtml(r.billingMode||'off')}`;
+      box.innerHTML=`<div class="production-hero ${r.productionReady?'ready':'pending'}"><span>${r.productionReady?'✓':'⚙'}</span><div><strong>${r.productionReady?'Técnicamente listo para lanzamiento':'Preparación de lanzamiento pendiente'}</strong><small>Versión ${escapeHtml(r.version||'')} · modo ${escapeHtml(r.launchMode||'beta')} · ${billingLabel}</small></div></div><div class="production-grid">${items.map(([label,ok])=>`<div><span class="production-dot ${ok?'ok':'pending'}"></span><strong>${escapeHtml(label)}</strong><small>${ok?'Configurado':'Pendiente'}</small></div>`).join('')}</div><div class="production-pending"><strong>${r.freePremiumDuringLaunch?'Pendientes antes del lanzamiento':'Antes de cobrar a usuarios reales'}</strong><ul>${(r.pending||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`;
     }
 
     async function cargarAdminSystem(){

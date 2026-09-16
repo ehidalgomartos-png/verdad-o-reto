@@ -1,3 +1,5 @@
+> **Histórico:** este documento pertenece a la Fase 15. Para el estado actual usa `LANZAMIENTO-FASE16-GRATIS-PREMIUM.md` y `PRUEBA-FASE16.md`.
+
 # V/R Match — Ruta de lanzamiento real
 
 Esta fase deja el código preparado, pero **no activa cobros automáticamente**.

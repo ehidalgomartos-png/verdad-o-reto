@@ -24,8 +24,8 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '15.0.0';
-const LEGAL_VERSION = 'beta-2026-09-16';
+const APP_VERSION = '16.0.0';
+const LEGAL_VERSION = 'beta-2026-09-17';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 // En local guarda dentro del proyecto. En Render, define VR_STORAGE_DIR=/var/data
@@ -46,6 +46,7 @@ const ADMIN_EMAILS = new Set(String(process.env.VR_ADMIN_EMAILS || '').split(','
 const APP_BASE_URL = String(process.env.VR_APP_BASE_URL || '').replace(/\/$/, '');
 const LAUNCH_MODE = String(process.env.VR_LAUNCH_MODE || 'beta').toLowerCase() === 'production' ? 'production' : 'beta';
 const BILLING_ENABLED = String(process.env.VR_BILLING_ENABLED || 'false').toLowerCase() === 'true';
+const FREE_PREMIUM_DURING_LAUNCH = String(process.env.VR_FREE_PREMIUM_DURING_LAUNCH || 'true').toLowerCase() === 'true';
 const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || '').trim();
 const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || '').trim();
 const STRIPE_PRICE_PLUS_MONTHLY = String(process.env.STRIPE_PRICE_PLUS_MONTHLY || '').trim();
@@ -53,7 +54,7 @@ const STRIPE_API_BASE = 'https://api.stripe.com/v1';
 const STRIPE_PREPARED = Boolean(STRIPE_SECRET_KEY && STRIPE_WEBHOOK_SECRET && STRIPE_PRICE_PLUS_MONTHLY);
 const STRIPE_MODE = STRIPE_SECRET_KEY.startsWith('sk_live_') ? 'live' : (STRIPE_SECRET_KEY.startsWith('sk_test_') ? 'test' : (STRIPE_SECRET_KEY ? 'configured' : 'off'));
 // Salvaguarda: una clave LIVE nunca habilita cobros mientras la app siga en modo beta.
-const BILLING_CONFIGURED = Boolean(BILLING_ENABLED && STRIPE_PREPARED && APP_BASE_URL && (STRIPE_MODE !== 'live' || LAUNCH_MODE === 'production'));
+const BILLING_CONFIGURED = Boolean(!FREE_PREMIUM_DURING_LAUNCH && BILLING_ENABLED && STRIPE_PREPARED && APP_BASE_URL && (STRIPE_MODE !== 'live' || LAUNCH_MODE === 'production'));
 const SMTP_CONFIGURED = Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_FROM);
 const VAPID_PUBLIC_KEY = String(process.env.VAPID_PUBLIC_KEY || '').trim();
 const VAPID_PRIVATE_KEY = String(process.env.VAPID_PRIVATE_KEY || '').trim();
@@ -677,6 +678,8 @@ function getPlusSettings(userId) {
   };
 }
 function plusIsActive(userId) {
+  // Lanzamiento: todos los usuarios disfrutan los extras V/R+ sin pago.
+  if (FREE_PREMIUM_DURING_LAUNCH) return true;
   const row = db.prepare("SELECT status,expires_at FROM plus_memberships WHERE user_id=?").get(userId);
   if (!row || row.status !== 'active') return false;
   if (row.expires_at && Number(row.expires_at) <= now()) {
@@ -701,13 +704,15 @@ function plusBoostState(userId) {
 function getPlusState(userId) {
   const active = plusIsActive(userId);
   const row = db.prepare('SELECT status,plan,source,started_at,expires_at FROM plus_memberships WHERE user_id=?').get(userId);
+  const launchFree = FREE_PREMIUM_DURING_LAUNCH;
   return {
     active,
     plan: active ? (row?.plan || 'plus') : 'free',
     status: active ? 'active' : (row?.status || 'inactive'),
-    source: row?.source || null,
+    source: launchFree ? 'launch' : (row?.source || null),
     startedAt: row?.started_at || null,
-    expiresAt: active ? (row?.expires_at || null) : null,
+    expiresAt: launchFree ? null : (active ? (row?.expires_at || null) : null),
+    launchFree,
     settings: getPlusSettings(userId),
     boost: plusBoostState(userId),
     billingEnabled: BILLING_CONFIGURED
@@ -837,7 +842,8 @@ function billingPublicState(userId){
     launchMode:LAUNCH_MODE,
     customer:Boolean(billingCustomerForUser(userId)),
     subscription:sub?{status:sub.status,currentPeriodEnd:sub.current_period_end||null,cancelAtPeriodEnd:Boolean(sub.cancel_at_period_end)}:null,
-    plus:getPlusState(userId)
+    plus:getPlusState(userId),
+    freePremiumDuringLaunch:FREE_PREMIUM_DURING_LAUNCH
   };
 }
 
@@ -1440,6 +1446,7 @@ app.post('/api/account/delete', requireAuth, rateLimit({limit:3,windowMs:24*60*6
 app.get('/api/billing/status', requireAuth, (req,res) => res.json({ok:true,billing:billingPublicState(req.user.id)}));
 
 app.post('/api/billing/checkout', requireAuth, rateLimit({limit:8,windowMs:60*60*1000,key:req=>req.user.id}), async (req,res) => {
+  if(FREE_PREMIUM_DURING_LAUNCH)return res.status(409).json({ok:false,error:'V/R+ está incluido gratis durante el lanzamiento. No necesitas pagar ni añadir una tarjeta.'});
   if(!BILLING_CONFIGURED)return res.status(503).json({ok:false,error:'El cobro V/R+ todavía no está activado.'});
   const full=db.prepare('SELECT email,email_verified FROM users WHERE id=?').get(req.user.id);
   if(!full?.email_verified)return res.status(403).json({ok:false,error:'Verifica tu correo antes de contratar V/R+.'});
@@ -1821,22 +1828,23 @@ function productionReadiness() {
     webPushConfigured: PUSH_CONFIGURED,
     billingPrepared:STRIPE_PREPARED,
     billingEnabled:BILLING_ENABLED,
+    freePremiumDuringLaunch:FREE_PREMIUM_DURING_LAUNCH,
     billingConfigured,
     billingMode:STRIPE_MODE,
     billingLive,
-    productionReady: Boolean(coreReady && billingLive && productionMode),
+    productionReady: Boolean(coreReady && productionMode && (FREE_PREMIUM_DURING_LAUNCH || billingLive)),
     pending: [
       !customDomain ? 'Dominio propio y VR_APP_BASE_URL definitivo' : null,
       !persistentStorage ? 'Render de pago + Persistent Disk en /var/data (o almacenamiento administrado)' : null,
       !REQUIRE_EMAIL_VERIFICATION ? 'VR_REQUIRE_EMAIL_VERIFICATION=true' : null,
       !SMTP_CONFIGURED ? 'SMTP profesional con dominio verificado' : null,
-      !STRIPE_PREPARED ? 'Claves, webhook y Price ID de Stripe' : null,
-      STRIPE_PREPARED && !BILLING_ENABLED ? 'VR_BILLING_ENABLED=true después de probar Stripe en sandbox' : null,
-      STRIPE_PREPARED && STRIPE_MODE !== 'live' ? 'Cambiar Stripe de sandbox a claves/Price ID live solo al final' : null,
-      STRIPE_MODE === 'live' && !productionMode ? 'La clave Stripe live está protegida: no se habilitará el checkout hasta VR_LAUNCH_MODE=production' : null,
+      !FREE_PREMIUM_DURING_LAUNCH && !STRIPE_PREPARED ? 'Configurar el proveedor de pago antes de ofrecer Premium de pago' : null,
+      !FREE_PREMIUM_DURING_LAUNCH && STRIPE_PREPARED && !BILLING_ENABLED ? 'VR_BILLING_ENABLED=true después de probar el checkout en sandbox' : null,
+      !FREE_PREMIUM_DURING_LAUNCH && STRIPE_PREPARED && STRIPE_MODE !== 'live' ? 'Pasar el proveedor de sandbox a producción solo al final' : null,
+      !FREE_PREMIUM_DURING_LAUNCH && STRIPE_MODE === 'live' && !productionMode ? 'El cobro live está protegido: no se habilitará hasta VR_LAUNCH_MODE=production' : null,
       !productionMode ? 'VR_LAUNCH_MODE=production cuando termine la validación final' : null,
       !PUSH_CONFIGURED ? 'Web Push VAPID (recomendado, no bloquea el lanzamiento)' : null,
-      'Revisión legal/fiscal final antes de cobrar a usuarios reales'
+      FREE_PREMIUM_DURING_LAUNCH ? 'Mantener VR_BILLING_ENABLED=false mientras todo Premium esté incluido gratis' : 'Revisión legal/fiscal final antes de cobrar a usuarios reales'
     ].filter(Boolean)
   };
 }
@@ -1915,6 +1923,8 @@ app.get('/sw.js', (req,res) => { res.type('application/javascript'); res.setHead
 app.get('/terms.html', (req,res) => res.sendFile(path.join(ROOT,'terms.html')));
 app.get('/privacy.html', (req,res) => res.sendFile(path.join(ROOT,'privacy.html')));
 app.get('/community.html', (req,res) => res.sendFile(path.join(ROOT,'community.html')));
+app.get(['/como-funciona','/como-funciona.html'], (req,res) => res.sendFile(path.join(ROOT,'como-funciona.html')));
+app.get(['/premium','/premium.html'], (req,res) => res.sendFile(path.join(ROOT,'premium.html')));
 app.get('/preview.html', (req,res) => res.sendFile(path.join(ROOT,'preview.html')));
 
 function socketSet(userId) {
@@ -2122,5 +2132,5 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v15.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);
-  console.log('Resiliencia F14: mantenimiento + backup manual protegidos');console.log(`Lanzamiento F15: ${LAUNCH_MODE} | Stripe ${BILLING_CONFIGURED?`${STRIPE_MODE} activo`:(STRIPE_PREPARED?'preparado / desactivado':'no configurado')}`);console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad beta: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad F13: sesiones + bloqueados + exportación de datos');});
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v16.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);
+  console.log('Resiliencia F14: mantenimiento + backup manual protegidos');console.log(`Lanzamiento F16: ${LAUNCH_MODE} | Premium lanzamiento ${FREE_PREMIUM_DURING_LAUNCH?'incluido gratis':'estándar'} | Stripe ${BILLING_CONFIGURED?`${STRIPE_MODE} activo`:(STRIPE_PREPARED?'preparado / desactivado':'no configurado')}`);console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad beta: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad F13: sesiones + bloqueados + exportación de datos');});

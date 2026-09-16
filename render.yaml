@@ -16,6 +16,8 @@ services:
         value: "false"
       - key: VR_LAUNCH_MODE
         value: beta
+      - key: VR_FREE_PREMIUM_DURING_LAUNCH
+        value: "true"
       - key: VR_BILLING_ENABLED
         value: "false"
       - key: STRIPE_SECRET_KEY

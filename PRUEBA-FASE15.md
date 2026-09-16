@@ -1,3 +1,5 @@
+> **Histórico:** este documento pertenece a la Fase 15. Para el estado actual usa `LANZAMIENTO-FASE16-GRATIS-PREMIUM.md` y `PRUEBA-FASE16.md`.
+
 # Prueba Fase 15 — Lanzamiento y Billing
 
 1. Despliega sin variables Stripe nuevas. La app debe iniciar y V/R+ debe seguir funcionando en modo beta.

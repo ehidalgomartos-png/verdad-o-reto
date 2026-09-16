@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vr-match-shell-v15';
+const CACHE_NAME = 'vr-match-shell-v16';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -8,6 +8,8 @@ const APP_SHELL = [
   '/terms.html',
   '/privacy.html',
   '/community.html',
+  '/como-funciona.html',
+  '/premium.html',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/icon-maskable-512.png',
@@ -35,13 +37,14 @@ self.addEventListener('fetch', event => {
 
   if (req.mode === 'navigate') {
     event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const pageKey = url.pathname === '/' ? '/index.html' : url.pathname;
       try {
         const response = await fetch(req);
-        const cache = await caches.open(CACHE_NAME);
-        cache.put('/index.html', response.clone());
+        if (response.ok && (APP_SHELL.includes(pageKey) || pageKey === '/index.html')) cache.put(pageKey, response.clone());
         return response;
       } catch {
-        return (await caches.match('/index.html')) || (await caches.match('/offline.html'));
+        return (await caches.match(pageKey)) || (await caches.match('/index.html')) || (await caches.match('/offline.html'));
       }
     })());
     return;
