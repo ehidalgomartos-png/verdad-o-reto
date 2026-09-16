@@ -1243,15 +1243,19 @@
     }
 
     function procesarVideoGrabado() {
-      const tipo = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : (mimeVideoCompatible() || 'video/webm');
-      const blob = new Blob(mediaChunks, { type: tipo });
+      const tipoRecorder = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : (mimeVideoCompatible() || 'video/webm');
+      // Conservamos los codecs para MediaRecorder, pero normalizamos el MIME del Blob.
+      // Así el Data URL queda como data:video/webm;base64,... o data:video/mp4;base64,...
+      // y sigue siendo compatible con navegadores/servidores que no esperan parámetros extra.
+      const tipoBase = String(tipoRecorder).split(';')[0] || 'video/webm';
+      const blob = new Blob(mediaChunks, { type: tipoBase });
       mediaChunks = [];
       if (!blob.size) return mostrarToast('No se pudo grabar el vídeo.', 'error');
       if (blob.size > MAX_MEDIA_BYTES) return mostrarToast('El vídeo pesa demasiado. Intenta grabarlo más corto.', 'warn');
       const reader = new FileReader();
       reader.onload = () => {
         if (cameraCancelled) return;
-        enviarPruebaMedia('video', reader.result, tipo);
+        enviarPruebaMedia('video', reader.result, tipoBase);
         cerrarCamara();
       };
       reader.onerror = () => mostrarToast('No se pudo procesar el vídeo.', 'error');
@@ -1262,15 +1266,40 @@
       if (!miSala) return mostrarToast('No hay una partida activa.', 'warn');
       if (!dataUrl || typeof dataUrl !== 'string') return;
       detenerTemporizador();
+
       const tipoNormalizado = tipo === 'video' ? 'video' : 'imagen';
-      mostrarPruebaMedia(tipoNormalizado === 'video' ? 'video' : 'imagen', dataUrl);
-      actualizarCartaAnimada(tipoNormalizado === 'video'
-        ? '¡Vídeo enviado! Esperando la reacción de tu oponente…'
-        : '¡Foto enviada! Esperando la reacción de tu oponente…', 'PRUEBA ENVIADA');
+      const nombrePrueba = tipoNormalizado === 'video' ? 'vídeo' : 'foto';
+
+      mostrarPruebaMedia(tipoNormalizado, dataUrl);
+      actualizarCartaAnimada(`Enviando ${nombrePrueba} a tu oponente…`, 'ENVIANDO PRUEBA');
       $('seccionPrueba').classList.add('hidden');
       miTurno = false;
-      actualizarBarraTurno(false,'Esperando reacción');
-      socket.emit('enviar_media', { sala: miSala, tipo: tipoNormalizado, dataUrl, mime });
+      actualizarBarraTurno(false, 'Enviando prueba');
+
+      socket.timeout(15000).emit('enviar_media', {
+        sala: miSala,
+        tipo: tipoNormalizado,
+        dataUrl,
+        mime
+      }, (error, respuesta) => {
+        if (error || !respuesta || !respuesta.ok) {
+          const mensaje = respuesta && respuesta.error
+            ? respuesta.error
+            : 'No se pudo entregar la prueba al oponente. Inténtalo otra vez.';
+          mostrarToast(mensaje, 'error');
+          actualizarCartaAnimada(`No se pudo enviar tu ${nombrePrueba}.
+
+Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
+          $('seccionPrueba').classList.remove('hidden');
+          actualizarBarraTurno(false, 'Reintenta la prueba');
+          return;
+        }
+
+        actualizarCartaAnimada(tipoNormalizado === 'video'
+          ? '¡Vídeo enviado! Tu oponente ya lo ha recibido.'
+          : '¡Foto enviada! Tu oponente ya la ha recibido.', 'PRUEBA ENVIADA');
+        actualizarBarraTurno(false, 'Esperando siguiente jugada');
+      });
     }
 
     socket.on('recibir_media', (media = {}) => {

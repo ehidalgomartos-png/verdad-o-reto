@@ -6,7 +6,7 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  maxHttpBufferSize: 9e6,
+  maxHttpBufferSize: 12e6,
   cors: { origin: true, credentials: true }
 });
 
@@ -181,16 +181,32 @@ io.on('connection', socket => {
     });
   });
 
-  socket.on('enviar_media', (datos = {}) => {
-    if (!socket.room || socket.room !== datos.sala) return;
+  socket.on('enviar_media', (datos = {}, ack) => {
+    const done = typeof ack === 'function' ? ack : () => {};
+    if (!socket.room || socket.room !== datos.sala) {
+      return done({ ok: false, error: 'La sala ya no está activa.' });
+    }
+
     const tipo = datos.tipo === 'video' ? 'video' : 'imagen';
     const dataUrl = String(datos.dataUrl || '');
     const mime = String(datos.mime || '').slice(0, 80);
-    const esImagenValida = tipo === 'imagen' && /^data:image\/(?:jpeg|png|webp);base64,/i.test(dataUrl);
-    const esVideoValido = tipo === 'video' && /^data:video\/(?:webm|mp4);base64,/i.test(dataUrl);
-    if (!esImagenValida && !esVideoValido) return;
-    if (dataUrl.length > 8.2e6) return;
+
+    // FileReader puede generar, por ejemplo:
+    // data:video/webm;codecs=vp8,opus;base64,...
+    // La validación anterior solo aceptaba data:video/webm;base64,... y
+    // descartaba el vídeo silenciosamente antes de enviarlo al rival.
+    const esImagenValida = tipo === 'imagen' && /^data:image\/(?:jpeg|png|webp)(?:;[^;]+)*;base64,/i.test(dataUrl);
+    const esVideoValido = tipo === 'video' && /^data:video\/(?:webm|mp4)(?:;[^;]+)*;base64,/i.test(dataUrl);
+
+    if (!esImagenValida && !esVideoValido) {
+      return done({ ok: false, error: 'El formato de la prueba no es válido.' });
+    }
+    if (dataUrl.length > 9e6) {
+      return done({ ok: false, error: 'El vídeo pesa demasiado. Grábalo un poco más corto.' });
+    }
+
     socket.to(socket.room).emit('recibir_media', { tipo, dataUrl, mime });
+    done({ ok: true });
   });
 
   // Compatibilidad con clientes antiguos que todavía envíen solo fotos.
