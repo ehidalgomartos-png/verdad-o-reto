@@ -29,6 +29,30 @@
       <h1>¿Quién eres?</h1>
       <p class="subtitle">Crea tu perfil para entrar en la sala y empezar a jugar.</p>
       <form id="formularioPerfil" class="form-stack" novalidate>
+        <div class="profile-avatar-field">
+          <label>Foto o avatar</label>
+          <div class="profile-avatar-row">
+            <button type="button" class="profile-avatar-preview" id="avatarPreviewButton" onclick="document.getElementById('inputAvatar').click()" aria-label="Elegir foto de perfil">
+              <span id="avatarPreviewFallback">🙂</span>
+              <img id="avatarPreviewImage" alt="Tu foto de perfil" hidden>
+              <i>+</i>
+            </button>
+            <div class="profile-avatar-copy">
+              <strong>Personaliza tu perfil</strong>
+              <small>Puedes subir una foto o elegir uno de los avatares.</small>
+              <button type="button" class="mini-link" onclick="document.getElementById('inputAvatar').click()">Elegir foto</button>
+            </div>
+          </div>
+          <input type="file" id="inputAvatar" accept="image/*" style="display:none">
+          <div class="avatar-options" id="avatarOptions" aria-label="Avatares disponibles">
+            <button type="button" onclick="seleccionarAvatarEmoji('😎')">😎</button>
+            <button type="button" onclick="seleccionarAvatarEmoji('😈')">😈</button>
+            <button type="button" onclick="seleccionarAvatarEmoji('🤠')">🤠</button>
+            <button type="button" onclick="seleccionarAvatarEmoji('🥷')">🥷</button>
+            <button type="button" onclick="seleccionarAvatarEmoji('👽')">👽</button>
+            <button type="button" onclick="seleccionarAvatarEmoji('🐯')">🐯</button>
+          </div>
+        </div>
         <div class="field">
           <label for="nombreUsuario">Nombre o apodo</label>
           <input type="text" id="nombreUsuario" placeholder="Ej. Alex" maxlength="24" autocomplete="nickname" required>
@@ -121,6 +145,7 @@
         <p id="textoCarta">Esperando oponente…</p>
         <div id="indicadorEscribiendo" class="typing hidden"><i></i><i></i><i></i><span>El oponente está escribiendo…</span></div>
         <img id="imagenPrueba" alt="Prueba enviada por el jugador" style="display:none;">
+        <video id="videoPrueba" controls playsinline preload="metadata" style="display:none;"></video>
         <div id="barraReacciones" class="reaction-bar hidden">
           <button onclick="enviarReaccion('🔥')" aria-label="Fuego">🔥</button>
           <button onclick="enviarReaccion('😱')" aria-label="Sorpresa">😱</button>
@@ -134,8 +159,15 @@
       </div>
 
       <div id="seccionPrueba" class="proof-panel hidden">
-        <button class="upload-box" onclick="document.getElementById('inputPrueba').click()"><span>📸</span><strong>Subir foto de prueba</strong><small>Toca para elegir una foto o usar la cámara.</small></button>
-        <input type="file" id="inputPrueba" accept="image/*" capture="environment" style="display:none" onchange="subirFoto(this)">
+        <div class="proof-choice-grid">
+          <button class="proof-choice" type="button" onclick="abrirCamara('foto')">
+            <span>📸</span><strong>Foto en directo</strong><small>Abre la cámara y hazla ahora.</small>
+          </button>
+          <button class="proof-choice" type="button" onclick="abrirCamara('video')">
+            <span>🎥</span><strong>Vídeo en directo</strong><small>Graba hasta 30 segundos.</small>
+          </button>
+        </div>
+        <small class="proof-live-note">Solo se puede responder al reto usando la cámara en ese momento.</small>
       </div>
 
       <div class="game-actions hidden" id="controlesJuego">
@@ -157,6 +189,26 @@
     </div>
   </div>
 
+  <div id="cameraModal" class="modal camera-modal hidden" aria-hidden="true">
+    <div class="camera-card">
+      <div class="camera-header">
+        <div><small>PRUEBA EN DIRECTO</small><strong id="cameraTitle">Haz una foto</strong></div>
+        <button class="camera-close" type="button" onclick="cerrarCamara()" aria-label="Cerrar cámara">×</button>
+      </div>
+      <div class="camera-stage">
+        <video id="cameraPreview" autoplay muted playsinline></video>
+        <div id="cameraLoading" class="camera-loading"><span class="spinner"></span><small>Abriendo cámara…</small></div>
+        <div id="recordingBadge" class="recording-badge hidden"><i></i><span>REC</span><strong id="recordingTime">00:00</strong><small>/ 00:30</small></div>
+      </div>
+      <div class="camera-hint" id="cameraHint">La imagen se enviará directamente a tu rival.</div>
+      <div class="camera-actions">
+        <button type="button" class="btn btn-secondary" onclick="cambiarCamara()">↻ Cámara</button>
+        <button type="button" class="camera-shutter" id="cameraActionButton" onclick="accionCamara()" aria-label="Capturar"></button>
+        <button type="button" class="btn btn-ghost camera-cancel" onclick="cerrarCamara()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io({ transports: ['websocket', 'polling'] });
@@ -173,6 +225,18 @@
     let rondaActual = 1;
     let enlaceSalaActual = '';
     let adultoPendiente = false;
+    let avatarJugador = '';
+    let rivalAvatar = '';
+    let cameraStream = null;
+    let cameraMode = 'foto';
+    let cameraFacingMode = 'user';
+    let mediaRecorder = null;
+    let mediaChunks = [];
+    let recordingInterval = null;
+    let recordingSeconds = 0;
+    let cameraCancelled = false;
+    const MAX_VIDEO_SECONDS = 30;
+    const MAX_MEDIA_BYTES = 6 * 1024 * 1024;
 
     const baseDeDatos = {
       rompehielos: {
@@ -575,6 +639,48 @@
       el._timer = setTimeout(() => el.classList.remove('show'), 2800);
     }
 
+    function pintarAvatar(elemento, avatar, nombre='A') {
+      if (!elemento) return;
+      elemento.innerHTML = '';
+      if (avatar && avatar.startsWith('data:image/')) {
+        const img = document.createElement('img');
+        img.src = avatar;
+        img.alt = `Avatar de ${nombre || 'jugador'}`;
+        elemento.appendChild(img);
+      } else {
+        elemento.textContent = avatar || (nombre || 'A').charAt(0).toUpperCase();
+      }
+    }
+
+    function actualizarPreviewAvatar() {
+      const img = $('avatarPreviewImage');
+      const fallback = $('avatarPreviewFallback');
+      if (avatarJugador && avatarJugador.startsWith('data:image/')) {
+        img.src = avatarJugador; img.hidden = false; fallback.hidden = true;
+      } else {
+        img.src = ''; img.hidden = true; fallback.hidden = false; fallback.textContent = avatarJugador || '🙂';
+      }
+      pintarAvatar($('avatarDot'), avatarJugador, nombreJugador || $('nombreUsuario').value || 'A');
+    }
+
+    function seleccionarAvatarEmoji(emoji) {
+      avatarJugador = emoji;
+      actualizarPreviewAvatar();
+      [...$('avatarOptions').querySelectorAll('button')].forEach(btn => btn.classList.toggle('selected', btn.textContent === emoji));
+    }
+
+    async function procesarAvatar(file) {
+      if (!file || !file.type.startsWith('image/')) return mostrarToast('Selecciona una imagen válida.', 'warn');
+      if (file.size > 12 * 1024 * 1024) return mostrarToast('La imagen es demasiado grande. Máximo 12 MB.', 'warn');
+      try {
+        avatarJugador = await comprimirImagen(file, 220, .70);
+        actualizarPreviewAvatar();
+        [...$('avatarOptions').querySelectorAll('button')].forEach(btn => btn.classList.remove('selected'));
+      } catch {
+        mostrarToast('No se pudo procesar la foto de perfil.', 'error');
+      }
+    }
+
     function volverPerfil() {
       if (miSala) return mostrarToast('Sal de la sala antes de volver al perfil.', 'warn');
       showScreen('pantallaPerfil');
@@ -644,9 +750,9 @@
       if (!Number.isInteger(edad) || edad < 13 || edad > 99) return mostrarToast('La edad debe estar entre 13 y 99 años.', 'warn');
       nombreJugador = nombre;
       edadJugador = edad;
-      localStorage.setItem('vr_profile', JSON.stringify({ nombre: nombreJugador, edad: edadJugador }));
+      localStorage.setItem('vr_profile', JSON.stringify({ nombre: nombreJugador, edad: edadJugador, avatar: avatarJugador }));
       $('saludoHeader').textContent = nombreJugador;
-      $('avatarDot').textContent = nombreJugador.charAt(0).toUpperCase();
+      pintarAvatar($('avatarDot'), avatarJugador, nombreJugador);
       $('nombreMazoActivo').textContent = nombreMazo(mazoElegido).toUpperCase();
       if (salaInvitacion) {
         inicializarInvitacion();
@@ -661,6 +767,8 @@
         if (!saved) return;
         if (saved.nombre) $('nombreUsuario').value = saved.nombre;
         if (saved.edad) $('edadUsuario').value = saved.edad;
+        if (saved.avatar) avatarJugador = saved.avatar;
+        actualizarPreviewAvatar();
       } catch { localStorage.removeItem('vr_profile'); }
     }
 
@@ -685,7 +793,8 @@
       socket.emit('unirse_sala', {
         salaID: miSala,
         nombre: nombreJugador,
-        mazo: mazoElegido
+        mazo: mazoElegido,
+        avatar: avatarJugador
       }, (resultado) => {
         if (resultado && !resultado.ok) {
           mostrarToast(resultado.error || 'No se pudo entrar en la sala.', 'error');
@@ -728,6 +837,9 @@
         if (tiempoRestante <= 10) $('cajaTemporizador').classList.add('urgent');
         if (tiempoRestante <= 0) {
           detenerTemporizador();
+          cerrarCamara();
+          $('seccionRespuesta').classList.add('hidden');
+          $('seccionPrueba').classList.add('hidden');
           mostrarToast('Tiempo agotado. El turno pasa al otro jugador.', 'warn');
           miTurno = false;
           actualizarBarraTurno(false, 'Tiempo agotado');
@@ -773,7 +885,7 @@
     function entrarLobbyDescubrir() {
       showScreen('pantallaLobby');
       $('textoLobby').textContent = `Buscando jugadores en ${nombreMazo(mazoElegido)}…`;
-      socket.emit('entrar_lobby', { nombre: nombreJugador, mazo: mazoElegido });
+      socket.emit('entrar_lobby', { nombre: nombreJugador, mazo: mazoElegido, avatar: avatarJugador });
     }
 
     socket.on('actualizar_lista_espera', (lista) => {
@@ -791,7 +903,7 @@
         info.className = 'player-info';
         const avatar = document.createElement('span');
         avatar.className = 'player-avatar';
-        avatar.textContent = (j.nombre || 'A').charAt(0).toUpperCase();
+        pintarAvatar(avatar, j.avatar || '', j.nombre || 'A');
         const text = document.createElement('div');
         const name = document.createElement('strong');
         name.textContent = j.nombre || 'Anónimo';
@@ -816,10 +928,11 @@
       miSala = datos.salaID;
       mazoElegido = datos.mazo || 'rompehielos';
       rivalNombre = datos.oponenteNombre || 'Tu oponente';
+      rivalAvatar = datos.oponenteAvatar || '';
       showScreen('pantallaJuego');
       prepararMesa('Partida online');
       $('opponentName').textContent = rivalNombre;
-      $('opponentAvatar').textContent = rivalNombre.charAt(0).toUpperCase();
+      pintarAvatar($('opponentAvatar'), rivalAvatar, rivalNombre);
       $('zonaInvitacion').classList.add('hidden');
       $('roomState').textContent = 'Partida online';
       if (datos.creadorID === socket.id) {
@@ -839,7 +952,8 @@
       socket.emit('unirse_sala', {
         salaID: miSala,
         nombre: nombreJugador,
-        mazo: mazoElegido
+        mazo: mazoElegido,
+        avatar: avatarJugador
       }, (res) => {
         if (res && !res.ok) return mostrarToast(res.error || 'No se pudo crear la sala.', 'error');
         showScreen('pantallaJuego');
@@ -863,8 +977,9 @@
 
     socket.on('oponente_unido', (datos) => {
       rivalNombre = datos && datos.nombre ? datos.nombre : 'Tu amigo';
+      rivalAvatar = datos && datos.avatar ? datos.avatar : '';
       $('opponentName').textContent = rivalNombre;
-      $('opponentAvatar').textContent = rivalNombre.charAt(0).toUpperCase();
+      pintarAvatar($('opponentAvatar'), rivalAvatar, rivalNombre);
       $('zonaInvitacion').classList.add('hidden');
       $('roomState').textContent = 'Sala privada · En juego';
 
@@ -900,7 +1015,7 @@
       const carta = obtenerCartaSinRepetir(tipo);
       ultimaCartaJugada = carta;
       detenerTemporizador();
-      $('imagenPrueba').style.display = 'none';
+      limpiarPruebaVisual();
       $('barraReacciones').classList.add('hidden');
       $('controlesJuego').classList.add('hidden');
       $('seccionRespuesta').classList.add('hidden');
@@ -917,7 +1032,7 @@
 
     socket.on('actualizar_mesa', (datos) => {
       detenerTemporizador();
-      $('imagenPrueba').style.display = 'none';
+      limpiarPruebaVisual();
       $('controlesJuego').classList.add('hidden');
       $('seccionRespuesta').classList.add('hidden');
       $('seccionPrueba').classList.add('hidden');
@@ -925,7 +1040,7 @@
       ultimaCartaJugada = datos.textoCarta;
       miTurno = false;
       const etiqueta = datos.tipo === 'verdad' ? 'VERDAD' : 'RETO';
-      const espera = datos.tipo === 'verdad' ? 'Esperando su respuesta…' : 'Esperando su foto de prueba…';
+      const espera = datos.tipo === 'verdad' ? 'Esperando su respuesta…' : 'Esperando su foto o vídeo de prueba…';
       actualizarCartaAnimada(`Tu oponente eligió ${etiqueta}\n\n“${datos.textoCarta}”\n\n${espera}`, etiqueta);
       $('challengeTag').textContent = `OPONENTE · ${etiqueta}`;
       actualizarBarraTurno(false, espera.replace('…',''));
@@ -971,26 +1086,201 @@
       });
     }
 
-    async function subirFoto(input) {
-      if (!input.files || !input.files[0]) return;
-      const file = input.files[0];
-      if (!file.type.startsWith('image/')) return mostrarToast('Selecciona una imagen válida.','warn');
-      if (file.size > 12 * 1024 * 1024) return mostrarToast('La foto original es demasiado grande. Máximo 12 MB.','warn');
-      try {
-        detenerTemporizador();
-        const fotoBase64 = await comprimirImagen(file);
-        $('imagenPrueba').src = fotoBase64; $('imagenPrueba').style.display='block';
-        actualizarCartaAnimada('¡Foto enviada! Esperando la reacción de tu oponente…','PRUEBA ENVIADA');
-        $('seccionPrueba').classList.add('hidden');
-        miTurno = false; actualizarBarraTurno(false,'Esperando reacción');
-        socket.emit('enviar_foto', { sala: miSala, fotoBase64 });
-      } catch { mostrarToast('No se pudo procesar la foto.','error'); } finally { input.value=''; }
+    function limpiarPruebaVisual() {
+      const imagen = $('imagenPrueba');
+      const video = $('videoPrueba');
+      imagen.src = ''; imagen.style.display = 'none';
+      video.pause(); video.removeAttribute('src'); video.load(); video.style.display = 'none';
     }
 
-    socket.on('recibir_foto', (fotoBase64) => {
-      actualizarCartaAnimada('¡El oponente ha enviado la foto de prueba!\n\n¡Te toca!', 'PRUEBA');
-      $('imagenPrueba').src = fotoBase64; $('imagenPrueba').style.display='block';
-      $('barraReacciones').classList.remove('hidden'); $('controlesJuego').classList.remove('hidden');
+    function mostrarPruebaMedia(tipo, dataUrl) {
+      limpiarPruebaVisual();
+      if (tipo === 'video') {
+        const video = $('videoPrueba');
+        video.src = dataUrl; video.style.display = 'block';
+      } else {
+        const imagen = $('imagenPrueba');
+        imagen.src = dataUrl; imagen.style.display = 'block';
+      }
+    }
+
+    async function abrirCamara(modo) {
+      const hostLocal = ['localhost','127.0.0.1','::1'].includes(window.location.hostname);
+      if (!window.isSecureContext && !hostLocal) {
+        return mostrarToast('Para usar la cámara, abre la web con HTTPS.', 'error');
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        return mostrarToast('Tu navegador no permite usar la cámara desde esta página.', 'error');
+      }
+      cameraCancelled = false;
+      cameraMode = modo === 'video' ? 'video' : 'foto';
+      $('cameraTitle').textContent = cameraMode === 'video' ? 'Graba tu vídeo' : 'Haz tu foto';
+      $('cameraHint').textContent = cameraMode === 'video'
+        ? 'Pulsa el botón rojo para grabar. Se detendrá automáticamente a los 30 segundos.'
+        : 'Pulsa el botón para capturar la foto y enviarla al rival.';
+      $('cameraActionButton').classList.toggle('is-video', cameraMode === 'video');
+      $('cameraActionButton').classList.remove('recording');
+      $('recordingBadge').classList.add('hidden');
+      $('cameraModal').classList.remove('hidden');
+      $('cameraModal').setAttribute('aria-hidden','false');
+      await iniciarCamara();
+    }
+
+    async function iniciarCamara() {
+      detenerStreamCamara();
+      $('cameraLoading').classList.remove('hidden');
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: cameraFacingMode }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: cameraMode === 'video'
+        });
+        $('cameraPreview').classList.toggle('not-mirrored', cameraFacingMode === 'environment');
+        $('cameraPreview').srcObject = cameraStream;
+        await $('cameraPreview').play().catch(() => {});
+        $('cameraLoading').classList.add('hidden');
+      } catch (error) {
+        cerrarCamara();
+        mostrarToast('No se pudo abrir la cámara. Revisa los permisos del navegador.', 'error');
+      }
+    }
+
+    function detenerStreamCamara() {
+      if (cameraStream) cameraStream.getTracks().forEach(track => track.stop());
+      cameraStream = null;
+      $('cameraPreview').srcObject = null;
+    }
+
+    async function cambiarCamara() {
+      if (mediaRecorder && mediaRecorder.state === 'recording') return mostrarToast('Detén la grabación antes de cambiar de cámara.', 'warn');
+      cameraFacingMode = cameraFacingMode === 'user' ? 'environment' : 'user';
+      await iniciarCamara();
+    }
+
+    function cerrarCamara() {
+      cameraCancelled = true;
+      if (mediaRecorder && mediaRecorder.state === 'recording') { mediaRecorder.onstop = null; mediaRecorder.stop(); }
+      clearInterval(recordingInterval);
+      recordingInterval = null;
+      mediaRecorder = null;
+      mediaChunks = [];
+      recordingSeconds = 0;
+      $('recordingBadge').classList.add('hidden');
+      $('cameraActionButton').classList.remove('recording');
+      detenerStreamCamara();
+      $('cameraModal').classList.add('hidden');
+      $('cameraModal').setAttribute('aria-hidden','true');
+    }
+
+    function accionCamara() {
+      if (!cameraStream) return mostrarToast('La cámara todavía no está lista.', 'warn');
+      if (cameraMode === 'video') {
+        if (mediaRecorder && mediaRecorder.state === 'recording') detenerGrabacionVideo();
+        else iniciarGrabacionVideo();
+      } else {
+        capturarFotoDirecta();
+      }
+    }
+
+    function capturarFotoDirecta() {
+      const video = $('cameraPreview');
+      if (!video.videoWidth || !video.videoHeight) return mostrarToast('Espera un momento a que cargue la cámara.', 'warn');
+      const maxSide = 1280;
+      const ratio = Math.min(1, maxSide / Math.max(video.videoWidth, video.videoHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(video.videoWidth * ratio);
+      canvas.height = Math.round(video.videoHeight * ratio);
+      const ctx = canvas.getContext('2d');
+      if (cameraFacingMode === 'user') {
+        ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
+      }
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', .78);
+      enviarPruebaMedia('imagen', dataUrl, 'image/jpeg');
+      cerrarCamara();
+    }
+
+    function mimeVideoCompatible() {
+      const opciones = ['video/webm;codecs=vp8,opus','video/webm','video/mp4'];
+      if (!window.MediaRecorder || typeof MediaRecorder.isTypeSupported !== 'function') return '';
+      return opciones.find(tipo => MediaRecorder.isTypeSupported(tipo)) || '';
+    }
+
+    function iniciarGrabacionVideo() {
+      if (!window.MediaRecorder) return mostrarToast('Tu navegador no permite grabar vídeo desde aquí.', 'error');
+      const mimeType = mimeVideoCompatible();
+      mediaChunks = [];
+      recordingSeconds = 0;
+      try {
+        const opciones = { videoBitsPerSecond: 700000, audioBitsPerSecond: 64000 };
+        if (mimeType) opciones.mimeType = mimeType;
+        mediaRecorder = new MediaRecorder(cameraStream, opciones);
+      } catch {
+        return mostrarToast('No se pudo iniciar la grabación de vídeo.', 'error');
+      }
+      mediaRecorder.ondataavailable = event => { if (event.data && event.data.size) mediaChunks.push(event.data); };
+      mediaRecorder.onstop = procesarVideoGrabado;
+      mediaRecorder.start(500);
+      $('cameraActionButton').classList.add('recording');
+      $('recordingBadge').classList.remove('hidden');
+      actualizarTiempoGrabacion();
+      recordingInterval = setInterval(() => {
+        recordingSeconds += 1;
+        actualizarTiempoGrabacion();
+        if (recordingSeconds >= MAX_VIDEO_SECONDS) detenerGrabacionVideo();
+      }, 1000);
+    }
+
+    function actualizarTiempoGrabacion() {
+      $('recordingTime').textContent = `00:${String(recordingSeconds).padStart(2,'0')}`;
+    }
+
+    function detenerGrabacionVideo() {
+      if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
+      clearInterval(recordingInterval);
+      recordingInterval = null;
+      mediaRecorder.stop();
+      $('cameraActionButton').classList.remove('recording');
+    }
+
+    function procesarVideoGrabado() {
+      const tipo = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : (mimeVideoCompatible() || 'video/webm');
+      const blob = new Blob(mediaChunks, { type: tipo });
+      mediaChunks = [];
+      if (!blob.size) return mostrarToast('No se pudo grabar el vídeo.', 'error');
+      if (blob.size > MAX_MEDIA_BYTES) return mostrarToast('El vídeo pesa demasiado. Intenta grabarlo más corto.', 'warn');
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (cameraCancelled) return;
+        enviarPruebaMedia('video', reader.result, tipo);
+        cerrarCamara();
+      };
+      reader.onerror = () => mostrarToast('No se pudo procesar el vídeo.', 'error');
+      reader.readAsDataURL(blob);
+    }
+
+    function enviarPruebaMedia(tipo, dataUrl, mime='') {
+      if (!miSala) return mostrarToast('No hay una partida activa.', 'warn');
+      if (!dataUrl || typeof dataUrl !== 'string') return;
+      detenerTemporizador();
+      const tipoNormalizado = tipo === 'video' ? 'video' : 'imagen';
+      mostrarPruebaMedia(tipoNormalizado === 'video' ? 'video' : 'imagen', dataUrl);
+      actualizarCartaAnimada(tipoNormalizado === 'video'
+        ? '¡Vídeo enviado! Esperando la reacción de tu oponente…'
+        : '¡Foto enviada! Esperando la reacción de tu oponente…', 'PRUEBA ENVIADA');
+      $('seccionPrueba').classList.add('hidden');
+      miTurno = false;
+      actualizarBarraTurno(false,'Esperando reacción');
+      socket.emit('enviar_media', { sala: miSala, tipo: tipoNormalizado, dataUrl, mime });
+    }
+
+    socket.on('recibir_media', (media = {}) => {
+      const tipo = media.tipo === 'video' ? 'video' : 'imagen';
+      actualizarCartaAnimada(tipo === 'video'
+        ? '¡El oponente ha enviado un vídeo de prueba!\n\n¡Te toca!'
+        : '¡El oponente ha enviado una foto de prueba!\n\n¡Te toca!', 'PRUEBA');
+      mostrarPruebaMedia(tipo, media.dataUrl || '');
+      $('barraReacciones').classList.remove('hidden');
+      $('controlesJuego').classList.remove('hidden');
       rondaActual += 1; $('contadorRonda').textContent = rondaActual;
       miTurno = true; actualizarBarraTurno(true,'Tu turno');
     });
@@ -1014,15 +1304,16 @@
       abandonarPartidaLocal();
     }
     function abandonarPartidaLocal() {
-      detenerTemporizador(); clearTimeout(timeoutEscribiendo);
-      miSala=''; rivalNombre=''; rondaActual=1; enlaceSalaActual='';
-      $('imagenPrueba').src=''; $('imagenPrueba').style.display='none';
+      detenerTemporizador(); clearTimeout(timeoutEscribiendo); cerrarCamara();
+      miSala=''; rivalNombre=''; rivalAvatar=''; rondaActual=1; enlaceSalaActual='';
+      limpiarPruebaVisual();
       $('zonaInvitacion').classList.add('hidden'); $('controlesJuego').classList.add('hidden');
       showScreen('pantallaMenu'); actualizarBarraTurno(false,'Esperando');
       actualizarCartaAnimada('Esperando oponente…','ESPERANDO');
     }
 
     $('nombreUsuario').addEventListener('input', () => { $('nombreUsuario').value = limpiarNombre($('nombreUsuario').value); });
+    $('inputAvatar').addEventListener('change', (e) => { procesarAvatar(e.target.files && e.target.files[0]); e.target.value = ''; });
     $('deckAdult').title = 'Solo mayores de 18 años';
     cargarPerfil();
     if (mazoInvitacion) $('mazoSeleccionadoLabel').textContent = `Mazo: ${nombreMazo(mazoInvitacion)}`;

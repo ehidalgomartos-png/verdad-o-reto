@@ -6,7 +6,7 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  maxHttpBufferSize: 2e6,
+  maxHttpBufferSize: 9e6,
   cors: { origin: true, credentials: true }
 });
 
@@ -20,6 +20,15 @@ const rooms = new Map(); // roomId -> { players:Set, creatorId, mazo }
 
 function cleanName(value) {
   return String(value ?? 'Anónimo').replace(/[^\p{L}\p{N} _.'-]/gu, '').trim().slice(0, 24) || 'Anónimo';
+}
+
+const AVATAR_EMOJIS = new Set(['😎','😈','🤠','🥷','👽','🐯']);
+
+function cleanAvatar(value) {
+  const avatar = String(value || '');
+  if (AVATAR_EMOJIS.has(avatar)) return avatar;
+  if (/^data:image\/(?:jpeg|png|webp);base64,/i.test(avatar) && avatar.length <= 350000) return avatar;
+  return '';
 }
 
 function validDeck(mazo) {
@@ -64,7 +73,8 @@ io.on('connection', socket => {
     leaveRoom(socket);
     socket.nombre = cleanName(data.nombre);
     socket.mazo = validDeck(data.mazo);
-    waitingPlayers.set(socket.id, { id: socket.id, nombre: socket.nombre, mazo: socket.mazo });
+    socket.avatar = cleanAvatar(data.avatar);
+    waitingPlayers.set(socket.id, { id: socket.id, nombre: socket.nombre, mazo: socket.mazo, avatar: socket.avatar });
     broadcastLobby();
   });
 
@@ -92,11 +102,19 @@ io.on('connection', socket => {
 
     rooms.set(salaID, { players: new Set([socket.id, opponent.id]), creatorId: socket.id, mazo });
     done({ ok: true, salaID });
-    io.to(salaID).emit('partida_iniciada', {
+    socket.emit('partida_iniciada', {
       salaID,
       creadorID: socket.id,
       mazo,
-      oponenteNombre: opponent.nombre || 'Tu oponente'
+      oponenteNombre: opponent.nombre || 'Tu oponente',
+      oponenteAvatar: opponent.avatar || ''
+    });
+    opponent.emit('partida_iniciada', {
+      salaID,
+      creadorID: socket.id,
+      mazo,
+      oponenteNombre: socket.nombre || 'Tu oponente',
+      oponenteAvatar: socket.avatar || ''
     });
   });
 
@@ -110,6 +128,7 @@ io.on('connection', socket => {
     // mismo momento en que entra para poder mostrárselo a su rival.
     if (data.nombre) socket.nombre = cleanName(data.nombre);
     if (data.mazo) socket.mazo = validDeck(data.mazo);
+    if (Object.prototype.hasOwnProperty.call(data, 'avatar')) socket.avatar = cleanAvatar(data.avatar);
 
     removeFromLobby(socket.id);
     const room = rooms.get(roomId);
@@ -128,10 +147,12 @@ io.on('connection', socket => {
         // El creador de la sala es quien inicia la partida.
         socket.emit('oponente_unido', {
           nombre: opponent.nombre || 'Tu amigo',
+          avatar: opponent.avatar || '',
           tuTurno: false
         });
         opponent.emit('oponente_unido', {
           nombre: socket.nombre || 'Tu amigo',
+          avatar: socket.avatar || '',
           tuTurno: true
         });
       }
@@ -160,12 +181,24 @@ io.on('connection', socket => {
     });
   });
 
+  socket.on('enviar_media', (datos = {}) => {
+    if (!socket.room || socket.room !== datos.sala) return;
+    const tipo = datos.tipo === 'video' ? 'video' : 'imagen';
+    const dataUrl = String(datos.dataUrl || '');
+    const mime = String(datos.mime || '').slice(0, 80);
+    const esImagenValida = tipo === 'imagen' && /^data:image\/(?:jpeg|png|webp);base64,/i.test(dataUrl);
+    const esVideoValido = tipo === 'video' && /^data:video\/(?:webm|mp4);base64,/i.test(dataUrl);
+    if (!esImagenValida && !esVideoValido) return;
+    if (dataUrl.length > 8.2e6) return;
+    socket.to(socket.room).emit('recibir_media', { tipo, dataUrl, mime });
+  });
+
+  // Compatibilidad con clientes antiguos que todavía envíen solo fotos.
   socket.on('enviar_foto', (datos = {}) => {
     if (!socket.room || socket.room !== datos.sala) return;
     const foto = String(datos.fotoBase64 || '');
-    if (!foto.startsWith('data:image/')) return;
-    if (foto.length > 1.8e6) return;
-    socket.to(socket.room).emit('recibir_foto', foto);
+    if (!foto.startsWith('data:image/') || foto.length > 1.8e6) return;
+    socket.to(socket.room).emit('recibir_media', { tipo: 'imagen', dataUrl: foto, mime: 'image/jpeg' });
   });
 
   socket.on('escribiendo', sala => {
