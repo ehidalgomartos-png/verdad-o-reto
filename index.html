@@ -633,10 +633,20 @@
       $('opponentAvatar').textContent = rivalNombre.charAt(0).toUpperCase();
       $('zonaInvitacion').classList.add('hidden');
       $('roomState').textContent = 'Sala privada · En juego';
-      actualizarCartaAnimada('¡Tu amigo se ha conectado! Te toca empezar.', 'TU TURNO');
-      $('controlesJuego').classList.remove('hidden');
-      miTurno = true;
-      actualizarBarraTurno(true,'Tu turno');
+
+      const soyYoQuienEmpieza = datos && datos.tuTurno === true;
+
+      if (soyYoQuienEmpieza) {
+        actualizarCartaAnimada('¡Tu amigo se ha conectado! Te toca empezar.', 'TU TURNO');
+        $('controlesJuego').classList.remove('hidden');
+        miTurno = true;
+        actualizarBarraTurno(true, 'Tu turno');
+      } else {
+        actualizarCartaAnimada('¡Te has unido a la partida! Espera a que tu oponente empiece.', 'ESPERANDO');
+        $('controlesJuego').classList.add('hidden');
+        miTurno = false;
+        actualizarBarraTurno(false, 'Esperando');
+      }
     });
 
     function obtenerCartaSinRepetir(tipo) {

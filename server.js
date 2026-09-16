@@ -119,8 +119,15 @@ io.on('connection', socket => {
       done({ ok: true, roomId, full: true });
       const opponent = [...room.players].filter(id => id !== socket.id).map(id => io.sockets.sockets.get(id)).find(Boolean);
       if (opponent) {
-        socket.emit('oponente_unido', { nombre: opponent.nombre || 'Tu amigo' });
-        opponent.emit('oponente_unido', { nombre: socket.nombre || 'Tu amigo' });
+        // El creador de la sala es quien inicia la partida.
+        socket.emit('oponente_unido', {
+          nombre: opponent.nombre || 'Tu amigo',
+          tuTurno: false
+        });
+        opponent.emit('oponente_unido', {
+          nombre: socket.nombre || 'Tu amigo',
+          tuTurno: true
+        });
       }
     } else {
       rooms.set(roomId, { players: new Set([socket.id]), creatorId: socket.id, mazo: socket.mazo || 'rompehielos' });
