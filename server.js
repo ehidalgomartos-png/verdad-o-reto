@@ -19,6 +19,7 @@ const waitingPlayers = new Map(); // socket.id -> { id, nombre, mazo }
 const rooms = new Map(); // roomId -> { players:Set, creatorId, mazo }
 const datingProfiles = new Map(); // socket.id -> perfil público temporal
 const datingLikes = new Map(); // socket.id -> Set(socket.id)
+let datingMessageSeq = 0;
 
 
 function cleanName(value) {
@@ -32,6 +33,14 @@ function cleanAvatar(value) {
   if (AVATAR_EMOJIS.has(avatar)) return avatar;
   if (/^data:image\/(?:jpeg|png|webp);base64,/i.test(avatar) && avatar.length <= 350000) return avatar;
   return '';
+}
+
+function cleanPhotos(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(v => String(v || ''))
+    .filter(v => /^data:image\/(?:jpeg|png|webp);base64,/i.test(v) && v.length <= 700000)
+    .slice(0, 4);
 }
 
 function validDeck(mazo) {
@@ -144,6 +153,7 @@ io.on('connection', socket => {
       nombre: socket.nombre,
       edad,
       avatar: socket.avatar,
+      fotos: cleanPhotos(data.fotos),
       ciudad: cleanShortText(data.ciudad, 40),
       bio: cleanShortText(data.bio, 180),
       intereses: cleanInterests(data.intereses)
@@ -171,6 +181,26 @@ io.on('connection', socket => {
       socket.emit('dating_match', otherProfile);
       opponent.emit('dating_match', me);
     }
+  });
+
+  socket.on('dating_chat_send', (data = {}, ack) => {
+    const done = typeof ack === 'function' ? ack : () => {};
+    const opponentId = String(data.oponenteID || '');
+    const opponent = io.sockets.sockets.get(opponentId);
+    if (!opponent || !datingProfiles.has(opponentId)) return done({ ok: false, error: 'Ese match no está conectado.' });
+    if (!areDatingMatched(socket.id, opponentId)) return done({ ok: false, error: 'Solo puedes escribir a un match mutuo.' });
+    const texto = cleanShortText(data.texto, 500);
+    if (!texto) return done({ ok: false, error: 'Escribe un mensaje antes de enviarlo.' });
+    const message = {
+      id: `msg_${Date.now().toString(36)}_${(++datingMessageSeq).toString(36)}`,
+      from: socket.id,
+      to: opponentId,
+      text: texto,
+      ts: Date.now()
+    };
+    socket.emit('dating_chat_message', message);
+    opponent.emit('dating_chat_message', message);
+    done({ ok: true, id: message.id });
   });
 
   socket.on('dating_game_invite', (data = {}, ack) => {

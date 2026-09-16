@@ -42,7 +42,7 @@
       <p class="subtitle">Conoce personas, haz match y rompe el hielo jugando en lugar de empezar con el típico “hola”.</p>
       <form id="formularioPerfil" class="form-stack" novalidate>
         <div class="profile-avatar-field">
-          <label>Foto o avatar</label>
+          <label>Fotos del perfil</label>
           <div class="profile-avatar-row">
             <button type="button" class="profile-avatar-preview" id="avatarPreviewButton" onclick="document.getElementById('inputAvatar').click()" aria-label="Elegir foto de perfil">
               <span id="avatarPreviewFallback">🙂</span>
@@ -51,11 +51,12 @@
             </button>
             <div class="profile-avatar-copy">
               <strong>Personaliza tu perfil</strong>
-              <small>Puedes subir una foto o elegir uno de los avatares.</small>
-              <button type="button" class="mini-link" onclick="document.getElementById('inputAvatar').click()">Elegir foto</button>
+              <small>Sube hasta 4 fotos. La primera será tu foto principal.</small>
+              <button type="button" class="mini-link" onclick="document.getElementById('inputAvatar').click()">Añadir fotos</button>
             </div>
           </div>
-          <input type="file" id="inputAvatar" accept="image/*" style="display:none">
+          <input type="file" id="inputAvatar" accept="image/*" multiple style="display:none">
+          <div id="profilePhotoGrid" class="profile-photo-grid" aria-label="Fotos seleccionadas"></div>
           <div class="avatar-options" id="avatarOptions" aria-label="Avatares disponibles">
             <button type="button" onclick="seleccionarAvatarEmoji('😎')">😎</button>
             <button type="button" onclick="seleccionarAvatarEmoji('😈')">😈</button>
@@ -98,9 +99,25 @@
       <div class="dating-topbar">
         <div>
           <span class="eyebrow">DESCUBRIR</span>
-          <h2>¿Hay vibra?</h2>
+          <h2>Encuentra tu vibra.</h2>
         </div>
-        <button class="dating-profile-button" type="button" onclick="volverPerfil()" aria-label="Editar perfil"><span id="datingAvatarMini">🙂</span></button>
+        <div class="dating-top-actions">
+          <button class="vr-plus-pill" type="button" onclick="mostrarToast('V/R+ llegará en una siguiente fase. Primero estamos validando el núcleo de la app.','info')">V/R+</button>
+          <button class="filter-button" type="button" onclick="toggleDatingFilters()" aria-label="Filtros">☷</button>
+          <button class="dating-profile-button" type="button" onclick="volverPerfil()" aria-label="Editar perfil"><span id="datingAvatarMini">🙂</span></button>
+        </div>
+      </div>
+
+      <div id="datingFilters" class="dating-filters hidden">
+        <div class="filter-row">
+          <label>Edad mínima<input id="filterAgeMin" type="number" min="18" max="99" value="18"></label>
+          <label>Edad máxima<input id="filterAgeMax" type="number" min="18" max="99" value="99"></label>
+        </div>
+        <div class="filter-row">
+          <label>Ciudad<input id="filterCity" type="text" maxlength="40" placeholder="Ej. Valencia"></label>
+          <label>Interés<input id="filterInterest" type="text" maxlength="30" placeholder="Ej. fotografía"></label>
+        </div>
+        <div class="filter-actions"><button class="mini-link" type="button" onclick="limpiarDatingFilters()">Limpiar</button><button class="btn btn-primary" type="button" onclick="aplicarDatingFilters()">Aplicar filtros</button></div>
       </div>
 
       <div class="dating-stage" id="datingStage">
@@ -111,8 +128,11 @@
         </div>
         <article id="datingCard" class="dating-card hidden" aria-live="polite">
           <div class="dating-photo" id="datingPhoto">
+            <div class="photo-progress" id="datingPhotoProgress"></div>
+            <button class="photo-zone photo-prev" type="button" onclick="cambiarFotoDating(-1,event)" aria-label="Foto anterior"></button>
+            <button class="photo-zone photo-next" type="button" onclick="cambiarFotoDating(1,event)" aria-label="Foto siguiente"></button>
             <span id="datingAvatarLarge">🙂</span>
-            <div class="swipe-stamp stamp-like" id="stampLike">LIKE</div>
+            <div class="swipe-stamp stamp-like" id="stampLike">ME GUSTA</div>
             <div class="swipe-stamp stamp-pass" id="stampPass">PASAR</div>
             <div class="dating-photo-shade"></div>
             <div class="dating-card-main">
@@ -128,11 +148,12 @@
       </div>
 
       <div class="swipe-actions" id="swipeActions">
+        <button class="swipe-btn rewind" type="button" onclick="mostrarToast('Rewind será una función V/R+.','info')" aria-label="Volver atrás">↶</button>
         <button class="swipe-btn pass" type="button" onclick="pasarPerfil()" aria-label="Pasar">✕</button>
         <button class="swipe-btn game" type="button" onclick="retarPerfilActual()" aria-label="Retar">🎲</button>
         <button class="swipe-btn like" type="button" onclick="darLike()" aria-label="Me gusta">♥</button>
       </div>
-      <p class="dating-tip">🎲 Rétale con un rompehielos · ♥ Like · ✕ Pasar</p>
+      <p class="dating-tip">Desliza · toca la foto para ver la galería · 🎲 convierte el match en conversación</p>
       <nav class="dating-nav" aria-label="Navegación principal">
         <button class="active" onclick="irADescubrir()"><span>🔥</span><small>Descubrir</small></button>
         <button onclick="irAMatches()"><span>💕</span><small>Matches</small><i id="matchCountBadge" class="nav-badge hidden">0</i></button>
@@ -155,6 +176,31 @@
         <button onclick="irAMazos()"><span>🎮</span><small>Jugar</small></button>
         <button onclick="volverPerfil()"><span>👤</span><small>Perfil</small></button>
       </nav>
+    </section>
+
+    <section id="pantallaChat" class="screen dating-screen chat-screen hidden">
+      <div class="chat-header">
+        <button class="chat-back" type="button" onclick="irAMatches()">←</button>
+        <div id="chatAvatar" class="chat-avatar">♥</div>
+        <div class="chat-person"><strong id="chatName">Tu match</strong><small id="chatStatus">Match reciente · rompe el hielo</small></div>
+        <button class="chat-game-button" type="button" onclick="toggleChatGameTray()" aria-label="Invitar a jugar">🎮</button>
+      </div>
+      <div id="chatGameTray" class="chat-game-tray hidden">
+        <div><strong>Convierte el chat en juego</strong><small>Los dos tenéis que aceptar.</small></div>
+        <button onclick="invitarJuegoDesdeChat('rompehielos')">🧊 Rompehielos</button>
+        <button onclick="invitarJuegoDesdeChat('parejas')">❤️ Conóceme</button>
+        <button onclick="invitarJuegoDesdeChat('seccionXX')">🔥 After Dark</button>
+      </div>
+      <div id="chatMessages" class="chat-messages"></div>
+      <div class="chat-starters" id="chatStarters">
+        <button type="button" onclick="usarInicioChat(this)">¿Qué plan improvisado nunca rechazarías?</button>
+        <button type="button" onclick="usarInicioChat(this)">¿Qué canción pondrías en nuestra primera playlist?</button>
+        <button type="button" onclick="usarInicioChat(this)">Descríbete usando solo 3 emojis.</button>
+      </div>
+      <form id="chatForm" class="chat-composer">
+        <input id="chatInput" type="text" maxlength="500" autocomplete="off" placeholder="Escribe algo mejor que “hola”…">
+        <button type="submit" aria-label="Enviar">➤</button>
+      </form>
     </section>
 
     <section id="pantallaMazos" class="screen hidden">
@@ -324,8 +370,10 @@
       <p id="matchModalText">Os gustáis. Ahora evitad el “hola” y empezad jugando.</p>
       <div class="match-modal-actions">
         <button class="btn btn-ghost" onclick="cerrarMatchModal()">Seguir viendo</button>
-        <button class="btn btn-primary" onclick="invitarJuegoDesdeMatch()">🎮 Romper el hielo</button>
+        <button class="btn btn-primary" onclick="abrirChatDesdeMatch()">💬 Abrir conversación</button>
       </div>
+      <button class="match-game-link" type="button" onclick="invitarJuegoDesdeMatch()">o empezar directamente con 🎮 Rompehielos</button>
+      <div id="matchConfetti" class="match-confetti" aria-hidden="true"></div>
     </div>
   </div>
 
@@ -402,6 +450,11 @@
     let currentMatch = null;
     let pendingGameInvite = null;
     let origenPartida = 'legacy';
+    let fotosJugador = [];
+    let datingPhotoIndex = 0;
+    let datingFilters = { ageMin:18, ageMax:99, city:'', interest:'' };
+    let currentChatMatch = null;
+    const datingChats = new Map();
     let pointerStartX = 0;
     let pointerDeltaX = 0;
     let pointerDragging = false;
@@ -792,7 +845,7 @@
     const mazoInvitacion = params.get('mazo');
 
     const $ = (id) => document.getElementById(id);
-    const screens = ['pantallaPerfil','pantallaDescubrir','pantallaMatches','pantallaMazos','pantallaMenu','pantallaLobby','pantallaJuego'];
+    const screens = ['pantallaPerfil','pantallaDescubrir','pantallaMatches','pantallaChat','pantallaMazos','pantallaMenu','pantallaLobby','pantallaJuego'];
 
     function showScreen(id) {
       screens.forEach(x => $(x).classList.toggle('hidden', x !== id));
@@ -871,6 +924,7 @@
         nombre: nombreJugador,
         edad: edadJugador,
         avatar: avatarJugador,
+        fotos: fotosJugador,
         ciudad: ciudadJugador,
         bio: bioJugador,
         intereses: interesesJugador
@@ -894,9 +948,75 @@
 
     function perfilEsMatch(id) { return datingMatches.some(m => m.id === id); }
 
+    function perfilCumpleFiltros(p) {
+      if (!p) return false;
+      const edad = Number(p.edad || 0);
+      if (edad < datingFilters.ageMin || edad > datingFilters.ageMax) return false;
+      const city = datingFilters.city.trim().toLowerCase();
+      if (city && !String(p.ciudad || '').toLowerCase().includes(city)) return false;
+      const interest = datingFilters.interest.trim().toLowerCase();
+      if (interest && !(Array.isArray(p.intereses) ? p.intereses : []).some(x => String(x).toLowerCase().includes(interest))) return false;
+      return true;
+    }
+
+    function toggleDatingFilters() { $('datingFilters').classList.toggle('hidden'); }
+    function limpiarDatingFilters() {
+      $('filterAgeMin').value = 18; $('filterAgeMax').value = 99; $('filterCity').value = ''; $('filterInterest').value = '';
+      datingFilters = { ageMin:18, ageMax:99, city:'', interest:'' }; renderDatingCard();
+    }
+    function aplicarDatingFilters() {
+      let min = Math.max(18, Math.min(99, Number($('filterAgeMin').value) || 18));
+      let max = Math.max(18, Math.min(99, Number($('filterAgeMax').value) || 99));
+      if (min > max) [min,max] = [max,min];
+      datingFilters = { ageMin:min, ageMax:max, city:String($('filterCity').value || ''), interest:String($('filterInterest').value || '') };
+      $('datingFilters').classList.add('hidden'); renderDatingCard();
+    }
+
+    function fotosDePerfil(p) {
+      const fotos = Array.isArray(p && p.fotos) ? p.fotos.filter(x => typeof x === 'string' && x.startsWith('data:image/')) : [];
+      if (!fotos.length && p && p.avatar && p.avatar.startsWith('data:image/')) fotos.push(p.avatar);
+      return fotos;
+    }
+
+    function renderDatingPhoto() {
+      if (!currentDatingProfile) return;
+      const p = currentDatingProfile;
+      const fotos = fotosDePerfil(p);
+      const photo = $('datingPhoto');
+      const fallback = $('datingAvatarLarge');
+      photo.style.backgroundImage = '';
+      fallback.style.display = '';
+      if (fotos.length) {
+        datingPhotoIndex = Math.max(0, Math.min(datingPhotoIndex, fotos.length - 1));
+        photo.style.backgroundImage = `linear-gradient(180deg,rgba(5,5,10,.02) 25%,rgba(5,5,10,.92) 100%), url(${fotos[datingPhotoIndex]})`;
+        fallback.style.display = 'none';
+      } else {
+        datingPhotoIndex = 0;
+        fallback.textContent = p.avatar || (p.nombre || '?').charAt(0).toUpperCase();
+      }
+      const progress = $('datingPhotoProgress');
+      progress.innerHTML = '';
+      const total = Math.max(1, fotos.length);
+      for (let i=0;i<total;i++) {
+        const bar = document.createElement('i');
+        if (i === datingPhotoIndex) bar.classList.add('active');
+        progress.appendChild(bar);
+      }
+    }
+
+    function cambiarFotoDating(delta, event) {
+      if (event) { event.preventDefault(); event.stopPropagation(); }
+      if (!currentDatingProfile) return;
+      const fotos = fotosDePerfil(currentDatingProfile);
+      if (fotos.length < 2) return;
+      datingPhotoIndex = (datingPhotoIndex + delta + fotos.length) % fotos.length;
+      renderDatingPhoto();
+    }
+
     function renderDatingCard() {
-      const disponible = datingProfiles.find(p => !datingPassed.has(p.id) && !perfilEsMatch(p.id));
+      const disponible = datingProfiles.find(p => !datingPassed.has(p.id) && !perfilEsMatch(p.id) && perfilCumpleFiltros(p));
       currentDatingProfile = disponible || null;
+      datingPhotoIndex = 0;
       const card = $('datingCard');
       const empty = $('datingEmpty');
       const actions = $('swipeActions');
@@ -904,6 +1024,9 @@
         card.classList.add('hidden');
         empty.classList.remove('hidden');
         actions.classList.add('is-disabled');
+        const filtered = datingProfiles.some(p => !datingPassed.has(p.id) && !perfilEsMatch(p.id));
+        empty.querySelector('strong').textContent = filtered ? 'No hay perfiles con estos filtros' : 'No hay más perfiles ahora';
+        empty.querySelector('small').textContent = filtered ? 'Prueba ampliando edad, ciudad o intereses.' : 'Cuando alguien entre, aparecerá aquí automáticamente. Abre otra pestaña para probar el match.';
         return;
       }
       empty.classList.add('hidden');
@@ -923,15 +1046,7 @@
       (Array.isArray(p.intereses) ? p.intereses : []).forEach(item => {
         const chip = document.createElement('span'); chip.textContent = item; interestBox.appendChild(chip);
       });
-      const photo = $('datingPhoto');
-      photo.style.backgroundImage = '';
-      $('datingAvatarLarge').style.display = '';
-      if (p.avatar && p.avatar.startsWith('data:image/')) {
-        photo.style.backgroundImage = `linear-gradient(180deg,transparent 35%,rgba(5,5,10,.92) 100%), url(${p.avatar})`;
-        $('datingAvatarLarge').style.display = 'none';
-      } else {
-        $('datingAvatarLarge').textContent = p.avatar || (p.nombre || '?').charAt(0).toUpperCase();
-      }
+      renderDatingPhoto();
     }
 
     function animarSalidaDating(direccion, despues) {
@@ -989,6 +1104,7 @@
       $('matchModalText').textContent = `Tú y ${data.nombre || 'tu match'} os gustáis. Ahora evitad el “hola” y empezad jugando.`;
       $('matchModal').classList.remove('hidden');
       $('matchModal').setAttribute('aria-hidden','false');
+      lanzarConfettiMatch();
     }
 
     function cerrarMatchModal() {
@@ -996,11 +1112,33 @@
       $('matchModal').setAttribute('aria-hidden','true');
     }
 
-    function invitarJuego(matchId) {
+    function lanzarConfettiMatch() {
+      const box = $('matchConfetti');
+      if (!box) return;
+      box.innerHTML = '';
+      const glyphs = ['♥','✦','•','♥','✧'];
+      for (let i=0;i<28;i++) {
+        const bit = document.createElement('span');
+        bit.textContent = glyphs[i % glyphs.length];
+        bit.style.setProperty('--x', `${(Math.random()*220-110).toFixed(0)}px`);
+        bit.style.setProperty('--r', `${(Math.random()*320-160).toFixed(0)}deg`);
+        bit.style.setProperty('--d', `${(Math.random()*.55).toFixed(2)}s`);
+        box.appendChild(bit);
+      }
+    }
+
+    function abrirChatDesdeMatch() {
+      if (!currentMatch) return;
+      const match = currentMatch;
+      cerrarMatchModal();
+      abrirChat(match.id);
+    }
+
+    function invitarJuego(matchId, mazo='rompehielos') {
       const match = datingMatches.find(m => m.id === matchId);
       if (!match) return mostrarToast('Ese match ya no está disponible.', 'warn');
       currentMatch = match;
-      socket.emit('dating_game_invite', { oponenteID: match.id, mazo: 'rompehielos' }, (res) => {
+      socket.emit('dating_game_invite', { oponenteID: match.id, mazo }, (res) => {
         if (!res || !res.ok) return mostrarToast((res && res.error) || 'No se pudo enviar la invitación.', 'warn');
         mostrarToast(`Invitación enviada a ${match.nombre}.`, 'info');
       });
@@ -1010,7 +1148,84 @@
       if (!currentMatch) return;
       const id = currentMatch.id;
       cerrarMatchModal();
-      invitarJuego(id);
+      invitarJuego(id, 'rompehielos');
+    }
+
+    function abrirChat(matchId) {
+      const match = datingMatches.find(m => m.id === matchId);
+      if (!match) return mostrarToast('Ese match ya no está disponible.', 'warn');
+      currentChatMatch = match;
+      currentMatch = match;
+      pintarAvatar($('chatAvatar'), match.avatar || '', match.nombre || 'M');
+      $('chatName').textContent = `${match.nombre || 'Tu match'}${match.edad ? `, ${match.edad}` : ''}`;
+      $('chatStatus').textContent = match.ciudad ? `${match.ciudad} · match activo` : 'Match activo · rompe el hielo';
+      $('chatGameTray').classList.add('hidden');
+      $('chatStarters').classList.toggle('hidden', chatMessagesFor(match.id).length > 0);
+      showScreen('pantallaChat');
+      renderChat();
+      setTimeout(() => $('chatInput').focus(), 120);
+    }
+
+    function toggleChatGameTray() { $('chatGameTray').classList.toggle('hidden'); }
+
+    function invitarJuegoDesdeChat(mazo) {
+      if (!currentChatMatch) return;
+      if (mazo === 'seccionXX' && edadJugador < 18) return;
+      $('chatGameTray').classList.add('hidden');
+      invitarJuego(currentChatMatch.id, mazo);
+    }
+
+    function chatMessagesFor(id) {
+      if (!datingChats.has(id)) datingChats.set(id, []);
+      return datingChats.get(id);
+    }
+
+    function guardarMensajeChat(partnerId, msg) {
+      if (!partnerId || !msg) return;
+      const list = chatMessagesFor(partnerId);
+      if (msg.id && list.some(x => x.id === msg.id)) return;
+      list.push(msg);
+      if (list.length > 120) list.splice(0, list.length - 120);
+      if (currentChatMatch && currentChatMatch.id === partnerId && !$('pantallaChat').classList.contains('hidden')) renderChat();
+    }
+
+    function renderChat() {
+      const box = $('chatMessages');
+      if (!box || !currentChatMatch) return;
+      const list = chatMessagesFor(currentChatMatch.id);
+      box.innerHTML = '';
+      if (!list.length) {
+        const intro = document.createElement('div'); intro.className = 'chat-intro';
+        intro.innerHTML = `<span>✨</span><strong>Hiciste match con ${escapeHtml(currentChatMatch.nombre || 'esta persona')}</strong><small>No empieces con el típico “hola”. Usa una idea de abajo o lanza un juego.</small>`;
+        box.appendChild(intro);
+      }
+      list.forEach(msg => {
+        const row = document.createElement('div');
+        row.className = `chat-bubble-row ${msg.from === socket.id ? 'mine' : 'theirs'}`;
+        const bubble = document.createElement('div'); bubble.className = 'chat-bubble'; bubble.textContent = msg.text || '';
+        row.appendChild(bubble); box.appendChild(row);
+      });
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      return String(text || '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[ch]));
+    }
+
+    function enviarChat(texto) {
+      if (!currentChatMatch) return;
+      const text = String(texto || '').trim().slice(0,500);
+      if (!text) return;
+      $('chatStarters').classList.add('hidden');
+      socket.emit('dating_chat_send', { oponenteID: currentChatMatch.id, texto:text }, (res) => {
+        if (!res || !res.ok) mostrarToast((res && res.error) || 'No se pudo enviar el mensaje.', 'warn');
+      });
+    }
+
+    function usarInicioChat(btn) {
+      if (!btn) return;
+      enviarChat(btn.textContent);
+      $('chatStarters').classList.add('hidden');
     }
 
     function renderMatches() {
@@ -1027,7 +1242,8 @@
         const copy = document.createElement('div'); copy.className = 'match-row-copy';
         const name = document.createElement('strong'); name.textContent = `${m.nombre || 'Match'}${m.edad ? `, ${m.edad}` : ''}`;
         const sub = document.createElement('small'); sub.textContent = m.ciudad || 'Match reciente'; copy.append(name, sub);
-        const btn = document.createElement('button'); btn.className = 'btn btn-danger-soft'; btn.textContent = '🎮 Jugar'; btn.onclick = () => invitarJuego(m.id);
+        const btn = document.createElement('button'); btn.className = 'btn btn-danger-soft'; btn.textContent = '💬 Abrir'; btn.onclick = () => abrirChat(m.id);
+        row.onclick = (event) => { if (event.target !== btn) abrirChat(m.id); };
         row.append(avatar, copy, btn); box.appendChild(row);
       });
     }
@@ -1040,6 +1256,15 @@
     socket.on('dating_match', (data = {}) => {
       addOrUpdateMatch(data);
       showMatchModal(data);
+    });
+
+    socket.on('dating_chat_message', (data = {}) => {
+      const partnerId = data.from === socket.id ? data.to : data.from;
+      guardarMensajeChat(partnerId, data);
+      if (data.from !== socket.id && (!currentChatMatch || currentChatMatch.id !== partnerId || $('pantallaChat').classList.contains('hidden'))) {
+        const match = datingMatches.find(m => m.id === partnerId);
+        mostrarToast(`${match?.nombre || 'Tu match'} te ha escrito.`, 'info');
+      }
     });
 
     socket.on('dating_game_invite', (data = {}) => {
@@ -1152,7 +1377,7 @@
       ciudadJugador = String($('ciudadUsuario').value || '').trim().slice(0,40);
       bioJugador = String($('bioUsuario').value || '').trim().slice(0,180);
       interesesJugador = normalizarIntereses($('interesesUsuario').value);
-      localStorage.setItem('vr_profile', JSON.stringify({ nombre: nombreJugador, edad: edadJugador, avatar: avatarJugador, ciudad: ciudadJugador, bio: bioJugador, intereses: interesesJugador }));
+      localStorage.setItem('vr_profile', JSON.stringify({ nombre: nombreJugador, edad: edadJugador, avatar: avatarJugador, fotos: fotosJugador, ciudad: ciudadJugador, bio: bioJugador, intereses: interesesJugador }));
       $('saludoHeader').textContent = nombreJugador;
       pintarAvatar($('avatarDot'), avatarJugador, nombreJugador);
       $('nombreMazoActivo').textContent = nombreMazo(mazoElegido).toUpperCase();
@@ -1170,11 +1395,13 @@
         if (saved.nombre) $('nombreUsuario').value = saved.nombre;
         if (saved.edad) $('edadUsuario').value = saved.edad;
         if (saved.avatar) avatarJugador = saved.avatar;
+        if (Array.isArray(saved.fotos)) fotosJugador = saved.fotos.filter(x => typeof x === 'string' && x.startsWith('data:image/')).slice(0,4);
         if (saved.ciudad) $('ciudadUsuario').value = saved.ciudad;
         if (saved.bio) $('bioUsuario').value = saved.bio;
         if (Array.isArray(saved.intereses)) $('interesesUsuario').value = saved.intereses.join(', ');
         $('bioCounter').textContent = String(($('bioUsuario').value || '').length);
         actualizarPreviewAvatar();
+        renderProfilePhotoGrid();
       } catch { localStorage.removeItem('vr_profile'); }
     }
 
@@ -1745,13 +1972,61 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
       miSala=''; rivalNombre=''; rivalAvatar=''; rondaActual=1; enlaceSalaActual='';
       limpiarPruebaVisual();
       $('zonaInvitacion').classList.add('hidden'); $('controlesJuego').classList.add('hidden');
-      showScreen(origenPartida === 'dating' ? 'pantallaDescubrir' : 'pantallaMenu'); actualizarBarraTurno(false,'Esperando');
+      if (origenPartida === 'dating' && currentChatMatch) { showScreen('pantallaChat'); renderChat(); }
+      else showScreen(origenPartida === 'dating' ? 'pantallaDescubrir' : 'pantallaMenu');
+      actualizarBarraTurno(false,'Esperando');
       actualizarCartaAnimada('Esperando oponente…','ESPERANDO');
+    }
+
+    function renderProfilePhotoGrid() {
+      const grid = $('profilePhotoGrid');
+      if (!grid) return;
+      grid.innerHTML = '';
+      fotosJugador.forEach((src, index) => {
+        const wrap = document.createElement('div'); wrap.className = 'profile-photo-thumb';
+        const img = document.createElement('img'); img.src = src; img.alt = `Foto ${index+1}`;
+        const badge = document.createElement('span'); badge.textContent = index === 0 ? 'PRINCIPAL' : String(index+1);
+        const remove = document.createElement('button'); remove.type='button'; remove.textContent='×'; remove.setAttribute('aria-label','Quitar foto');
+        remove.onclick = () => { fotosJugador.splice(index,1); if (fotosJugador[0]) avatarJugador=fotosJugador[0]; renderProfilePhotoGrid(); actualizarPreviewAvatar(); };
+        wrap.append(img,badge,remove); grid.appendChild(wrap);
+      });
+      if (fotosJugador.length < 4) {
+        const add = document.createElement('button'); add.type='button'; add.className='profile-photo-add'; add.innerHTML='<b>＋</b><small>Añadir</small>';
+        add.onclick = () => $('inputAvatar').click(); grid.appendChild(add);
+      }
+    }
+
+    async function procesarFotosPerfil(fileList) {
+      const files = [...(fileList || [])].filter(f => f && f.type && f.type.startsWith('image/')).slice(0, Math.max(0, 4-fotosJugador.length));
+      if (!files.length) return;
+      try {
+        for (const file of files) {
+          if (file.size > 14*1024*1024) { mostrarToast('Una foto supera 14 MB y se omitió.','warn'); continue; }
+          const data = await comprimirImagen(file, 900, .72);
+          if (data.length > 700000) { mostrarToast('Una foto quedó demasiado pesada y se omitió.','warn'); continue; }
+          fotosJugador.push(data);
+        }
+        if (fotosJugador.length) avatarJugador = await comprimirDataUrlParaAvatar(fotosJugador[0]);
+        actualizarPreviewAvatar(); renderProfilePhotoGrid();
+      } catch { mostrarToast('No se pudieron procesar algunas fotos.','error'); }
+    }
+
+    function comprimirDataUrlParaAvatar(dataUrl) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const max=220, ratio=Math.min(1,max/Math.max(img.width,img.height));
+          const canvas=document.createElement('canvas'); canvas.width=Math.round(img.width*ratio); canvas.height=Math.round(img.height*ratio);
+          canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height); resolve(canvas.toDataURL('image/jpeg',.70));
+        };
+        img.onerror = () => resolve(''); img.src=dataUrl;
+      });
     }
 
     $('nombreUsuario').addEventListener('input', () => { $('nombreUsuario').value = limpiarNombre($('nombreUsuario').value); });
     $('bioUsuario').addEventListener('input', () => { $('bioCounter').textContent = String($('bioUsuario').value.length); });
-    $('inputAvatar').addEventListener('change', (e) => { procesarAvatar(e.target.files && e.target.files[0]); e.target.value = ''; });
+    $('inputAvatar').addEventListener('change', async (e) => { await procesarFotosPerfil(e.target.files); e.target.value = ''; });
+    $('chatForm').addEventListener('submit', (e) => { e.preventDefault(); const input=$('chatInput'); enviarChat(input.value); input.value=''; });
     initDatingSwipe();
     $('deckAdult').title = 'Solo mayores de 18 años';
     cargarPerfil();
