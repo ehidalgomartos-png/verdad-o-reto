@@ -1,19 +1,20 @@
 {
   "name": "vr-match",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "private": true,
-  "description": "Dating app + chat + multiplayer icebreaker game with persistent accounts and SQLite",
+  "description": "V/R Match dating app with persistent accounts, moderation, password recovery and SQLite",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "check": "node --check server.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": "22.x"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
     "express": "^4.21.2",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "nodemailer": "^10.0.8"
   }
 }

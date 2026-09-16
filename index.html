@@ -49,6 +49,7 @@
         <div class="field"><label for="authPassword">Contraseña</label><input id="authPassword" type="password" minlength="8" maxlength="72" autocomplete="current-password" placeholder="Mínimo 8 caracteres" required></div>
         <button id="authSubmit" class="btn btn-primary btn-xl" type="submit"><span>Entrar</span><b>→</b></button>
       </form>
+      <button id="forgotPasswordButton" class="auth-forgot" type="button" onclick="abrirRecuperacion()">¿Olvidaste tu contraseña?</button>
       <p class="legal-note">V/R Match es solo para mayores de 18 años. Al crear una cuenta aceptas las normas de convivencia y seguridad.</p>
     </section>
 
@@ -57,7 +58,7 @@
       <span class="eyebrow">CREA TU PERFIL</span>
       <h1>Haz match distinto.</h1>
       <p class="subtitle">Conoce personas, haz match y rompe el hielo jugando en lugar de empezar con el típico “hola”.</p>
-      <div class="account-strip"><span id="accountEmail">Cuenta activa</span><button type="button" onclick="cerrarSesion()">Cerrar sesión</button></div>
+      <div class="account-strip"><span id="accountEmail">Cuenta activa</span><div class="account-strip-actions"><button type="button" onclick="abrirCuenta()">Cuenta y seguridad</button><button type="button" class="logout-link" onclick="cerrarSesion()">Cerrar sesión</button></div></div>
       <form id="formularioPerfil" class="form-stack" novalidate>
         <div class="profile-avatar-field">
           <label>Fotos del perfil</label>
@@ -237,6 +238,14 @@
         <input id="chatInput" type="text" maxlength="500" autocomplete="off" placeholder="Escribe algo mejor que “hola”…">
         <button type="submit" aria-label="Enviar">➤</button>
       </form>
+    </section>
+
+    <section id="pantallaAdmin" class="screen admin-screen hidden">
+      <div class="screen-topbar"><button class="link-btn" onclick="cerrarAdmin()">← Volver</button><span class="topbar-title">MODERACIÓN</span><span class="live-pill"><i></i> ADMIN</span></div>
+      <div class="section-heading"><span class="eyebrow">SEGURIDAD</span><h2>Panel de moderación</h2><p>Revisa denuncias y actúa sobre las cuentas cuando sea necesario.</p></div>
+      <div id="adminStats" class="admin-stats"><div><strong>—</strong><span>usuarios</span></div><div><strong>—</strong><span>matches</span></div><div><strong>—</strong><span>denuncias</span></div><div><strong>—</strong><span>mensajes</span></div></div>
+      <div class="admin-toolbar"><label>Estado<select id="adminReportStatus" class="profile-select" onchange="cargarAdminReports()"><option value="open">Abiertas</option><option value="resolved">Resueltas</option><option value="dismissed">Descartadas</option></select></label><button class="btn btn-secondary" type="button" onclick="cargarAdminReports()">↻ Actualizar</button></div>
+      <div id="adminReportList" class="admin-report-list"><div class="empty-state"><span class="spinner"></span><strong>Cargando denuncias…</strong></div></div>
     </section>
 
     <section id="pantallaMazos" class="screen hidden">
@@ -437,6 +446,47 @@
     </div>
   </div>
 
+  <div id="forgotModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card account-modal-card">
+      <button class="modal-close" onclick="cerrarRecuperacion()">×</button>
+      <span class="modal-icon">🔐</span><h3>Recuperar contraseña</h3>
+      <p>Escribe el correo de tu cuenta. Si existe, generaremos un enlace para crear una contraseña nueva.</p>
+      <div class="field"><label for="forgotEmail">Correo</label><input id="forgotEmail" type="email" maxlength="254" placeholder="tu@email.com"></div>
+      <div class="modal-actions"><button class="btn btn-ghost" onclick="cerrarRecuperacion()">Cancelar</button><button class="btn btn-primary" onclick="solicitarRecuperacion()">Enviar enlace</button></div>
+    </div>
+  </div>
+
+  <div id="resetModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card account-modal-card">
+      <span class="modal-icon">🔑</span><h3>Nueva contraseña</h3>
+      <p>Elige una contraseña nueva para tu cuenta.</p>
+      <div class="field"><label for="resetPassword">Nueva contraseña</label><input id="resetPassword" type="password" minlength="8" maxlength="72" autocomplete="new-password"></div>
+      <div class="field"><label for="resetPassword2">Repetir contraseña</label><input id="resetPassword2" type="password" minlength="8" maxlength="72" autocomplete="new-password"></div>
+      <button class="btn btn-primary btn-xl" type="button" onclick="restablecerPassword()"><span>Guardar contraseña</span><b>→</b></button>
+    </div>
+  </div>
+
+  <div id="accountModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card account-modal-card account-settings-card">
+      <button class="modal-close" onclick="cerrarCuenta()">×</button>
+      <span class="eyebrow">CUENTA</span><h3>Privacidad y seguridad</h3>
+      <div class="account-email-card"><div><small>CORREO</small><strong id="settingsEmail">—</strong></div><span id="emailVerifiedBadge" class="security-badge">Pendiente</span></div>
+      <button id="resendVerificationButton" class="mini-link account-resend" type="button" onclick="reenviarVerificacion()">Reenviar verificación</button>
+      <div class="settings-section"><strong>Privacidad</strong><label class="setting-switch"><span><b>Mostrarme en Descubrir</b><small>Desactívalo para pausar temporalmente tu perfil.</small></span><input id="privacyDiscoverable" type="checkbox" checked></label><label class="setting-switch"><span><b>Mostrar estado online</b><small>Oculta el indicador de conexión a otros usuarios.</small></span><input id="privacyShowOnline" type="checkbox" checked></label><label class="setting-switch"><span><b>Permitir invitaciones a jugar</b><small>Tus matches podrán proponerte una partida.</small></span><input id="privacyGameInvites" type="checkbox" checked></label><button class="btn btn-secondary" type="button" onclick="guardarPrivacidad()">Guardar privacidad</button></div>
+      <div class="settings-section"><strong>Cambiar contraseña</strong><div class="field"><input id="currentPassword" type="password" maxlength="72" autocomplete="current-password" placeholder="Contraseña actual"></div><div class="field"><input id="newPassword" type="password" maxlength="72" autocomplete="new-password" placeholder="Nueva contraseña · mínimo 8"></div><button class="btn btn-secondary" type="button" onclick="cambiarPasswordCuenta()">Actualizar contraseña</button></div>
+      <button id="adminPanelButton" class="btn btn-secondary hidden" type="button" onclick="abrirAdmin()">⚑ Abrir panel de moderación</button>
+      <div class="danger-zone"><strong>Zona de riesgo</strong><p>Eliminar la cuenta borra perfil, matches, mensajes, fotos y sesiones de forma permanente.</p><button class="btn btn-danger-soft" type="button" onclick="abrirEliminarCuenta()">Eliminar mi cuenta</button></div>
+    </div>
+  </div>
+
+  <div id="deleteAccountModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card safety-modal-card">
+      <button class="modal-close" onclick="cerrarEliminarCuenta()">×</button><span class="modal-icon">⚠️</span><h3>Eliminar cuenta</h3><p>Esta acción es permanente. Escribe tu contraseña para confirmar.</p>
+      <div class="field"><label for="deleteAccountPassword">Contraseña</label><input id="deleteAccountPassword" type="password" maxlength="72" autocomplete="current-password"></div>
+      <div class="modal-actions"><button class="btn btn-ghost" onclick="cerrarEliminarCuenta()">Cancelar</button><button class="btn btn-danger-soft" onclick="eliminarCuentaDefinitiva()">Eliminar definitivamente</button></div>
+    </div>
+  </div>
+
   <div id="cameraModal" class="modal camera-modal hidden" aria-hidden="true">
     <div class="camera-card">
       <div class="camera-header">
@@ -463,6 +513,9 @@
     let authToken = localStorage.getItem('vr_auth_token') || '';
     let currentUserId = '';
     let currentUserEmail = '';
+    let currentUserEmailVerified = false;
+    let currentUserAdmin = false;
+    let currentPrivacy = { discoverable:true, showOnline:true, allowGameInvites:true };
     let authMode = 'login';
     let miSala = '';
     let mazoElegido = 'rompehielos';
@@ -490,7 +543,7 @@
     const MAX_VIDEO_SECONDS = 30;
     const MAX_MEDIA_BYTES = 6 * 1024 * 1024;
 
-    // --- Capa dating MVP: perfiles conectados, likes y matches en memoria ---
+    // --- Capa dating: perfiles, matches y chat persistentes ---
     let ciudadJugador = '';
     let bioJugador = '';
     let interesesJugador = [];
@@ -894,9 +947,11 @@
     const params = new URLSearchParams(window.location.search);
     const salaInvitacion = params.get('sala');
     const mazoInvitacion = params.get('mazo');
+    let resetToken = params.get('reset') || '';
+    const verificationResult = params.get('verification') || '';
 
     const $ = (id) => document.getElementById(id);
-    const screens = ['pantallaAuth','pantallaPerfil','pantallaDescubrir','pantallaMatches','pantallaChat','pantallaMazos','pantallaMenu','pantallaLobby','pantallaJuego'];
+    const screens = ['pantallaAuth','pantallaPerfil','pantallaDescubrir','pantallaMatches','pantallaChat','pantallaAdmin','pantallaMazos','pantallaMenu','pantallaLobby','pantallaJuego'];
 
     function showScreen(id) {
       screens.forEach(x => $(x).classList.toggle('hidden', x !== id));
@@ -946,7 +1001,10 @@
     function aplicarCuenta(user) {
       currentUserId = user?.id || '';
       currentUserEmail = user?.email || '';
+      currentUserEmailVerified = Boolean(user?.emailVerified);
+      currentUserAdmin = Boolean(user?.admin);
       $('accountEmail').textContent = currentUserEmail || 'Cuenta activa';
+      if ($('adminPanelButton')) $('adminPanelButton').classList.toggle('hidden', !currentUserAdmin);
     }
 
     async function completarAcceso(result) {
@@ -982,12 +1040,40 @@
       const oldToken = authToken;
       if (callApi && oldToken) await api('/api/auth/logout', { method:'POST', body:{} });
       if (socket.connected) socket.disconnect();
-      authToken=''; currentUserId=''; currentUserEmail='';
+      authToken=''; currentUserId=''; currentUserEmail=''; currentUserEmailVerified=false; currentUserAdmin=false;
       localStorage.removeItem('vr_auth_token'); localStorage.removeItem('vr_profile');
       datingProfiles=[]; datingMatches=[]; datingPassed=new Set(); datingChats.clear();
       currentChatMatch=null; currentMatch=null; nombreJugador=''; edadJugador=0; avatarJugador=''; fotosJugador=[];
       $('authPassword').value=''; actualizarConexion(false); showScreen('pantallaAuth');
     }
+
+    function abrirRecuperacion() { $('forgotEmail').value=$('authEmail').value||''; $('forgotModal').classList.remove('hidden'); $('forgotModal').setAttribute('aria-hidden','false'); }
+    function cerrarRecuperacion() { $('forgotModal').classList.add('hidden'); $('forgotModal').setAttribute('aria-hidden','true'); }
+    async function solicitarRecuperacion() { const email=String($('forgotEmail').value||'').trim(); if(!email)return mostrarToast('Escribe tu correo.','warn'); const res=await api('/api/auth/forgot',{method:'POST',body:{email}}); cerrarRecuperacion(); mostrarToast(res.message||'Si existe la cuenta, recibirás un enlace.','info'); }
+    function abrirResetPassword() { if(!resetToken)return; $('resetModal').classList.remove('hidden'); $('resetModal').setAttribute('aria-hidden','false'); }
+    async function restablecerPassword() { const p1=$('resetPassword').value,p2=$('resetPassword2').value; if(p1.length<8)return mostrarToast('La contraseña debe tener al menos 8 caracteres.','warn'); if(p1!==p2)return mostrarToast('Las contraseñas no coinciden.','warn'); const res=await api('/api/auth/reset',{method:'POST',body:{token:resetToken,password:p1}}); if(!res.ok)return mostrarToast(res.error||'No se pudo restablecer.','error'); resetToken=''; history.replaceState({},document.title,location.pathname); $('resetModal').classList.add('hidden'); await completarAcceso(res); mostrarToast('Contraseña actualizada.','info'); }
+
+    function abrirCuenta() {
+      $('settingsEmail').textContent=currentUserEmail||'—';
+      $('emailVerifiedBadge').textContent=currentUserEmailVerified?'Verificado':'Pendiente'; $('emailVerifiedBadge').classList.toggle('verified',currentUserEmailVerified);
+      $('resendVerificationButton').classList.toggle('hidden',currentUserEmailVerified);
+      $('privacyDiscoverable').checked=currentPrivacy.discoverable!==false; $('privacyShowOnline').checked=currentPrivacy.showOnline!==false; $('privacyGameInvites').checked=currentPrivacy.allowGameInvites!==false;
+      $('adminPanelButton').classList.toggle('hidden',!currentUserAdmin); $('accountModal').classList.remove('hidden'); $('accountModal').setAttribute('aria-hidden','false');
+    }
+    function cerrarCuenta() { $('accountModal').classList.add('hidden'); $('accountModal').setAttribute('aria-hidden','true'); }
+    async function reenviarVerificacion() { const res=await api('/api/auth/resend-verification',{method:'POST',body:{email:currentUserEmail}}); mostrarToast(res.message||'Solicitud enviada.','info'); }
+    async function guardarPrivacidad() { const body={discoverable:$('privacyDiscoverable').checked,showOnline:$('privacyShowOnline').checked,allowGameInvites:$('privacyGameInvites').checked}; const res=await api('/api/account/privacy',{method:'PUT',body}); if(!res.ok)return mostrarToast(res.error||'No se pudo guardar.','error'); currentPrivacy=res.privacy||body; mostrarToast('Privacidad actualizada.','info'); if(socket.connected) registrarDating(); }
+    async function cambiarPasswordCuenta() { const currentPassword=$('currentPassword').value,newPassword=$('newPassword').value; if(newPassword.length<8)return mostrarToast('La nueva contraseña debe tener al menos 8 caracteres.','warn'); const res=await api('/api/account/change-password',{method:'POST',body:{currentPassword,newPassword}}); if(!res.ok)return mostrarToast(res.error||'No se pudo cambiar la contraseña.','error'); $('currentPassword').value='';$('newPassword').value='';mostrarToast('Contraseña actualizada. Las otras sesiones se cerraron.','info'); }
+    function abrirEliminarCuenta() { $('deleteAccountPassword').value=''; $('deleteAccountModal').classList.remove('hidden'); $('deleteAccountModal').setAttribute('aria-hidden','false'); }
+    function cerrarEliminarCuenta() { $('deleteAccountModal').classList.add('hidden'); $('deleteAccountModal').setAttribute('aria-hidden','true'); }
+    async function eliminarCuentaDefinitiva() { const password=$('deleteAccountPassword').value;if(!password)return mostrarToast('Escribe tu contraseña.','warn'); const res=await api('/api/account/delete',{method:'POST',body:{password}});if(!res.ok)return mostrarToast(res.error||'No se pudo eliminar la cuenta.','error'); cerrarEliminarCuenta();cerrarCuenta();await cerrarSesion(false);mostrarToast('Cuenta eliminada.','info'); }
+
+    async function abrirAdmin() { if(!currentUserAdmin)return; cerrarCuenta(); showScreen('pantallaAdmin'); await cargarAdminStats(); await cargarAdminReports(); }
+    function cerrarAdmin() { showScreen('pantallaPerfil'); }
+    async function cargarAdminStats() { const res=await api('/api/admin/stats'); if(!res.ok)return; const s=res.stats||{}; const vals=[s.users,s.matches,s.openReports,s.messages]; [...$('adminStats').querySelectorAll('strong')].forEach((el,i)=>el.textContent=String(vals[i]??'—')); }
+    async function cargarAdminReports() { if(!currentUserAdmin)return; const status=$('adminReportStatus').value; const res=await api(`/api/admin/reports?status=${encodeURIComponent(status)}`); if(!res.ok)return mostrarToast(res.error||'No se pudieron cargar denuncias.','error'); renderAdminReports(res.reports||[]); }
+    function renderAdminReports(reports) { const list=$('adminReportList'); list.innerHTML=''; if(!reports.length){list.innerHTML='<div class="empty-state"><span>✓</span><strong>No hay denuncias en este estado</strong><small>La cola está limpia.</small></div>';return;} reports.forEach(r=>{const card=document.createElement('article');card.className='admin-report-card';const date=new Date(r.created_at).toLocaleString('es-ES');card.innerHTML=`<div class="admin-report-head"><div><small>${escapeHtml(r.reason)} · ${escapeHtml(date)}</small><strong>${escapeHtml(r.reported_name||r.reported_email||'Usuario')}</strong></div><span>${escapeHtml(r.status)}</span></div><p>${escapeHtml(r.details||'Sin detalles adicionales.')}</p><div class="admin-report-meta">Reporta: ${escapeHtml(r.reporter_name||r.reporter_email||'Usuario')}<br>Cuenta denunciada: ${escapeHtml(r.reported_email||'')}</div><textarea maxlength="500" placeholder="Nota interna para moderación"></textarea><div class="admin-report-actions"><button data-a="dismiss">Descartar</button><button data-a="resolve">Resolver</button><button class="danger" data-a="suspend">Suspender cuenta</button></div>`;card.querySelectorAll('[data-a]').forEach(btn=>btn.onclick=()=>accionAdminReporte(r.id,btn.dataset.a,card.querySelector('textarea').value));list.appendChild(card);}); }
+    async function accionAdminReporte(id,action,note) { if(action==='suspend'&&!confirm('¿Suspender esta cuenta y cerrar sus sesiones?'))return; const res=await api(`/api/admin/reports/${encodeURIComponent(id)}/action`,{method:'POST',body:{action,note}});if(!res.ok)return mostrarToast(res.error||'No se pudo aplicar la acción.','error');mostrarToast('Acción de moderación guardada.','info');await cargarAdminStats();await cargarAdminReports(); }
 
     function toggleChatSafety() { $('chatSafetyTray').classList.toggle('hidden'); }
     function abrirReporte() {
@@ -1539,8 +1625,12 @@
     socket.on('disconnect', () => { actualizarConexion(false); if (authToken) mostrarToast('Conexión perdida. Intentando reconectar…','warn'); });
     socket.on('connect_error', (err) => {
       actualizarConexion(false);
-      if (String(err && err.message) === 'AUTH_REQUIRED') cerrarSesion(false);
+      const msg=String(err&&err.message||'');
+      if (msg === 'AUTH_REQUIRED') cerrarSesion(false);
+      if (msg === 'EMAIL_VERIFICATION_REQUIRED') { cerrarSesion(false); mostrarToast('Verifica tu correo antes de continuar.','warn'); }
     });
+    socket.on('account_deleted',()=>cerrarSesion(false));
+    socket.on('account_suspended',()=>{cerrarSesion(false);mostrarToast('Esta cuenta ha sido suspendida.','error');});
 
     function limpiarNombre(valor) {
       return valor.replace(/[^\p{L}\p{N} _.'-]/gu, '').trim().slice(0,24);
@@ -1563,7 +1653,8 @@
         ciudad:String($('ciudadUsuario').value || '').trim().slice(0,40),
         bio:String($('bioUsuario').value || '').trim().slice(0,180),
         intereses:normalizarIntereses($('interesesUsuario').value),
-        preferences:{ ageMin, ageMax, lookingFor:$('lookingForUsuario').value, city:String($('prefCity').value||'').trim().slice(0,40), interest:String($('prefInterest').value||'').trim().slice(0,30) }
+        preferences:{ ageMin, ageMax, lookingFor:$('lookingForUsuario').value, city:String($('prefCity').value||'').trim().slice(0,40), interest:String($('prefInterest').value||'').trim().slice(0,30) },
+        privacy:currentPrivacy
       };
       const res = await api('/api/profile', { method:'PUT', body:payload });
       if (!res.ok) return mostrarToast(res.error || 'No se pudo guardar el perfil.', 'error');
@@ -1594,6 +1685,7 @@
       $('prefAgeMax').value = pref.ageMax || 99;
       $('prefCity').value = pref.city || '';
       $('prefInterest').value = pref.interest || '';
+      currentPrivacy = { discoverable:saved.privacy?.discoverable!==false, showOnline:saved.privacy?.showOnline!==false, allowGameInvites:saved.privacy?.allowGameInvites!==false };
       $('bioCounter').textContent = String(bioJugador.length);
       $('saludoHeader').textContent = nombreJugador || 'Hola';
       actualizarPreviewAvatar(); renderProfilePhotoGrid();
@@ -2229,8 +2321,9 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
       const endpoint=authMode==='register'?'/api/auth/register':'/api/auth/login';
       const res=await api(endpoint,{method:'POST',body:{email,password}});
       if (!res.ok) return mostrarToast(res.error || 'No se pudo acceder.','error');
+      if (res.verificationRequired && !res.token) { mostrarToast(res.emailSent?'Cuenta creada. Revisa tu correo para verificarla.':'Cuenta creada, pero falta configurar el envío de correo en el servidor.','info'); cambiarAuthMode('login'); return; }
       await completarAcceso(res);
-      mostrarToast(authMode==='register'?'Cuenta creada. Completa tu perfil.':'Sesión iniciada.','info');
+      mostrarToast(authMode==='register'?(res.emailVerificationPending?'Cuenta creada. Puedes verificar tu correo desde Cuenta y seguridad.':'Cuenta creada. Completa tu perfil.'):'Sesión iniciada.','info');
     });
 
     $('nombreUsuario').addEventListener('input', () => { $('nombreUsuario').value = limpiarNombre($('nombreUsuario').value); });
@@ -2240,7 +2333,9 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
     initDatingSwipe();
     $('deckAdult').title = 'Solo mayores de 18 años';
     if (mazoInvitacion) $('mazoSeleccionadoLabel').textContent = `Mazo: ${nombreMazo(mazoInvitacion)}`;
-    bootstrapAuth();
+    if (verificationResult === 'ok') { history.replaceState({},document.title,location.pathname); setTimeout(()=>mostrarToast('Correo verificado correctamente. Ya puedes entrar.','info'),150); }
+    if (verificationResult === 'invalid') { history.replaceState({},document.title,location.pathname); setTimeout(()=>mostrarToast('El enlace de verificación no es válido o ha caducado.','warn'),150); }
+    if (resetToken) { showScreen('pantallaAuth'); setTimeout(abrirResetPassword,100); } else bootstrapAuth();
   </script>
 </body>
 </html>

@@ -7,9 +7,29 @@ services:
     healthCheckPath: /healthz
     envVars:
       - key: NODE_VERSION
-        value: 20
+        value: 22
       - key: VR_STORAGE_DIR
         value: /var/data
+      - key: VR_APP_BASE_URL
+        value: https://verdad-o-reto-zz0k.onrender.com
+      - key: VR_ALLOWED_ORIGINS
+        value: https://verdad-o-reto-zz0k.onrender.com
+      - key: VR_REQUIRE_EMAIL_VERIFICATION
+        value: "false"
+      - key: VR_ADMIN_EMAILS
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: SMTP_SECURE
+        sync: false
     disk:
       name: vr-match-data
       mountPath: /var/data
