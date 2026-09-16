@@ -1,6 +1,6 @@
 # V/R MATCH — CONTEXTO MAESTRO DEL PROYECTO
 
-**Última actualización:** 16 de septiembre de 2026 · Fase 10 PWA preparada  
+**Última actualización:** 16 de septiembre de 2026 · Fase 11 preproducción preparada  
 **Estado:** Fases 4, 5 y 6 validadas; Fase 7 preparada para desplegar  
 **Proyecto:** V/R Match  
 **Concepto:** App de citas donde, después de hacer match, dos personas pueden conversar y jugar dinámicas tipo Verdad o Reto / Rompehielos dentro de la propia experiencia de dating.
@@ -1024,3 +1024,26 @@ Se mantiene para el cierre:
 ```
 
 Después de validar la PWA, el siguiente bloque debe centrarse en **estabilización de producto móvil, QA general y preparación para producción**, antes de empaquetar con React Native/Flutter o publicar en stores.
+
+
+# ACTUALIZACIÓN — FASE 11 · PREPRODUCCIÓN
+
+**Versión preparada:** 11.0.0
+
+Se añadió una fase de pulido previa al lanzamiento comercial:
+
+- onboarding persistente;
+- confirmación +18 y aceptación beta en registro;
+- Condiciones/Privacidad/Comunidad en documentos beta;
+- panel admin de preparación de producción;
+- cabeceras de seguridad y política no-store para API;
+- Service Worker v11;
+- checklist explícito para dominio, persistencia, verificación obligatoria, push, checkout V/R+ y revisión legal.
+
+Los documentos legales incluidos son borradores de producto y requieren revisión jurídica antes de producción.
+
+Health check esperado:
+
+```json
+{"ok":true,"db":true,"version":"11.0.0"}
+```

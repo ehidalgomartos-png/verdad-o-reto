@@ -59,10 +59,14 @@
       <form id="authForm" class="form-stack" novalidate>
         <div class="field"><label for="authEmail">Correo</label><input id="authEmail" type="email" maxlength="254" autocomplete="email" placeholder="tu@email.com" required></div>
         <div class="field"><label for="authPassword">Contraseña</label><input id="authPassword" type="password" minlength="8" maxlength="72" autocomplete="current-password" placeholder="Mínimo 8 caracteres" required></div>
+        <div id="registerLegalBox" class="register-legal-box hidden">
+          <label class="legal-check"><input id="confirmAdult" type="checkbox"><span><b>Confirmo que tengo 18 años o más.</b><small>V/R Match es exclusivamente para personas adultas.</small></span></label>
+          <label class="legal-check"><input id="acceptTerms" type="checkbox"><span><b>Acepto las condiciones beta y la privacidad.</b><small><a href="/terms.html" target="_blank" rel="noopener">Condiciones</a> · <a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a> · <a href="/community.html" target="_blank" rel="noopener">Comunidad</a></small></span></label>
+        </div>
         <button id="authSubmit" class="btn btn-primary btn-xl" type="submit"><span>Entrar</span><b>→</b></button>
       </form>
       <button id="forgotPasswordButton" class="auth-forgot" type="button" onclick="abrirRecuperacion()">¿Olvidaste tu contraseña?</button>
-      <p class="legal-note">V/R Match es solo para mayores de 18 años. Al crear una cuenta aceptas las normas de convivencia y seguridad.</p>
+      <p class="legal-note">Solo +18. Consulta nuestras <a href="/terms.html" target="_blank" rel="noopener">Condiciones beta</a>, <a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a> y <a href="/community.html" target="_blank" rel="noopener">Normas de comunidad</a>.</p>
     </section>
 
     <section id="pantallaPerfil" class="screen screen-profile hidden">
@@ -320,6 +324,7 @@
         <button id="adminTabReports" class="active" type="button" onclick="cambiarAdminTab('reports')">⚑ Denuncias</button>
         <button id="adminTabUsers" type="button" onclick="cambiarAdminTab('users')">👤 Usuarios</button>
         <button id="adminTabHistory" type="button" onclick="cambiarAdminTab('history')">🕘 Historial</button>
+        <button id="adminTabProduction" type="button" onclick="cambiarAdminTab('production')">🚀 Producción</button>
       </div>
 
       <div id="adminPaneReports" class="admin-pane">
@@ -344,6 +349,11 @@
       <div id="adminPaneHistory" class="admin-pane hidden">
         <div class="admin-history-head"><div><strong>Historial de moderación</strong><small>Cada acción administrativa queda registrada.</small></div><button class="btn btn-secondary" type="button" onclick="cargarAdminHistory()">↻ Actualizar</button></div>
         <div id="adminHistoryList" class="admin-history-list"><div class="empty-state"><span>🕘</span><strong>Sin cargar</strong></div></div>
+      </div>
+
+      <div id="adminPaneProduction" class="admin-pane hidden">
+        <div class="admin-history-head"><div><strong>Preparación de producción</strong><small>Checklist técnico sin mostrar secretos.</small></div><button class="btn btn-secondary" type="button" onclick="cargarProductionReadiness()">↻ Actualizar</button></div>
+        <div id="productionReadiness" class="production-readiness"><div class="empty-state"><span>🚀</span><strong>Comprueba el estado del producto</strong></div></div>
       </div>
     </section>
 
@@ -490,7 +500,7 @@
     FIN GOOGLE ADSENSE -->
   </aside>
 
-  <footer class="app-copyright" aria-label="Copyright">Copyright © 2026 Hidalgo Entertainment</footer>
+  <footer class="app-copyright" aria-label="Copyright"><span>Copyright © 2026 Hidalgo Entertainment</span><nav><a href="/terms.html" target="_blank" rel="noopener">Condiciones</a><a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a><a href="/community.html" target="_blank" rel="noopener">Comunidad</a></nav></footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <div id="confirmModal" class="modal hidden" aria-hidden="true">
@@ -557,6 +567,21 @@
     </div>
   </div>
 
+  <div id="onboardingModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card onboarding-modal-card">
+      <span class="onboarding-badge">V/R MATCH · BETA</span>
+      <h3>Haz match. Habla. Juega.</h3>
+      <p class="onboarding-lead">Cuatro ideas antes de empezar para que V/R Match sea más claro, privado y seguro.</p>
+      <div class="onboarding-grid">
+        <article><span>💕</span><strong>Dating primero</strong><small>Descubre perfiles, haz match y empieza a hablar antes de jugar.</small></article>
+        <article><span>🎮</span><strong>El juego rompe el hielo</strong><small>Las dinámicas viven dentro del chat y requieren aceptación del otro usuario.</small></article>
+        <article><span>📍</span><strong>Tu ubicación es aproximada</strong><small>Solo calculamos distancia. No mostramos coordenadas ni una dirección exacta.</small></article>
+        <article><span>🛡️</span><strong>Tú tienes el control</strong><small>Bloquea, denuncia o pausa tu perfil cuando lo necesites. V/R Match es solo +18.</small></article>
+      </div>
+      <div class="onboarding-actions"><a href="/community.html" target="_blank" rel="noopener" class="mini-link">Ver normas</a><button class="btn btn-primary" type="button" onclick="completarOnboarding()">Empezar</button></div>
+    </div>
+  </div>
+
   <div id="forgotModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card account-modal-card">
       <button class="modal-close" onclick="cerrarRecuperacion()">×</button>
@@ -587,6 +612,7 @@
       <div id="pwaInstallSection" class="settings-section"><strong>Aplicación</strong><div class="pwa-install-card"><div class="pwa-install-icon">V/R</div><div><b>Instalar V/R Match</b><small id="pwaInstallStatus">Añade V/R Match a tu pantalla de inicio y ábrelo como una app.</small></div></div><button id="pwaInstallButton" class="btn btn-secondary" type="button" onclick="instalarPWA()">⇩ Instalar aplicación</button></div>
       <div class="settings-section"><strong>Cambiar contraseña</strong><div class="field"><input id="currentPassword" type="password" maxlength="72" autocomplete="current-password" placeholder="Contraseña actual"></div><div class="field"><input id="newPassword" type="password" maxlength="72" autocomplete="new-password" placeholder="Nueva contraseña · mínimo 8"></div><button class="btn btn-secondary" type="button" onclick="cambiarPasswordCuenta()">Actualizar contraseña</button></div>
       <button id="accountPlusButton" class="btn btn-secondary" type="button" onclick="cerrarCuenta();abrirPlus()">✦ Ver V/R+</button>
+      <div class="settings-section"><strong>Legal y seguridad</strong><p class="account-legal-copy">V/R Match está en beta. Los textos legales actuales son borradores de producto y deben revisarse profesionalmente antes del lanzamiento comercial.</p><div class="account-legal-links"><a href="/terms.html" target="_blank" rel="noopener">Condiciones beta</a><a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a><a href="/community.html" target="_blank" rel="noopener">Normas de comunidad</a></div></div>
       <button id="adminPanelButton" class="btn btn-secondary hidden" type="button" onclick="abrirAdmin()">⚑ Abrir panel de moderación</button>
       <div class="danger-zone"><strong>Zona de riesgo</strong><p>Eliminar la cuenta borra perfil, matches, mensajes, fotos y sesiones de forma permanente.</p><button class="btn btn-danger-soft" type="button" onclick="abrirEliminarCuenta()">Eliminar mi cuenta</button></div>
     </div>
@@ -667,6 +693,7 @@
     let currentUserEmail = '';
     let currentUserEmailVerified = false;
     let currentUserAdmin = false;
+    let currentOnboardingCompleted = true;
     let currentPlus = { active:false, plan:'free', status:'inactive', expiresAt:null, settings:{verifiedOnly:false,minSharedInterests:0,sortMode:'smart'}, boost:{active:false,activeUntil:null,cooldownUntil:null,available:false}, billingEnabled:false };
     let plusReturnScreen = 'pantallaDescubrir';
     let currentPrivacy = { discoverable:true, showOnline:true, allowGameInvites:true };
@@ -1440,6 +1467,8 @@
       $('authTabRegister').classList.toggle('active', authMode === 'register');
       $('authSubmit').querySelector('span').textContent = authMode === 'login' ? 'Entrar' : 'Crear cuenta';
       $('authPassword').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
+      $('registerLegalBox').classList.toggle('hidden', authMode !== 'register');
+      $('forgotPasswordButton').classList.toggle('hidden', authMode === 'register');
     }
 
     function conectarSocket() {
@@ -1565,6 +1594,7 @@
       authToken = result.token || authToken;
       if (authToken) localStorage.setItem('vr_auth_token', authToken);
       aplicarCuenta(result.user || {});
+      currentOnboardingCompleted = result.onboardingCompleted !== false;
       aplicarPlusState(result.plus || currentPlus);
       if(result.notificationState)aplicarEstadoNotificaciones(result.notificationState);
       if (result.profile) aplicarPerfilServidor(result.profile);
@@ -1581,6 +1611,14 @@
           renderDatingCard(); renderMatches();
         }
       } else showScreen('pantallaPerfil');
+      if (!currentOnboardingCompleted) setTimeout(abrirOnboarding, 180);
+    }
+
+    function abrirOnboarding() { $('onboardingModal').classList.remove('hidden'); $('onboardingModal').setAttribute('aria-hidden','false'); }
+    async function completarOnboarding() {
+      const res=await api('/api/account/onboarding-complete',{method:'POST',body:{}});
+      if(!res.ok)return mostrarToast(res.error||'No se pudo completar el inicio.','error');
+      currentOnboardingCompleted=true; $('onboardingModal').classList.add('hidden'); $('onboardingModal').setAttribute('aria-hidden','true'); mostrarToast('Todo listo. Bienvenido a V/R Match.','info');
     }
 
     async function bootstrapAuth() {
@@ -1598,7 +1636,7 @@
       if (callApi && oldToken) await desvincularPushSesion();
       if (callApi && oldToken) await api('/api/auth/logout', { method:'POST', body:{} });
       if (socket.connected) socket.disconnect();
-      authToken=''; currentUserId=''; currentUserEmail=''; currentUserEmailVerified=false; currentUserAdmin=false; currentPlus=normalizarPlus({});
+      authToken=''; currentUserId=''; currentUserEmail=''; currentUserEmailVerified=false; currentUserAdmin=false; currentOnboardingCompleted=true; currentPlus=normalizarPlus({});
       notificationItems=[];notificationUnread=0;notificationPreferences=normalizarPreferenciasNotificacion({});pushSubscriptionActive=false;
       localStorage.removeItem('vr_auth_token'); localStorage.removeItem('vr_profile');
       datingProfiles=[]; datingMatches=[]; datingPassed=new Set(); datingChats.clear();
@@ -1635,6 +1673,16 @@
       await cargarAdminStats();
       await cambiarAdminTab(adminCurrentTab || 'reports');
     }
+    async function cargarProductionReadiness() {
+      if(!currentUserAdmin)return;
+      const box=$('productionReadiness'); box.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Comprobando…</strong></div>';
+      const res=await api('/api/admin/production-readiness');
+      if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudo comprobar')}</strong></div>`;return;}
+      const r=res.readiness||{};
+      const items=[['Dominio propio',r.customDomain],['Persistencia de datos',r.persistentStorage],['SMTP',r.smtpConfigured],['Verificación obligatoria',r.emailVerificationRequired],['Administrador',r.adminConfigured],['Web Push',r.webPushConfigured],['Cobro V/R+',r.billingConfigured]];
+      box.innerHTML=`<div class="production-hero ${r.productionReady?'ready':'pending'}"><span>${r.productionReady?'✓':'⚙'}</span><div><strong>${r.productionReady?'Base técnica lista':'Beta funcional · producción pendiente'}</strong><small>Versión ${escapeHtml(r.version||'')} · legal ${escapeHtml(r.legalVersion||'')}</small></div></div><div class="production-grid">${items.map(([label,ok])=>`<div><span class="production-dot ${ok?'ok':'pending'}"></span><strong>${escapeHtml(label)}</strong><small>${ok?'Configurado':'Pendiente'}</small></div>`).join('')}</div><div class="production-pending"><strong>Antes del lanzamiento comercial</strong><ul>${(r.pending||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`;
+    }
+
     function cerrarAdmin() { cerrarAdminUsuario(); showScreen('pantallaPerfil'); }
     async function cargarAdminStats() {
       const res=await api('/api/admin/stats');
@@ -1644,16 +1692,19 @@
       [...$('adminStats').querySelectorAll('strong')].forEach((el,i)=>el.textContent=String(vals[i]??'—'));
     }
     async function cambiarAdminTab(tab='reports') {
-      adminCurrentTab=['reports','users','history'].includes(tab)?tab:'reports';
+      adminCurrentTab=['reports','users','history','production'].includes(tab)?tab:'reports';
       $('adminPaneReports').classList.toggle('hidden',adminCurrentTab!=='reports');
       $('adminPaneUsers').classList.toggle('hidden',adminCurrentTab!=='users');
       $('adminPaneHistory').classList.toggle('hidden',adminCurrentTab!=='history');
+      $('adminPaneProduction').classList.toggle('hidden',adminCurrentTab!=='production');
       $('adminTabReports').classList.toggle('active',adminCurrentTab==='reports');
       $('adminTabUsers').classList.toggle('active',adminCurrentTab==='users');
       $('adminTabHistory').classList.toggle('active',adminCurrentTab==='history');
+      $('adminTabProduction').classList.toggle('active',adminCurrentTab==='production');
       if(adminCurrentTab==='reports')await cargarAdminReports();
       if(adminCurrentTab==='users')await cargarAdminUsers();
       if(adminCurrentTab==='history')await cargarAdminHistory();
+      if(adminCurrentTab==='production')await cargarProductionReadiness();
     }
     const adminReasonLabels={harassment:'Acoso',fake:'Perfil falso',spam:'Spam / estafa',sexual:'Contenido sexual no consentido',underage:'Posible menor de edad',other:'Otro'};
     const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',suspend:'Cuenta suspendida',reactivate:'Cuenta reactivada',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado'};
@@ -3128,7 +3179,9 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
       const password=String($('authPassword').value||'');
       if (!email || !password) return mostrarToast('Completa correo y contraseña.','warn');
       const endpoint=authMode==='register'?'/api/auth/register':'/api/auth/login';
-      const res=await api(endpoint,{method:'POST',body:{email,password}});
+      const body={email,password};
+      if(authMode==='register'){body.confirmAdult=$('confirmAdult').checked;body.acceptTerms=$('acceptTerms').checked;if(!body.confirmAdult)return mostrarToast('Confirma que tienes 18 años o más.','warn');if(!body.acceptTerms)return mostrarToast('Acepta las condiciones beta y la privacidad.','warn');}
+      const res=await api(endpoint,{method:'POST',body});
       if (!res.ok) return mostrarToast(res.error || 'No se pudo acceder.','error');
       if (res.verificationRequired && !res.token) { mostrarToast(res.emailSent?'Cuenta creada. Revisa tu correo para verificarla.':'Cuenta creada, pero falta configurar el envío de correo en el servidor.','info'); cambiarAuthMode('login'); return; }
       await completarAcceso(res);

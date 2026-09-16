@@ -1,8 +1,8 @@
 {
   "name": "vr-match",
-  "version": "10.0.0",
+  "version": "11.0.0",
   "private": true,
-  "description": "V/R Match dating app with proximity, moderation, V/R+, notifications and installable PWA experience",
+  "description": "V/R Match dating app - preproduction polish, onboarding, legal beta, security readiness, PWA and notifications",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

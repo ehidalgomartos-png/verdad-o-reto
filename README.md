@@ -1,55 +1,49 @@
-# V/R Match — Fase 10 · PWA instalable
+# V/R Match — Fase 11 · Preproducción
 
-Versión: **10.0.0**
+Versión: **11.0.0**
 
-Esta fase convierte V/R Match en una **Progressive Web App instalable**, conservando todas las funciones de las fases anteriores.
+Esta fase no añade un nuevo modelo de negocio ni cambia el núcleo dating → chat → juego. Su objetivo es **pulir la beta y preparar el salto posterior a producción**.
 
-## Qué añade Fase 10
+## Qué añade
 
-- `manifest.webmanifest` con identidad V/R Match.
-- Iconos 192×192, 512×512, maskable y Apple Touch Icon.
-- Instalación desde Chrome/Edge/Android mediante el prompt nativo cuando está disponible.
-- Instrucciones específicas para iPhone/iPad: Safari → Compartir → Añadir a pantalla de inicio.
-- Botón de instalación en la cabecera cuando el navegador permite instalar.
-- Sección **Aplicación** dentro de Cuenta y seguridad.
-- Modo `standalone`: al abrir desde la pantalla de inicio se comporta como una app independiente.
-- Service Worker actualizado con caché controlada del shell público.
-- Pantalla offline de respaldo.
-- Web Push de Fase 9 conservado en el mismo Service Worker.
-- Safe areas para móviles con notch/isla dinámica.
+- onboarding persistente de bienvenida;
+- confirmación +18 y aceptación explícita de condiciones/privacidad al registrar cuentas nuevas;
+- borradores beta de Condiciones, Privacidad y Normas de comunidad;
+- enlaces legales desde login, cuenta y footer;
+- panel admin **Producción** con checklist técnico;
+- endpoint admin `/api/admin/production-readiness`;
+- cabeceras de seguridad adicionales (CSP, COOP, CORP, no-store en API);
+- `index.html` sin caché HTTP para reducir versiones visuales obsoletas tras deploy;
+- Service Worker actualizado a caché `v11`;
+- health check `11.0.0`.
 
-## Importante sobre el modo offline
+## Importante
 
-V/R Match puede arrancar como PWA, pero perfiles, matches, mensajes, ubicación y partidas siguen necesitando conexión con el backend. No se guardan datos privados de usuarios en la caché del Service Worker.
+Los textos legales son **borradores de beta, no una revisión jurídica final**. Antes del lanzamiento comercial deben adaptarse a la entidad responsable, política real de conservación, proveedores, jurisdicción y cumplimiento aplicable.
 
-La caché excluye expresamente:
-
-- `/api/*`
-- `/socket.io/*`
-- `/uploads/*`
-
-## Render
-
-No se necesitan variables de entorno nuevas para instalar la PWA.
-
-Continúan pendientes para producción:
+## Pendiente para cierre de producción
 
 - dominio propio;
-- Render de pago y persistencia;
-- remitente de correo con dominio propio;
-- VAPID si se decide activar push real de fondo;
-- checkout real de V/R+.
+- Render de pago + almacenamiento persistente o migración de base de datos/objetos;
+- remitente de correo en dominio propio;
+- activar `VR_REQUIRE_EMAIL_VERIFICATION=true`;
+- VAPID si se quiere push real en segundo plano;
+- checkout real de V/R+;
+- revisión jurídica final.
 
-## Health check
+## Deploy
 
-```json
-{"ok":true,"db":true,"version":"10.0.0"}
-```
+No requiere nuevas variables obligatorias. Sustituye los archivos del repositorio y deja que Render despliegue.
 
-En logs:
+Esperado:
 
 ```text
-V/R Match v10.0 escuchando en puerto 10000
+V/R Match v11.0 escuchando en puerto 10000
+Preproducción: pendiente | legal beta-2026-09-16
 ```
 
-Consulta `PRUEBA-FASE10.md` después del deploy.
+```json
+{"ok":true,"db":true,"version":"11.0.0"}
+```
+
+Consulta `PRUEBA-FASE11.md`.

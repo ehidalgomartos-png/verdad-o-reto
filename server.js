@@ -22,6 +22,8 @@ const io = new Server(server, {
   }
 });
 
+const APP_VERSION = '11.0.0';
+const LEGAL_VERSION = 'beta-2026-09-16';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 // En local guarda dentro del proyecto. En Render, define VR_STORAGE_DIR=/var/data
@@ -166,6 +168,7 @@ ensureColumn('reports', 'updated_at', 'INTEGER');
 ensureColumn('reports', 'moderator_note', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('reports', 'match_id', 'TEXT');
 ensureColumn('reports', 'evidence_json', "TEXT NOT NULL DEFAULT '[]'");
+ensureColumn('users', 'onboarding_completed', 'INTEGER NOT NULL DEFAULT 0');
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS auth_tokens (
@@ -241,6 +244,15 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   UNIQUE(user_id, endpoint)
 );
 CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
+CREATE TABLE IF NOT EXISTS legal_acceptances (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  legal_version TEXT NOT NULL,
+  adult_confirmed INTEGER NOT NULL DEFAULT 1,
+  terms_accepted INTEGER NOT NULL DEFAULT 1,
+  accepted_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_legal_acceptances_user ON legal_acceptances(user_id, accepted_at DESC);
 `);
 
 app.disable('x-powered-by');
@@ -249,7 +261,11 @@ app.use((req,res,next) => {
   res.setHeader('X-Content-Type-Options','nosniff');
   res.setHeader('X-Frame-Options','DENY');
   res.setHeader('Referrer-Policy','strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy','camera=(self), microphone=(self), geolocation=(self)');
+  res.setHeader('Permissions-Policy','camera=(self), microphone=(self), geolocation=(self), payment=()');
+  res.setHeader('Cross-Origin-Opener-Policy','same-origin');
+  res.setHeader('Cross-Origin-Resource-Policy','same-origin');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https: wss:; worker-src 'self'; manifest-src 'self'; font-src 'self' data:");
+  if (req.path.startsWith('/api/')) res.setHeader('Cache-Control','no-store');
   if (process.env.NODE_ENV === 'production' || process.env.RENDER) res.setHeader('Strict-Transport-Security','max-age=15552000; includeSubDomains');
   next();
 });
@@ -817,19 +833,25 @@ app.post('/api/auth/register', rateLimit({limit:8,windowMs:60*60*1000,key:req=>r
   try {
     const email = cleanEmail(req.body?.email);
     const password = String(req.body?.password || '');
+    const confirmAdult = req.body?.confirmAdult === true;
+    const acceptTerms = req.body?.acceptTerms === true;
+    if (!confirmAdult) return res.status(400).json({ok:false,error:'Debes confirmar que tienes 18 años o más.'});
+    if (!acceptTerms) return res.status(400).json({ok:false,error:'Debes aceptar las condiciones beta y la política de privacidad.'});
     if (!validEmail(email)) return res.status(400).json({ ok:false, error:'Introduce un correo válido.' });
     if (Buffer.byteLength(password,'utf8') < 8 || Buffer.byteLength(password,'utf8') > 72) return res.status(400).json({ ok:false, error:'La contraseña debe tener entre 8 y 72 caracteres aprox.' });
     if (db.prepare('SELECT 1 FROM users WHERE email=?').get(email)) return res.status(409).json({ ok:false, error:'Ya existe una cuenta con ese correo.' });
     const id = safeId('usr');
     const passwordHash = hashPassword(password);
     const ts = now();
-    db.prepare('INSERT INTO users(id,email,password_hash,created_at,last_seen_at,email_verified) VALUES(?,?,?,?,?,0)').run(id,email,passwordHash,ts,ts);
+    db.prepare('INSERT INTO users(id,email,password_hash,created_at,last_seen_at,email_verified,onboarding_completed) VALUES(?,?,?,?,?,0,0)').run(id,email,passwordHash,ts,ts);
+    db.prepare('INSERT INTO legal_acceptances(id,user_id,legal_version,adult_confirmed,terms_accepted,accepted_at) VALUES(?,?,?,?,?,?)')
+      .run(safeId('legal'),id,LEGAL_VERSION,1,1,ts);
     const user = {id,email};
     let emailSent = false;
     try { emailSent = (await sendVerificationEmail(req,user)).sent; } catch (e) { console.error('Error enviando verificación:',e.message); }
-    if (REQUIRE_EMAIL_VERIFICATION) return res.json({ok:true,verificationRequired:true,emailSent,user:{...user,emailVerified:false}});
+    if (REQUIRE_EMAIL_VERIFICATION) return res.json({ok:true,verificationRequired:true,emailSent,user:{...user,emailVerified:false},onboardingCompleted:false});
     const token = createSession(id);
-    res.json({ ok:true, token, user:{ ...user, emailVerified:false, admin:isAdmin(user) }, profile:null, plus:getPlusState(id), emailVerificationPending:true, emailSent });
+    res.json({ ok:true, token, user:{ ...user, emailVerified:false, admin:isAdmin(user) }, profile:null, plus:getPlusState(id), onboardingCompleted:false, emailVerificationPending:true, emailSent });
   } catch (e) {
     console.error(e); res.status(500).json({ ok:false, error:'No se pudo crear la cuenta.' });
   }
@@ -844,7 +866,7 @@ app.post('/api/auth/login', rateLimit({limit:25,windowMs:15*60*1000,key:req=>`${
     if (REQUIRE_EMAIL_VERIFICATION && !row.email_verified) return res.status(403).json({ok:false,error:'Primero verifica tu correo.',verificationRequired:true});
     db.prepare('UPDATE users SET last_seen_at=? WHERE id=?').run(now(),row.id);
     const token = createSession(row.id);
-    res.json({ ok:true, token, user:{id:row.id,email:row.email,emailVerified:Boolean(row.email_verified),admin:isAdmin(row)}, profile:getProfile(row.id), plus:getPlusState(row.id) });
+    res.json({ ok:true, token, user:{id:row.id,email:row.email,emailVerified:Boolean(row.email_verified),admin:isAdmin(row)}, profile:getProfile(row.id), plus:getPlusState(row.id), onboardingCompleted:Boolean(row.onboarding_completed) });
   } catch (e) {
     console.error(e); res.status(500).json({ ok:false, error:'No se pudo iniciar sesión.' });
   }
@@ -866,7 +888,8 @@ app.post('/api/auth/reset', rateLimit({limit:10,windowMs:60*60*1000,key:req=>req
     db.prepare('DELETE FROM sessions WHERE user_id=?').run(row.user_id);
     const user=db.prepare('SELECT id,email,email_verified FROM users WHERE id=?').get(row.user_id);
     const session=createSession(row.user_id);
-    res.json({ok:true,token:session,user:{id:user.id,email:user.email,emailVerified:Boolean(user.email_verified),admin:isAdmin(user)},profile:getProfile(user.id),plus:getPlusState(user.id)});
+    const onboarding=db.prepare('SELECT onboarding_completed FROM users WHERE id=?').get(user.id);
+    res.json({ok:true,token:session,user:{id:user.id,email:user.email,emailVerified:Boolean(user.email_verified),admin:isAdmin(user)},profile:getProfile(user.id),plus:getPlusState(user.id),onboardingCompleted:Boolean(onboarding?.onboarding_completed)});
   } catch(e){console.error(e);res.status(500).json({ok:false,error:'No se pudo restablecer la contraseña.'});}
 });
 
@@ -890,8 +913,13 @@ app.post('/api/auth/logout', requireAuth, (req,res) => {
 });
 
 app.get('/api/me', requireAuth, (req,res) => {
-  const full=db.prepare('SELECT email_verified FROM users WHERE id=?').get(req.user.id);
-  res.json({ ok:true, user:{id:req.user.id,email:req.user.email,emailVerified:Boolean(full?.email_verified),admin:isAdmin(req.user)}, profile:getProfile(req.user.id), matches:matchesFor(req.user.id), plus:getPlusState(req.user.id), notificationState:notificationState(req.user.id) });
+  const full=db.prepare('SELECT email_verified,onboarding_completed FROM users WHERE id=?').get(req.user.id);
+  res.json({ ok:true, user:{id:req.user.id,email:req.user.email,emailVerified:Boolean(full?.email_verified),admin:isAdmin(req.user)}, profile:getProfile(req.user.id), matches:matchesFor(req.user.id), plus:getPlusState(req.user.id), notificationState:notificationState(req.user.id), onboardingCompleted:Boolean(full?.onboarding_completed) });
+});
+
+app.post('/api/account/onboarding-complete', requireAuth, (req,res) => {
+  db.prepare('UPDATE users SET onboarding_completed=1 WHERE id=?').run(req.user.id);
+  res.json({ok:true,onboardingCompleted:true});
 });
 
 app.get('/api/notifications', requireAuth, (req,res) => {
@@ -1263,9 +1291,36 @@ app.post('/api/report', requireAuth, rateLimit({limit:10,windowMs:60*60*1000,key
   res.json({ok:true});
 });
 
-app.get('/healthz', (req,res) => { try { db.prepare('SELECT 1').get(); res.status(200).json({ok:true,db:true,version:'10.0.0'}); } catch { res.status(503).json({ok:false,db:false}); } });
+function productionReadiness() {
+  let hostname = '';
+  try { hostname = APP_BASE_URL ? new URL(APP_BASE_URL).hostname : ''; } catch {}
+  const customDomain = Boolean(hostname && !hostname.endsWith('.onrender.com') && hostname !== 'localhost');
+  const persistentStorage = path.resolve(STORAGE_DIR) !== path.resolve(ROOT);
+  return {
+    version: APP_VERSION,
+    legalVersion: LEGAL_VERSION,
+    customDomain,
+    persistentStorage,
+    smtpConfigured: SMTP_CONFIGURED,
+    emailVerificationRequired: REQUIRE_EMAIL_VERIFICATION,
+    adminConfigured: ADMIN_EMAILS.size > 0,
+    webPushConfigured: PUSH_CONFIGURED,
+    billingConfigured: false,
+    productionReady: Boolean(customDomain && persistentStorage && SMTP_CONFIGURED && REQUIRE_EMAIL_VERIFICATION && ADMIN_EMAILS.size > 0),
+    pending: [
+      !customDomain ? 'Dominio propio' : null,
+      !persistentStorage ? 'Persistencia de datos / Render de pago o base administrada' : null,
+      !REQUIRE_EMAIL_VERIFICATION ? 'Verificación de email obligatoria' : null,
+      !PUSH_CONFIGURED ? 'Web Push VAPID (opcional)' : null,
+      'Checkout real V/R+ y revisión legal final'
+    ].filter(Boolean)
+  };
+}
+
+app.get('/api/admin/production-readiness', requireAuth, requireAdmin, (req,res) => res.json({ok:true,readiness:productionReadiness()}));
+app.get('/healthz', (req,res) => { try { db.prepare('SELECT 1').get(); res.status(200).json({ok:true,db:true,version:APP_VERSION}); } catch { res.status(503).json({ok:false,db:false}); } });
 app.use('/uploads', express.static(UPLOAD_DIR, { fallthrough:false, maxAge:'7d', dotfiles:'deny' }));
-app.get(['/', '/index.html'], (req,res) => res.sendFile(path.join(ROOT,'index.html')));
+app.get(['/', '/index.html'], (req,res) => { res.setHeader('Cache-Control','no-cache, no-store, must-revalidate'); res.sendFile(path.join(ROOT,'index.html')); });
 app.get('/styles.css', (req,res) => res.sendFile(path.join(ROOT,'styles.css')));
 app.get('/manifest.webmanifest', (req,res) => { res.type('application/manifest+json'); res.setHeader('Cache-Control','public, max-age=3600'); res.sendFile(path.join(ROOT,'manifest.webmanifest')); });
 app.get('/offline.html', (req,res) => res.sendFile(path.join(ROOT,'offline.html')));
@@ -1274,6 +1329,9 @@ app.get('/icons/icon-512.png', (req,res) => res.sendFile(path.join(ROOT,'icons',
 app.get('/icons/icon-maskable-512.png', (req,res) => res.sendFile(path.join(ROOT,'icons','icon-maskable-512.png')));
 app.get('/icons/apple-touch-icon.png', (req,res) => res.sendFile(path.join(ROOT,'icons','apple-touch-icon.png')));
 app.get('/sw.js', (req,res) => { res.type('application/javascript'); res.setHeader('Cache-Control','no-cache, no-store, must-revalidate'); res.sendFile(path.join(ROOT,'sw.js')); });
+app.get('/terms.html', (req,res) => res.sendFile(path.join(ROOT,'terms.html')));
+app.get('/privacy.html', (req,res) => res.sendFile(path.join(ROOT,'privacy.html')));
+app.get('/community.html', (req,res) => res.sendFile(path.join(ROOT,'community.html')));
 app.get('/preview.html', (req,res) => res.sendFile(path.join(ROOT,'preview.html')));
 
 function socketSet(userId) {
@@ -1481,4 +1539,4 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{console.log(`V/R Match v10.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);});
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v11.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);});
