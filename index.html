@@ -7,6 +7,18 @@
   <meta name="description" content="Verdad o Reto - juego multijugador online">
   <title>V/R • Verdad o Reto</title>
   <link rel="stylesheet" href="/styles.css">
+
+  <!-- =========================================================
+       GOOGLE ADSENSE · PASO 1
+       Cuando AdSense te entregue tu ID de editor, sustituye
+       ca-pub-TU_ID_DE_EDITOR y descomenta SOLO este <script>.
+       Este script debe cargarse una sola vez por página.
+       ========================================================= -->
+  <!--
+  <script async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-TU_ID_DE_EDITOR"
+          crossorigin="anonymous"></script>
+  -->
 </head>
 <body>
   <div class="bg-orb orb-1"></div>
@@ -177,6 +189,39 @@
       <div class="game-hint" id="gameHint">El turno pasa automáticamente al completar tu respuesta.</div>
     </section>
   </main>
+
+  <!-- =========================================================
+       GOOGLE ADSENSE · BANNER INFERIOR
+
+       PASO 2: crea en AdSense un bloque de anuncio Display
+       adaptable y sustituye:
+         1) ca-pub-TU_ID_DE_EDITOR
+         2) TU_ID_DE_BLOQUE
+
+       PASO 3: elimina los símbolos de comentario que rodean
+       el bloque <ins> + <script> que aparece más abajo.
+
+       Mientras no lo actives, se verá el placeholder de prueba.
+       ========================================================= -->
+  <aside class="ad-slot" id="bannerInferior" aria-label="Espacio publicitario">
+    <div class="ad-placeholder" id="adsensePlaceholder">
+      <span>ESPACIO PUBLICITARIO</span>
+      <strong>Google AdSense · bloque responsive preparado</strong>
+      <small>Actívalo reemplazando el ID de editor y el ID del bloque.</small>
+    </div>
+
+    <!-- INICIO GOOGLE ADSENSE - DESCOMENTAR CUANDO TENGAS LOS IDs
+    <ins class="adsbygoogle adsense-mobile-banner"
+         style="display:block"
+         data-ad-client="ca-pub-TU_ID_DE_EDITOR"
+         data-ad-slot="TU_ID_DE_BLOQUE"
+         data-ad-format="auto"
+         data-full-width-responsive="false"></ins>
+    <script>
+      (adsbygoogle = window.adsbygoogle || []).push({});
+    </script>
+    FIN GOOGLE ADSENSE -->
+  </aside>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <div id="confirmModal" class="modal hidden" aria-hidden="true">

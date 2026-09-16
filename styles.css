@@ -79,3 +79,94 @@ input { width:100%; border:1px solid rgba(255,255,255,.09); background:#0d0d14; 
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition:none!important}}
 
 @media (max-width:480px){.profile-avatar-row{align-items:flex-start}.profile-avatar-preview{width:64px;height:64px;flex-basis:64px}.avatar-options{grid-template-columns:repeat(6,1fr);gap:5px}.proof-choice-grid{grid-template-columns:1fr 1fr}.camera-card{padding:10px;border-radius:22px}.camera-stage{max-height:60vh}.camera-actions{grid-template-columns:1fr 64px 1fr;gap:7px}.camera-shutter{width:58px;height:58px}}
+
+/* Banner inferior responsive */
+.ad-slot{
+  position:relative;
+  z-index:1;
+  width:min(92vw,520px);
+  min-height:100px;
+  margin:0 auto calc(22px + env(safe-area-inset-bottom));
+  border:1px dashed rgba(255,255,255,.12);
+  border-radius:18px;
+  overflow:hidden;
+  background:rgba(13,13,20,.72);
+  box-shadow:0 16px 45px rgba(0,0,0,.24);
+}
+.ad-placeholder{
+  min-height:100px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  padding:14px;
+  text-align:center;
+  color:#747786;
+}
+.ad-placeholder span{font-size:8px;font-weight:900;letter-spacing:.18em;color:#626574}
+.ad-placeholder strong{font-size:11px;color:#9a9dab}
+.ad-banner-link{display:block;width:100%;line-height:0}
+.ad-banner-link img{display:block;width:100%;height:auto;max-height:140px;object-fit:cover}
+
+/* Mantiene la misma composición también en móviles pequeños */
+@media (max-width:380px){
+  .app-shell,.ad-slot{width:calc(100vw - 20px)}
+  .app-shell{padding-top:10px;padding-bottom:18px}
+  .brand-bar{gap:8px;margin-left:2px;margin-right:2px;margin-bottom:10px}
+  .brand-mark{font-size:21px}
+  .brand-copy strong{font-size:11px;letter-spacing:.13em;white-space:nowrap}
+  .connection-badge{font-size:8px;gap:5px}
+  .connection-dot{width:6px;height:6px}
+  .screen{padding:16px;border-radius:20px}
+  .screen-profile{padding-top:17px}
+  .hero-icon{width:62px;height:62px;border-radius:19px;margin-bottom:14px;font-size:28px}
+  .eyebrow{font-size:9px}
+  h1{font-size:clamp(30px,10vw,34px);margin-bottom:7px}
+  .subtitle{font-size:12px;line-height:1.45;margin-bottom:18px}
+  .form-stack{gap:12px}
+  .profile-avatar-row{gap:10px;padding:10px;border-radius:16px}
+  .profile-avatar-preview{width:58px;height:58px;flex-basis:58px;border-radius:17px}
+  .profile-avatar-copy strong{font-size:11px}
+  .profile-avatar-copy small{font-size:8px}
+  .avatar-options{gap:5px}
+  .avatar-options button{height:38px;border-radius:11px;font-size:18px}
+  .field{gap:6px}
+  label{font-size:11px}
+  input{padding:13px 14px;border-radius:14px}
+  .field-hint,.mini-info,.legal-note{font-size:9px}
+  .btn-xl{min-height:50px;font-size:14px;margin-top:2px}
+  .legal-note{margin-top:14px}
+  .ad-slot{min-height:90px;border-radius:16px;margin-bottom:calc(16px + env(safe-area-inset-bottom))}
+  .ad-placeholder{min-height:90px;padding:12px}
+}
+
+@media (max-width:340px){
+  .app-shell,.ad-slot{width:calc(100vw - 14px)}
+  .screen{padding:14px}
+  .brand-bar{gap:6px}
+  .brand-mark{font-size:20px}
+  .brand-copy strong{font-size:10px;letter-spacing:.11em}
+  .connection-badge{font-size:7px}
+  .hero-icon{width:58px;height:58px;margin-bottom:12px}
+  .profile-avatar-preview{width:54px;height:54px;flex-basis:54px}
+  .avatar-options button{height:35px;font-size:17px}
+  input{padding:12px 13px}
+  .btn-xl{min-height:48px}
+}
+
+
+/* Google AdSense: el bloque respeta el ancho visual de la app */
+.adsense-mobile-banner{
+  width:100%;
+  min-height:90px;
+}
+.ad-placeholder small{
+  max-width:310px;
+  font-size:9px;
+  line-height:1.45;
+  color:#626574;
+}
+.adsbygoogle[data-ad-status="unfilled"]{
+  display:none !important;
+}

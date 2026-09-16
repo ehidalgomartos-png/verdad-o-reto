@@ -1,0 +1,29 @@
+VERDAD O RETO · GOOGLE ADSENSE
+==============================
+
+El proyecto ya tiene reservado el banner inferior responsive.
+No hace falta tocar server.js ni package.json.
+
+1. En Google AdSense crea un bloque de anuncio de tipo Display y tamaño Adaptable.
+2. Google te dará dos datos importantes:
+   - ID de editor: ca-pub-XXXXXXXXXXXXXXXX
+   - ID de bloque: data-ad-slot="XXXXXXXXXX"
+3. Abre index.html.
+4. Busca: GOOGLE ADSENSE · PASO 1
+   - Sustituye ca-pub-TU_ID_DE_EDITOR por tu ID real.
+   - Descomenta el <script> de AdSense.
+5. Busca: INICIO GOOGLE ADSENSE
+   - Sustituye ca-pub-TU_ID_DE_EDITOR.
+   - Sustituye TU_ID_DE_BLOQUE.
+   - Descomenta el bloque <ins> y el <script> que hace push({}).
+6. Cuando el anuncio esté activo, elimina el div con id="adsensePlaceholder"
+   para que no aparezca el texto de prueba encima del anuncio.
+
+El anuncio usa data-ad-format="auto" y data-full-width-responsive="false"
+para adaptarse al ancho del contenedor del juego sin intentar ocupar todo el ancho
+físico del móvil.
+
+IMPORTANTE:
+- El script principal de AdSense debe cargarse una sola vez por página.
+- La cuenta/sitio debe estar aprobado por Google para servir anuncios.
+- No hagas clic en tus propios anuncios.
