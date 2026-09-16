@@ -17,6 +17,9 @@ const PORT = process.env.PORT || 3000;
 const VALID_MAZOS = new Set(['rompehielos', 'parejas', 'seccionXX']);
 const waitingPlayers = new Map(); // socket.id -> { id, nombre, mazo }
 const rooms = new Map(); // roomId -> { players:Set, creatorId, mazo }
+const datingProfiles = new Map(); // socket.id -> perfil público temporal
+const datingLikes = new Map(); // socket.id -> Set(socket.id)
+
 
 function cleanName(value) {
   return String(value ?? 'Anónimo').replace(/[^\p{L}\p{N} _.'-]/gu, '').trim().slice(0, 24) || 'Anónimo';
@@ -66,8 +69,132 @@ function leaveRoom(socket, notifyOpponent = false) {
   else if (room.creatorId === socket.id) room.creatorId = [...room.players][0];
 }
 
+function cleanShortText(value, max = 180) {
+  return String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+function cleanInterests(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map(v => cleanShortText(v, 24)).filter(Boolean).slice(0, 5);
+}
+
+function publicDatingProfile(socket) {
+  return datingProfiles.get(socket.id) || null;
+}
+
+function broadcastDatingProfiles() {
+  const all = [...datingProfiles.values()];
+  for (const s of io.sockets.sockets.values()) {
+    if (!datingProfiles.has(s.id)) continue;
+    s.emit('dating_profiles', all.filter(p => p.id !== s.id));
+  }
+}
+
+function removeDatingProfile(socketId) {
+  datingProfiles.delete(socketId);
+  datingLikes.delete(socketId);
+  for (const likes of datingLikes.values()) likes.delete(socketId);
+  broadcastDatingProfiles();
+}
+
+function areDatingMatched(a, b) {
+  return Boolean(datingLikes.get(a)?.has(b) && datingLikes.get(b)?.has(a));
+}
+
+function createDatingRoom(socket, opponent, mazo) {
+  const deck = validDeck(mazo);
+  leaveRoom(socket);
+  leaveRoom(opponent);
+  removeFromLobby(socket.id);
+  removeFromLobby(opponent.id);
+  const salaID = safeRoomId();
+  socket.join(salaID);
+  opponent.join(salaID);
+  socket.room = salaID;
+  opponent.room = salaID;
+  socket.mazo = opponent.mazo = deck;
+  rooms.set(salaID, { players: new Set([socket.id, opponent.id]), creatorId: socket.id, mazo: deck });
+  socket.emit('partida_iniciada', {
+    salaID, creadorID: socket.id, mazo: deck, origen: 'dating',
+    oponenteNombre: opponent.nombre || 'Tu match',
+    oponenteAvatar: opponent.avatar || ''
+  });
+  opponent.emit('partida_iniciada', {
+    salaID, creadorID: socket.id, mazo: deck, origen: 'dating',
+    oponenteNombre: socket.nombre || 'Tu match',
+    oponenteAvatar: socket.avatar || ''
+  });
+  return salaID;
+}
+
 io.on('connection', socket => {
   console.log('Usuario conectado:', socket.id);
+
+  socket.on('dating_join', (data = {}, ack) => {
+    const done = typeof ack === 'function' ? ack : () => {};
+    const edad = Number(data.edad);
+    if (!Number.isInteger(edad) || edad < 18 || edad > 99) {
+      return done({ ok: false, error: 'Debes tener 18 años o más.' });
+    }
+    socket.nombre = cleanName(data.nombre);
+    socket.avatar = cleanAvatar(data.avatar);
+    socket.edad = edad;
+    const profile = {
+      id: socket.id,
+      nombre: socket.nombre,
+      edad,
+      avatar: socket.avatar,
+      ciudad: cleanShortText(data.ciudad, 40),
+      bio: cleanShortText(data.bio, 180),
+      intereses: cleanInterests(data.intereses)
+    };
+    datingProfiles.set(socket.id, profile);
+    if (!datingLikes.has(socket.id)) datingLikes.set(socket.id, new Set());
+    done({ ok: true });
+    broadcastDatingProfiles();
+  });
+
+  socket.on('dating_like', (data = {}, ack) => {
+    const done = typeof ack === 'function' ? ack : () => {};
+    const opponentId = String(data.oponenteID || '');
+    const me = publicDatingProfile(socket);
+    const opponent = io.sockets.sockets.get(opponentId);
+    const otherProfile = datingProfiles.get(opponentId);
+    if (!me) return done({ ok: false, error: 'Tu perfil todavía no está activo.' });
+    if (!opponent || !otherProfile) return done({ ok: false, error: 'Ese perfil ya no está disponible.' });
+    if (opponentId === socket.id) return done({ ok: false, error: 'No puedes darte like a ti mismo.' });
+    if (!datingLikes.has(socket.id)) datingLikes.set(socket.id, new Set());
+    datingLikes.get(socket.id).add(opponentId);
+    const match = areDatingMatched(socket.id, opponentId);
+    done({ ok: true, match });
+    if (match) {
+      socket.emit('dating_match', otherProfile);
+      opponent.emit('dating_match', me);
+    }
+  });
+
+  socket.on('dating_game_invite', (data = {}, ack) => {
+    const done = typeof ack === 'function' ? ack : () => {};
+    const opponentId = String(data.oponenteID || '');
+    const opponent = io.sockets.sockets.get(opponentId);
+    if (!opponent || !datingProfiles.has(opponentId)) return done({ ok: false, error: 'Ese match no está conectado.' });
+    if (!areDatingMatched(socket.id, opponentId)) return done({ ok: false, error: 'Solo puedes jugar con un match mutuo.' });
+    const me = publicDatingProfile(socket);
+    if (!me) return done({ ok: false, error: 'Tu perfil no está activo.' });
+    const mazo = validDeck(data.mazo);
+    opponent.emit('dating_game_invite', { ...me, mazo });
+    done({ ok: true });
+  });
+
+  socket.on('dating_game_accept', (data = {}, ack) => {
+    const done = typeof ack === 'function' ? ack : () => {};
+    const opponentId = String(data.oponenteID || '');
+    const opponent = io.sockets.sockets.get(opponentId);
+    if (!opponent || !datingProfiles.has(opponentId)) return done({ ok: false, error: 'Ese match ya no está conectado.' });
+    if (!areDatingMatched(socket.id, opponentId)) return done({ ok: false, error: 'El match ya no está disponible.' });
+    const salaID = createDatingRoom(opponent, socket, data.mazo);
+    done({ ok: true, salaID });
+  });
 
   socket.on('entrar_lobby', (data = {}) => {
     leaveRoom(socket);
@@ -242,6 +369,7 @@ io.on('connection', socket => {
   });
 
   socket.on('disconnect', () => {
+    removeDatingProfile(socket.id);
     removeFromLobby(socket.id);
     leaveRoom(socket, true);
     console.log('Usuario desconectado:', socket.id);

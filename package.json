@@ -1,6 +1,6 @@
 {
-  "name": "verdad-o-reto-fotos",
-  "version": "2.0.0",
+  "name": "vr-match-mvp",
+  "version": "3.0.0",
   "private": true,
   "main": "server.js",
   "scripts": {

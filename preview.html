@@ -1,227 +1,51 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#09090d">
-  <meta name="description" content="Verdad o Reto - juego multijugador online">
-  <title>V/R • Verdad o Reto</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>V/R Match · Preview</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="bg-orb orb-1"></div>
-  <div class="bg-orb orb-2"></div>
-  <div class="bg-grid"></div>
-
+  <div class="bg-orb orb-1"></div><div class="bg-orb orb-2"></div><div class="bg-grid"></div>
   <main class="app-shell">
     <header class="brand-bar">
       <div class="brand-mark"><span>V</span><i>/</i><span>R</span></div>
-      <div class="brand-copy">
-        <strong>VERDAD O RETO</strong>
-        <small>JUEGA. RESPONDE. ATRÉVETE.</small>
-      </div>
-      <div id="connectionBadge" class="connection-badge offline"><span class="connection-dot"></span><span id="connectionText">Conectando</span></div>
+      <div class="brand-copy"><strong>V/R MATCH</strong><small>HAZ MATCH. ROMPE EL HIELO.</small></div>
+      <div class="connection-badge online"><span class="connection-dot"></span><span>Demo</span></div>
     </header>
-
-    <section id="pantallaPerfil" class="screen screen-profile">
-      <div class="hero-icon">⚡</div>
-      <span class="eyebrow">EMPIEZA LA PARTIDA</span>
-      <h1>¿Quién eres?</h1>
-      <p class="subtitle">Crea tu perfil para entrar en la sala y empezar a jugar.</p>
-      <form id="formularioPerfil" class="form-stack" novalidate>
-        <div class="profile-avatar-field">
-          <label>Foto o avatar</label>
-          <div class="profile-avatar-row">
-            <button type="button" class="profile-avatar-preview" id="avatarPreviewButton" onclick="document.getElementById('inputAvatar').click()" aria-label="Elegir foto de perfil">
-              <span id="avatarPreviewFallback">🙂</span>
-              <img id="avatarPreviewImage" alt="Tu foto de perfil" hidden>
-              <i>+</i>
-            </button>
-            <div class="profile-avatar-copy">
-              <strong>Personaliza tu perfil</strong>
-              <small>Puedes subir una foto o elegir uno de los avatares.</small>
-              <button type="button" class="mini-link" onclick="document.getElementById('inputAvatar').click()">Elegir foto</button>
+    <section class="screen dating-screen">
+      <div class="dating-topbar"><div><span class="eyebrow">DESCUBRIR</span><h2>¿Hay vibra?</h2></div><button class="dating-profile-button">😎</button></div>
+      <div class="dating-stage">
+        <article id="demoCard" class="dating-card">
+          <div class="dating-photo" id="demoPhoto">
+            <span id="demoAvatar" style="font-size:112px">📷</span>
+            <div class="dating-photo-shade"></div>
+            <div class="dating-card-main">
+              <div class="dating-name-row"><h3 id="demoName">Laura</h3><span id="demoAge">29</span></div>
+              <div class="dating-city" id="demoCity">📍 Valencia</div>
             </div>
           </div>
-          <input type="file" id="inputAvatar" accept="image/*" style="display:none">
-          <div class="avatar-options" id="avatarOptions" aria-label="Avatares disponibles">
-            <button type="button" onclick="seleccionarAvatarEmoji('😎')">😎</button>
-            <button type="button" onclick="seleccionarAvatarEmoji('😈')">😈</button>
-            <button type="button" onclick="seleccionarAvatarEmoji('🤠')">🤠</button>
-            <button type="button" onclick="seleccionarAvatarEmoji('🥷')">🥷</button>
-            <button type="button" onclick="seleccionarAvatarEmoji('👽')">👽</button>
-            <button type="button" onclick="seleccionarAvatarEmoji('🐯')">🐯</button>
-          </div>
-        </div>
-        <div class="field">
-          <label for="nombreUsuario">Nombre o apodo</label>
-          <input type="text" id="nombreUsuario" placeholder="Ej. Alex" maxlength="24" autocomplete="nickname" required>
-          <small class="field-hint">Máximo 24 caracteres.</small>
-        </div>
-        <div class="field">
-          <label for="edadUsuario">Edad</label>
-          <input type="number" id="edadUsuario" placeholder="18" min="13" max="99" inputmode="numeric" required>
-          <small class="field-hint">Necesitamos tu edad para activar el modo +18.</small>
-        </div>
-        <button type="submit" class="btn btn-primary btn-xl"><span>Continuar</span><b>→</b></button>
-      </form>
-      <p class="legal-note">Juega de forma responsable. Las salas +18 son solo para mayores de edad.</p>
-    </section>
-
-    <section id="pantallaMazos" class="screen hidden">
-      <div class="screen-topbar"><button class="link-btn" onclick="volverPerfil()">← Perfil</button><span class="topbar-title">MAZOS</span><span class="topbar-spacer"></span></div>
-      <div class="section-heading">
-        <span class="eyebrow">PASO 2</span>
-        <h2>Elige tu vibra</h2>
-        <p>Selecciona cómo quieres jugar esta partida.</p>
+          <div class="dating-card-copy"><p id="demoBio">Arquitectura, café fuerte y viajes improvisados. Si sabes elegir buena música, ya sumas puntos.</p><div class="interest-chips" id="demoInterests"><span>Viajes</span><span>Fotografía</span><span>Perros</span></div></div>
+        </article>
       </div>
-      <div class="deck-grid">
-        <button class="deck-card deck-ice" onclick="seleccionarMazo('rompehielos')">
-          <span class="deck-icon">🧊</span>
-          <span class="deck-body"><strong>Rompehielos</strong><small>Suave, rápido y divertido para empezar.</small></span>
-          <span class="deck-arrow">→</span>
-        </button>
-        <button class="deck-card deck-couple" onclick="seleccionarMazo('parejas')">
-          <span class="deck-icon">❤️</span>
-          <span class="deck-body"><strong>Modo Parejas</strong><small>Preguntas para conectar, recordar y conocerse.</small></span>
-          <span class="deck-arrow">→</span>
-        </button>
-        <button id="deckAdult" class="deck-card deck-adult" onclick="seleccionarMazo('seccionXX')">
-          <span class="deck-icon">🔥</span>
-          <span class="deck-body"><strong>Sección XX <em>+18</em></strong><small>Solo para adultos. Contenido subido de tono.</small></span>
-          <span class="deck-arrow">→</span>
-        </button>
-      </div>
-      <div class="mini-info">Puedes cambiar de mazo antes de crear o aceptar una partida.</div>
-    </section>
-
-    <section id="pantallaMenu" class="screen hidden">
-      <div class="screen-topbar"><button class="link-btn" onclick="irAMazos()">← Cambiar mazo</button><span id="saludoHeader" class="player-chip">Hola</span><span class="avatar-dot" id="avatarDot">A</span></div>
-      <div class="menu-hero">
-        <span class="eyebrow">TODO LISTO</span>
-        <h2>¿Con quién quieres jugar?</h2>
-        <p id="mazoSeleccionadoLabel">Mazo: Rompehielos</p>
-      </div>
-      <div class="mode-grid">
-        <button class="mode-card mode-live" onclick="entrarLobbyDescubrir()">
-          <span class="mode-icon">⚡</span><span><strong>Buscar en línea</strong><small>Encuentra a alguien conectado con el mismo mazo.</small></span><b>→</b>
-        </button>
-        <button class="mode-card mode-private" onclick="crearSalaWhatsApp()">
-          <span class="mode-icon">👥</span><span><strong>Retar por WhatsApp</strong><small>Crea una sala privada y comparte el enlace.</small></span><b>→</b>
-        </button>
-      </div>
-      <div class="stats-row"><div><strong id="statDeckCount">0</strong><span>cartas del mazo</span></div><div><strong>60s</strong><span>por turno</span></div><div><strong>2</strong><span>jugadores</span></div></div>
-    </section>
-
-    <section id="pantallaLobby" class="screen hidden">
-      <div class="screen-topbar"><button class="link-btn" onclick="irAMenu()">← Volver</button><span class="topbar-title">LOBBY</span><span class="live-pill"><i></i> EN VIVO</span></div>
-      <div class="section-heading compact"><span class="eyebrow">BUSCANDO RIVAL</span><h2>Jugadores en línea</h2><p id="textoLobby">Buscando personas con tu mismo mazo…</p></div>
-      <div id="contenedorListaJugadores" class="players-list"><div class="empty-state"><span class="spinner"></span><strong>Buscando jugadores…</strong><small>Esta pantalla se actualiza automáticamente.</small></div></div>
-      <button class="btn btn-ghost" onclick="irAMenu()">Cancelar búsqueda</button>
-    </section>
-
-    <section id="pantallaJuego" class="screen hidden screen-game">
-      <div class="game-topbar">
-        <button onclick="abandonarPartida()" class="danger-link">🚪 Salir</button>
-        <div class="room-title"><span id="nombreMazoActivo">ROMPEHIELOS</span><small id="roomState">Sala privada</small></div>
-        <div class="round-badge"><span>RONDA</span><strong id="contadorRonda">1</strong></div>
-      </div>
-
-      <div class="opponent-bar">
-        <div class="opponent-avatar" id="opponentAvatar">?</div>
-        <div><small>JUGANDO CON</small><strong id="opponentName">Tu oponente</strong></div>
-        <div id="turnBadge" class="turn-badge waiting">Esperando</div>
-      </div>
-
-      <div id="cajaTemporizador" class="timer hidden"><span>⏱</span><strong id="textoTemporizador">60</strong><small>s</small></div>
-
-      <div id="zonaInvitacion" class="invite-panel hidden">
-        <div><strong>Invita a tu amigo</strong><small>La sala está lista. Comparte el enlace para empezar.</small></div>
-        <div class="invite-actions"><button id="btnCopiarSala" class="btn btn-secondary">📋 Copiar</button><a href="#" id="btnWhatsApp" class="btn btn-whatsapp" target="_blank" rel="noopener">WhatsApp</a></div>
-      </div>
-
-      <div id="contenedorTarjetaJuego" class="challenge-card">
-        <div class="challenge-tag" id="challengeTag">ESPERANDO</div>
-        <p id="textoCarta">Esperando oponente…</p>
-        <div id="indicadorEscribiendo" class="typing hidden"><i></i><i></i><i></i><span>El oponente está escribiendo…</span></div>
-        <img id="imagenPrueba" alt="Prueba enviada por el jugador" style="display:none;">
-        <video id="videoPrueba" controls playsinline preload="metadata" style="display:none;"></video>
-        <div id="barraReacciones" class="reaction-bar hidden">
-          <button onclick="enviarReaccion('🔥')" aria-label="Fuego">🔥</button>
-          <button onclick="enviarReaccion('😱')" aria-label="Sorpresa">😱</button>
-          <button onclick="enviarReaccion('😂')" aria-label="Risa">😂</button>
-          <button onclick="enviarReaccion('❤️')" aria-label="Me gusta">❤️</button>
-        </div>
-      </div>
-
-      <div id="seccionRespuesta" class="answer-panel hidden">
-        <div class="input-row"><input type="text" id="inputRespuesta" placeholder="Escribe tu respuesta…" maxlength="500" autocomplete="off"><button class="btn btn-primary" onclick="enviarRespuestaTexto()">Enviar</button></div>
-      </div>
-
-      <div id="seccionPrueba" class="proof-panel hidden">
-        <div class="proof-choice-grid">
-          <button class="proof-choice" type="button" onclick="abrirCamara('foto')">
-            <span>📸</span><strong>Foto en directo</strong><small>Abre la cámara y hazla ahora.</small>
-          </button>
-          <button class="proof-choice" type="button" onclick="abrirCamara('video')">
-            <span>🎥</span><strong>Vídeo en directo</strong><small>Graba hasta 30 segundos.</small>
-          </button>
-        </div>
-        <small class="proof-live-note">Solo se puede responder al reto usando la cámara en ese momento.</small>
-      </div>
-
-      <div class="game-actions hidden" id="controlesJuego">
-        <button class="action-btn action-truth" onclick="jugarCarta('verdad')"><span>💬</span><strong>VERDAD</strong><small>Responde con sinceridad</small></button>
-        <button class="action-btn action-dare" onclick="jugarCarta('reto')"><span>🔥</span><strong>RETO</strong><small>Demuestra que te atreves</small></button>
-      </div>
-      <div class="game-hint" id="gameHint">El turno pasa automáticamente al completar tu respuesta.</div>
+      <div class="swipe-actions"><button class="swipe-btn pass" onclick="next(false)">✕</button><button class="swipe-btn game" onclick="matchNow()">🎲</button><button class="swipe-btn like" onclick="next(true)">♥</button></div>
+      <p class="dating-tip">Preview interactiva · el segundo like simula un match</p>
+      <nav class="dating-nav"><button class="active"><span>🔥</span><small>Descubrir</small></button><button onclick="matchNow()"><span>💕</span><small>Matches</small></button><button><span>🎮</span><small>Jugar</small></button><button><span>👤</span><small>Perfil</small></button></nav>
     </section>
   </main>
-
-  <!-- Espacio inferior para publicidad / patrocinio.
-       Para usar una imagen real, sustituye el contenido de .ad-placeholder por:
-       <a class="ad-banner-link" href="https://tu-enlace.com" target="_blank" rel="sponsored noopener">
-         <img src="/banner-publicidad.jpg" alt="Publicidad">
-       </a>
-       y guarda banner-publicidad.jpg en la misma carpeta del proyecto. -->
-  <aside class="ad-slot" id="bannerInferior" aria-label="Espacio publicitario">
-    <div class="ad-placeholder">
-      <span>ESPACIO PUBLICITARIO</span>
-      <strong>Banner móvil · 320 × 100 recomendado</strong>
-    </div>
-  </aside>
-
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <div id="confirmModal" class="modal hidden" aria-hidden="true">
-    <div class="modal-card">
-      <button class="modal-close" onclick="cerrarModal()">×</button>
-      <span class="modal-icon">🔥</span>
-      <h3>Sección XX · +18</h3>
-      <p>Este mazo es exclusivo para personas mayores de 18 años.</p>
-      <div class="modal-actions"><button class="btn btn-ghost" onclick="cerrarModal()">Cancelar</button><button class="btn btn-primary" onclick="confirmarAdulto()">Soy mayor de 18</button></div>
-    </div>
-  </div>
-
-  <div id="cameraModal" class="modal camera-modal hidden" aria-hidden="true">
-    <div class="camera-card">
-      <div class="camera-header">
-        <div><small>PRUEBA EN DIRECTO</small><strong id="cameraTitle">Haz una foto</strong></div>
-        <button class="camera-close" type="button" onclick="cerrarCamara()" aria-label="Cerrar cámara">×</button>
-      </div>
-      <div class="camera-stage">
-        <video id="cameraPreview" autoplay muted playsinline></video>
-        <div id="cameraLoading" class="camera-loading"><span class="spinner"></span><small>Abriendo cámara…</small></div>
-        <div id="recordingBadge" class="recording-badge hidden"><i></i><span>REC</span><strong id="recordingTime">00:00</strong><small>/ 00:30</small></div>
-      </div>
-      <div class="camera-hint" id="cameraHint">La imagen se enviará directamente a tu rival.</div>
-      <div class="camera-actions">
-        <button type="button" class="btn btn-secondary" onclick="cambiarCamara()">↻ Cámara</button>
-        <button type="button" class="camera-shutter" id="cameraActionButton" onclick="accionCamara()" aria-label="Capturar"></button>
-        <button type="button" class="btn btn-ghost camera-cancel" onclick="cerrarCamara()">Cancelar</button>
-      </div>
-    </div>
-  </div>
-
-
+  <div id="demoMatch" class="modal hidden" aria-hidden="true"><div class="modal-card match-modal-card"><button class="modal-close" onclick="closeMatch()">×</button><span class="match-kicker">✨ ES MUTUO</span><div class="match-hearts"><div class="match-avatar">😎</div><div class="match-heart">♥</div><div class="match-avatar" id="matchAvatar">📷</div></div><h3>¡Hay match!</h3><p id="matchText">Os gustáis. Ahora evitad el “hola” y empezad jugando.</p><div class="match-modal-actions"><button class="btn btn-ghost" onclick="closeMatch()">Seguir viendo</button><button class="btn btn-primary" onclick="alert('Aquí se abre Rompehielos en la versión conectada.')">🎮 Romper el hielo</button></div></div></div>
+  <script>
+    const profiles=[
+      {n:'Laura',a:29,c:'Valencia',e:'📷',b:'Arquitectura, café fuerte y viajes improvisados. Si sabes elegir buena música, ya sumas puntos.',i:['Viajes','Fotografía','Perros']},
+      {n:'Marta',a:31,c:'Torrent',e:'🎨',b:'Diseñadora, exposiciones y domingos sin despertador. Me gustan las conversaciones que se salen del guion.',i:['Diseño','Cine','Brunch']},
+      {n:'Andrea',a:27,c:'Burjassot',e:'🚲',b:'Ruta en bici, montaña y algún plan improvisado. Competitiva solo cuando hay juegos de por medio.',i:['Ciclismo','Naturaleza','Música']}
+    ];
+    let idx=0,likes=0,current=profiles[0];
+    function paint(){current=profiles[idx%profiles.length];demoName.textContent=current.n;demoAge.textContent=current.a;demoCity.textContent='📍 '+current.c;demoAvatar.textContent=current.e;demoBio.textContent=current.b;demoInterests.innerHTML=current.i.map(x=>'<span>'+x+'</span>').join('');demoCard.animate([{opacity:.25,transform:'scale(.98)'},{opacity:1,transform:'scale(1)'}],{duration:220});}
+    function next(like){if(like){likes++; if(likes===2){matchNow(); likes=0;}} idx++;paint();}
+    function matchNow(){matchAvatar.textContent=current.e;matchText.textContent='Tú y '+current.n+' os gustáis. Ahora evitad el “hola” y empezad jugando.';demoMatch.classList.remove('hidden');demoMatch.setAttribute('aria-hidden','false');}
+    function closeMatch(){demoMatch.classList.add('hidden');demoMatch.setAttribute('aria-hidden','true');}
+  </script>
 </body>
 </html>

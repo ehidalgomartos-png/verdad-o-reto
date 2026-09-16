@@ -170,3 +170,87 @@ input { width:100%; border:1px solid rgba(255,255,255,.09); background:#0d0d14; 
 .adsbygoogle[data-ad-status="unfilled"]{
   display:none !important;
 }
+
+/* =========================================================
+   V/R MATCH · CAPA DATING MVP
+   ========================================================= */
+textarea { font: inherit; }
+.profile-textarea {
+  width:100%; min-height:92px; resize:vertical; border:1px solid rgba(255,255,255,.09);
+  background:#0d0d14; color:#fff; border-radius:15px; padding:14px 16px; outline:none; line-height:1.45;
+}
+.profile-textarea:focus { border-color:rgba(255,47,120,.65); box-shadow:0 0 0 4px rgba(255,47,120,.08); }
+.dating-screen { padding:18px 18px 14px; overflow:hidden; }
+.dating-topbar { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:14px; }
+.dating-topbar h2 { margin:4px 0 0; font-size:28px; }
+.dating-profile-button { width:42px; height:42px; border:1px solid rgba(255,255,255,.10); border-radius:50%; overflow:hidden; display:grid; place-items:center; background:#171721; color:#fff; font-size:19px; cursor:pointer; padding:0; }
+.dating-profile-button img,.match-avatar img,.match-row-avatar img { width:100%; height:100%; object-fit:cover; }
+.dating-stage { position:relative; min-height:500px; display:grid; place-items:center; }
+.dating-card { width:100%; border-radius:28px; overflow:hidden; background:#101018; border:1px solid rgba(255,255,255,.09); box-shadow:0 28px 70px rgba(0,0,0,.38); touch-action:none; user-select:none; transform-origin:50% 95%; }
+.dating-photo { position:relative; height:390px; display:flex; align-items:center; justify-content:center; background-image:linear-gradient(145deg,#231129,#111c31 48%,#161620); background-size:cover; background-position:center; overflow:hidden; }
+#datingAvatarLarge { font-size:112px; filter:drop-shadow(0 18px 22px rgba(0,0,0,.28)); }
+.dating-photo:after { content:""; position:absolute; inset:0; background:linear-gradient(110deg,rgba(255,255,255,.045),transparent 32%,rgba(255,47,120,.055)); pointer-events:none; }
+.dating-photo-shade { position:absolute; inset:38% 0 0; background:linear-gradient(transparent,rgba(6,6,10,.94)); }
+.dating-card-main { position:absolute; left:20px; right:20px; bottom:18px; z-index:2; }
+.dating-name-row { display:flex; align-items:baseline; gap:8px; }
+.dating-name-row h3 { margin:0; font-size:32px; letter-spacing:-.045em; }
+.dating-name-row span { font-size:23px; color:#e4e4ea; font-weight:500; }
+.dating-city { margin-top:5px; font-size:11px; color:#c2c4cf; }
+.dating-card-copy { padding:16px 18px 18px; }
+.dating-card-copy p { color:#d3d4dc; line-height:1.5; font-size:12px; margin:0 0 12px; }
+.interest-chips { display:flex; flex-wrap:wrap; gap:7px; }
+.interest-chips span { font-size:9px; font-weight:800; color:#cfd1db; padding:7px 9px; border-radius:999px; border:1px solid rgba(255,255,255,.09); background:#181822; }
+.swipe-stamp { position:absolute; z-index:4; top:28px; border:3px solid currentColor; border-radius:10px; padding:7px 10px; font-size:25px; font-weight:1000; letter-spacing:.08em; opacity:0; pointer-events:none; }
+.stamp-like { left:22px; color:#48e68b; transform:rotate(-12deg); }
+.stamp-pass { right:22px; color:#ff6b84; transform:rotate(12deg); }
+.swipe-actions { display:flex; justify-content:center; align-items:center; gap:19px; margin:14px 0 8px; }
+.swipe-actions.is-disabled { opacity:.28; pointer-events:none; }
+.swipe-btn { width:58px; height:58px; border-radius:50%; border:1px solid rgba(255,255,255,.10); background:#15151f; display:grid; place-items:center; color:#fff; font-size:24px; cursor:pointer; box-shadow:0 12px 26px rgba(0,0,0,.22); transition:.18s; }
+.swipe-btn:hover { transform:translateY(-3px) scale(1.03); }
+.swipe-btn.pass { color:#ff6c83; }
+.swipe-btn.like { width:66px; height:66px; font-size:30px; color:#fff; background:linear-gradient(135deg,#ff2f78,#ff0f65); box-shadow:0 16px 32px rgba(255,47,120,.25); }
+.swipe-btn.game { color:#7adfff; }
+.dating-tip { text-align:center; color:#707382; font-size:9px; margin:6px 0 13px; }
+.dating-empty { width:100%; min-height:310px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:8px; border:1px dashed rgba(255,255,255,.09); border-radius:25px; background:rgba(15,15,22,.55); padding:28px; }
+.dating-empty span { font-size:38px; }
+.dating-empty strong { font-size:15px; }
+.dating-empty small { max-width:320px; color:#757887; line-height:1.5; font-size:10px; }
+.dating-nav { display:grid; grid-template-columns:repeat(4,1fr); border-top:1px solid rgba(255,255,255,.07); padding-top:10px; margin-top:4px; }
+.dating-nav button { position:relative; border:0; background:transparent; color:#666978; display:grid; justify-items:center; gap:3px; cursor:pointer; padding:4px; }
+.dating-nav button span { font-size:17px; }
+.dating-nav button small { font-size:8px; font-weight:800; }
+.dating-nav button.active { color:#ff5c91; }
+.nav-badge { position:absolute; top:0; left:56%; min-width:16px; height:16px; display:grid; place-items:center; padding:0 4px; border-radius:999px; background:#ff2f78; color:#fff; font-style:normal; font-size:8px; font-weight:1000; border:2px solid #11111a; }
+.matches-list { min-height:470px; display:grid; align-content:start; gap:9px; }
+.matches-empty { min-height:300px; }
+.match-row { display:grid; grid-template-columns:48px 1fr auto; align-items:center; gap:10px; border:1px solid rgba(255,255,255,.08); background:#101018; border-radius:17px; padding:10px; }
+.match-row-avatar { width:48px; height:48px; border-radius:15px; overflow:hidden; display:grid; place-items:center; background:linear-gradient(135deg,#ff2f78,#4a69ff); font-size:22px; }
+.match-row-copy { min-width:0; display:grid; gap:4px; }
+.match-row-copy strong { font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.match-row-copy small { color:#747785; font-size:9px; }
+.match-row .btn { min-height:36px; padding:8px 11px; font-size:9px; }
+.match-modal-card { text-align:center; }
+.match-kicker { display:block; color:#ff7ca7; font-size:9px; font-weight:1000; letter-spacing:.18em; margin-bottom:16px; }
+.match-hearts { display:flex; align-items:center; justify-content:center; margin:6px 0 17px; }
+.match-avatar { width:82px; height:82px; border-radius:50%; overflow:hidden; display:grid; place-items:center; background:linear-gradient(135deg,#ff2f78,#4a69ff); border:4px solid #171721; box-shadow:0 12px 28px rgba(0,0,0,.28); font-size:34px; }
+.match-avatar:first-child { transform:translateX(8px) rotate(-5deg); }
+.match-avatar:last-child { transform:translateX(-8px) rotate(5deg); }
+.match-heart { position:relative; z-index:2; width:42px; height:42px; border-radius:50%; display:grid; place-items:center; background:#ff2f78; color:#fff; box-shadow:0 8px 24px rgba(255,47,120,.35); }
+.match-modal-card h3 { font-size:28px; margin-bottom:8px; }
+.match-modal-card p { color:#8e91a0; font-size:11px; line-height:1.55; }
+.match-modal-actions { display:grid; grid-template-columns:1fr 1.15fr; gap:8px; margin-top:16px; }
+.match-modal-actions .btn { width:100%; }
+@media (max-width:480px) {
+  .dating-screen { padding:15px 13px 12px; }
+  .dating-stage { min-height:455px; }
+  .dating-photo { height:340px; }
+  .dating-name-row h3 { font-size:29px; }
+  .matches-list { min-height:420px; }
+}
+@media (max-width:380px) {
+  .dating-stage { min-height:425px; }
+  .dating-photo { height:310px; }
+  .swipe-btn { width:52px; height:52px; }
+  .swipe-btn.like { width:60px; height:60px; }
+  .match-modal-actions { grid-template-columns:1fr; }
+}

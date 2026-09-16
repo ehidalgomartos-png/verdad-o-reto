@@ -1,67 +1,23 @@
-# Foto/Avatar + vídeo grabado en el momento (máximo 30 s)
+# V/R Match MVP
 
-Este paquete añade al perfil:
+Primera evolución del juego V/R hacia una experiencia de citas basada en match + juego.
 
-- Foto de perfil desde imagen.
-- Avatares predeterminados.
-- Grabación de vídeo únicamente desde cámara + micrófono.
-- Duración máxima de 30 segundos.
-- Parada automática al llegar a 00:30.
-- Contador visible.
-- Cambio entre cámara frontal y trasera cuando el dispositivo dispone de más de una cámara.
-- Previsualización del vídeo.
-- Botones "Repetir vídeo" y "Usar vídeo".
-- No existe selector para subir un vídeo ya guardado.
+## Qué incluye
+- Perfil +18 con foto/avatar, ciudad, bio e intereses.
+- Pantalla Descubrir con tarjetas y gesto swipe (también botones).
+- Likes mutuos y modal de Match.
+- Lista de Matches.
+- Invitación consensuada a jugar Rompehielos.
+- Reutiliza el motor original: Socket.IO, turnos, Verdad/Reto, texto, foto, vídeo y reacciones.
+- Los perfiles, likes y matches viven en memoria del servidor: al reiniciar se borran.
 
-## Archivos
+## Cómo probar
+1. Ejecuta `npm install`.
+2. Ejecuta `npm start`.
+3. Abre `http://localhost:3000` en dos ventanas o navegadores diferentes.
+4. Crea dos perfiles mayores de 18 años.
+5. Da like desde ambos perfiles.
+6. Al producirse el match, invita a jugar y acepta desde la otra ventana.
 
-- `index.html`: demostración de la interfaz.
-- `profile-media.css`: estilos.
-- `profile-media.js`: lógica de foto/avatar y MediaRecorder.
-- `README.md`: este archivo.
-
-## Prueba local
-
-La cámara del navegador normalmente requiere un contexto seguro:
-- `https://`, o
-- `localhost`.
-
-No abras simplemente `index.html` con `file://` si el navegador bloquea la cámara.
-
-Ejemplo rápido:
-```bash
-python -m http.server 8080
-```
-
-Después abre:
-`http://localhost:8080`
-
-## Integración con el backend
-
-Cuando el usuario pulsa **Usar vídeo**, el módulo emite:
-
-```js
-profileVideoRecorded
-```
-
-El `event.detail.blob` contiene el archivo de vídeo generado.
-
-También se emiten:
-- `profilePhotoSelected`
-- `profileAvatarSelected`
-
-Puedes reemplazar el evento por una subida `fetch()` a la API de tu proyecto.
-
-## Importante sobre la regla "solo grabado al momento"
-
-La interfaz no ofrece ningún input para cargar vídeos desde archivos. La grabación se genera mediante `getUserMedia()` + `MediaRecorder`.
-
-Para una aplicación real, la validación definitiva debe hacerse también en el backend (autenticación, tamaño, formato, sesión de grabación y políticas de almacenamiento), porque ninguna restricción puramente visual del navegador debe considerarse una medida de seguridad absoluta.
-
-## Compatibilidad
-
-Funciona mejor en navegadores modernos con soporte de:
-- `navigator.mediaDevices.getUserMedia`
-- `MediaRecorder`
-
-En iPhone/iPad conviene probar la versión concreta de Safari que se vaya a usar.
+## Siguiente fase sugerida
+Persistencia con base de datos, autenticación, varias fotos, preferencias/filtros, bloqueo/denuncia, chat persistente y controles de privacidad.

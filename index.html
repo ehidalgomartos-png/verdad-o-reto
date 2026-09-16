@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#09090d">
-  <meta name="description" content="Verdad o Reto - juego multijugador online">
-  <title>V/R • Verdad o Reto</title>
+  <meta name="description" content="V/R Match - conecta, haz match y rompe el hielo jugando">
+  <title>V/R Match • Haz match y juega</title>
   <link rel="stylesheet" href="/styles.css">
 
   <!-- =========================================================
@@ -29,17 +29,17 @@
     <header class="brand-bar">
       <div class="brand-mark"><span>V</span><i>/</i><span>R</span></div>
       <div class="brand-copy">
-        <strong>VERDAD O RETO</strong>
-        <small>JUEGA. RESPONDE. ATRÉVETE.</small>
+        <strong>V/R MATCH</strong>
+        <small>HAZ MATCH. ROMPE EL HIELO.</small>
       </div>
       <div id="connectionBadge" class="connection-badge offline"><span class="connection-dot"></span><span id="connectionText">Conectando</span></div>
     </header>
 
     <section id="pantallaPerfil" class="screen screen-profile">
       <div class="hero-icon">⚡</div>
-      <span class="eyebrow">EMPIEZA LA PARTIDA</span>
-      <h1>¿Quién eres?</h1>
-      <p class="subtitle">Crea tu perfil para entrar en la sala y empezar a jugar.</p>
+      <span class="eyebrow">CREA TU PERFIL</span>
+      <h1>Haz match distinto.</h1>
+      <p class="subtitle">Conoce personas, haz match y rompe el hielo jugando en lugar de empezar con el típico “hola”.</p>
       <form id="formularioPerfil" class="form-stack" novalidate>
         <div class="profile-avatar-field">
           <label>Foto o avatar</label>
@@ -66,18 +66,95 @@
           </div>
         </div>
         <div class="field">
-          <label for="nombreUsuario">Nombre o apodo</label>
+          <label for="nombreUsuario">Nombre</label>
           <input type="text" id="nombreUsuario" placeholder="Ej. Alex" maxlength="24" autocomplete="nickname" required>
           <small class="field-hint">Máximo 24 caracteres.</small>
         </div>
         <div class="field">
           <label for="edadUsuario">Edad</label>
-          <input type="number" id="edadUsuario" placeholder="18" min="13" max="99" inputmode="numeric" required>
-          <small class="field-hint">Necesitamos tu edad para activar el modo +18.</small>
+          <input type="number" id="edadUsuario" placeholder="25" min="18" max="99" inputmode="numeric" required>
+          <small class="field-hint">V/R Match es exclusivamente para mayores de 18 años.</small>
         </div>
-        <button type="submit" class="btn btn-primary btn-xl"><span>Continuar</span><b>→</b></button>
+        <div class="field">
+          <label for="ciudadUsuario">Ciudad</label>
+          <input type="text" id="ciudadUsuario" placeholder="Ej. Valencia" maxlength="40" autocomplete="address-level2">
+        </div>
+        <div class="field">
+          <label for="bioUsuario">Sobre ti</label>
+          <textarea id="bioUsuario" class="profile-textarea" placeholder="Una frase que dé ganas de conocerte…" maxlength="180"></textarea>
+          <small class="field-hint"><span id="bioCounter">0</span>/180 caracteres.</small>
+        </div>
+        <div class="field">
+          <label for="interesesUsuario">Intereses</label>
+          <input type="text" id="interesesUsuario" placeholder="Ej. fotografía, viajes, ciclismo" maxlength="100">
+          <small class="field-hint">Sepáralos con comas. Mostraremos hasta 5.</small>
+        </div>
+        <button type="submit" class="btn btn-primary btn-xl"><span>Entrar a Descubrir</span><b>→</b></button>
       </form>
-      <p class="legal-note">Juega de forma responsable. Las salas +18 son solo para mayores de edad.</p>
+      <p class="legal-note">Solo +18. No compartas información sensible y usa bloquear o denunciar cuando sea necesario.</p>
+    </section>
+
+    <section id="pantallaDescubrir" class="screen dating-screen hidden">
+      <div class="dating-topbar">
+        <div>
+          <span class="eyebrow">DESCUBRIR</span>
+          <h2>¿Hay vibra?</h2>
+        </div>
+        <button class="dating-profile-button" type="button" onclick="volverPerfil()" aria-label="Editar perfil"><span id="datingAvatarMini">🙂</span></button>
+      </div>
+
+      <div class="dating-stage" id="datingStage">
+        <div id="datingEmpty" class="dating-empty hidden">
+          <span>✨</span>
+          <strong>No hay más perfiles ahora</strong>
+          <small>Cuando alguien entre, aparecerá aquí automáticamente. Abre otra pestaña para probar el match.</small>
+        </div>
+        <article id="datingCard" class="dating-card hidden" aria-live="polite">
+          <div class="dating-photo" id="datingPhoto">
+            <span id="datingAvatarLarge">🙂</span>
+            <div class="swipe-stamp stamp-like" id="stampLike">LIKE</div>
+            <div class="swipe-stamp stamp-pass" id="stampPass">PASAR</div>
+            <div class="dating-photo-shade"></div>
+            <div class="dating-card-main">
+              <div class="dating-name-row"><h3 id="datingName">Perfil</h3><span id="datingAge">25</span></div>
+              <div class="dating-city" id="datingCity">📍 Cerca de ti</div>
+            </div>
+          </div>
+          <div class="dating-card-copy">
+            <p id="datingBio">Buscando alguien con quien romper el hielo.</p>
+            <div class="interest-chips" id="datingInterests"></div>
+          </div>
+        </article>
+      </div>
+
+      <div class="swipe-actions" id="swipeActions">
+        <button class="swipe-btn pass" type="button" onclick="pasarPerfil()" aria-label="Pasar">✕</button>
+        <button class="swipe-btn game" type="button" onclick="retarPerfilActual()" aria-label="Retar">🎲</button>
+        <button class="swipe-btn like" type="button" onclick="darLike()" aria-label="Me gusta">♥</button>
+      </div>
+      <p class="dating-tip">🎲 Rétale con un rompehielos · ♥ Like · ✕ Pasar</p>
+      <nav class="dating-nav" aria-label="Navegación principal">
+        <button class="active" onclick="irADescubrir()"><span>🔥</span><small>Descubrir</small></button>
+        <button onclick="irAMatches()"><span>💕</span><small>Matches</small><i id="matchCountBadge" class="nav-badge hidden">0</i></button>
+        <button onclick="irAMazos()"><span>🎮</span><small>Jugar</small></button>
+        <button onclick="volverPerfil()"><span>👤</span><small>Perfil</small></button>
+      </nav>
+    </section>
+
+    <section id="pantallaMatches" class="screen dating-screen hidden">
+      <div class="dating-topbar">
+        <div><span class="eyebrow">CONEXIONES</span><h2>Tus matches</h2></div>
+        <button class="link-btn" onclick="irADescubrir()">Volver</button>
+      </div>
+      <div id="matchesList" class="matches-list">
+        <div class="dating-empty matches-empty"><span>💕</span><strong>Aún no hay matches</strong><small>Cuando el interés sea mutuo aparecerán aquí.</small></div>
+      </div>
+      <nav class="dating-nav" aria-label="Navegación principal">
+        <button onclick="irADescubrir()"><span>🔥</span><small>Descubrir</small></button>
+        <button class="active" onclick="irAMatches()"><span>💕</span><small>Matches</small></button>
+        <button onclick="irAMazos()"><span>🎮</span><small>Jugar</small></button>
+        <button onclick="volverPerfil()"><span>👤</span><small>Perfil</small></button>
+      </nav>
     </section>
 
     <section id="pantallaMazos" class="screen hidden">
@@ -234,6 +311,37 @@
     </div>
   </div>
 
+  <div id="matchModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card match-modal-card">
+      <button class="modal-close" onclick="cerrarMatchModal()">×</button>
+      <span class="match-kicker">✨ ES MUTUO</span>
+      <div class="match-hearts">
+        <div class="match-avatar" id="matchMyAvatar">🙂</div>
+        <div class="match-heart">♥</div>
+        <div class="match-avatar" id="matchTheirAvatar">🙂</div>
+      </div>
+      <h3>¡Hay match!</h3>
+      <p id="matchModalText">Os gustáis. Ahora evitad el “hola” y empezad jugando.</p>
+      <div class="match-modal-actions">
+        <button class="btn btn-ghost" onclick="cerrarMatchModal()">Seguir viendo</button>
+        <button class="btn btn-primary" onclick="invitarJuegoDesdeMatch()">🎮 Romper el hielo</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="gameInviteModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card match-modal-card">
+      <button class="modal-close" onclick="rechazarInvitacionJuego()">×</button>
+      <span class="modal-icon">🎮</span>
+      <h3 id="gameInviteTitle">Te invitan a jugar</h3>
+      <p>Un match quiere romper el hielo contigo con una ronda rápida.</p>
+      <div class="match-modal-actions">
+        <button class="btn btn-ghost" onclick="rechazarInvitacionJuego()">Ahora no</button>
+        <button class="btn btn-primary" onclick="aceptarInvitacionJuego()">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
   <div id="cameraModal" class="modal camera-modal hidden" aria-hidden="true">
     <div class="camera-card">
       <div class="camera-header">
@@ -282,6 +390,21 @@
     let cameraCancelled = false;
     const MAX_VIDEO_SECONDS = 30;
     const MAX_MEDIA_BYTES = 6 * 1024 * 1024;
+
+    // --- Capa dating MVP: perfiles conectados, likes y matches en memoria ---
+    let ciudadJugador = '';
+    let bioJugador = '';
+    let interesesJugador = [];
+    let datingProfiles = [];
+    let currentDatingProfile = null;
+    let datingPassed = new Set();
+    let datingMatches = [];
+    let currentMatch = null;
+    let pendingGameInvite = null;
+    let origenPartida = 'legacy';
+    let pointerStartX = 0;
+    let pointerDeltaX = 0;
+    let pointerDragging = false;
 
     const baseDeDatos = {
       rompehielos: {
@@ -669,7 +792,7 @@
     const mazoInvitacion = params.get('mazo');
 
     const $ = (id) => document.getElementById(id);
-    const screens = ['pantallaPerfil','pantallaMazos','pantallaMenu','pantallaLobby','pantallaJuego'];
+    const screens = ['pantallaPerfil','pantallaDescubrir','pantallaMatches','pantallaMazos','pantallaMenu','pantallaLobby','pantallaJuego'];
 
     function showScreen(id) {
       screens.forEach(x => $(x).classList.toggle('hidden', x !== id));
@@ -738,6 +861,237 @@
       showScreen('pantallaMenu');
     }
 
+    function normalizarIntereses(valor) {
+      return String(valor || '').split(',').map(x => x.trim()).filter(Boolean).slice(0,5);
+    }
+
+    function registrarDating() {
+      if (!nombreJugador || edadJugador < 18) return;
+      socket.emit('dating_join', {
+        nombre: nombreJugador,
+        edad: edadJugador,
+        avatar: avatarJugador,
+        ciudad: ciudadJugador,
+        bio: bioJugador,
+        intereses: interesesJugador
+      }, (res) => {
+        if (res && !res.ok) mostrarToast(res.error || 'No se pudo entrar a Descubrir.', 'error');
+      });
+    }
+
+    function irADescubrir() {
+      socket.emit('salir_lobby');
+      showScreen('pantallaDescubrir');
+      pintarAvatar($('datingAvatarMini'), avatarJugador, nombreJugador || 'Tú');
+      registrarDating();
+      renderDatingCard();
+    }
+
+    function irAMatches() {
+      showScreen('pantallaMatches');
+      renderMatches();
+    }
+
+    function perfilEsMatch(id) { return datingMatches.some(m => m.id === id); }
+
+    function renderDatingCard() {
+      const disponible = datingProfiles.find(p => !datingPassed.has(p.id) && !perfilEsMatch(p.id));
+      currentDatingProfile = disponible || null;
+      const card = $('datingCard');
+      const empty = $('datingEmpty');
+      const actions = $('swipeActions');
+      if (!currentDatingProfile) {
+        card.classList.add('hidden');
+        empty.classList.remove('hidden');
+        actions.classList.add('is-disabled');
+        return;
+      }
+      empty.classList.add('hidden');
+      card.classList.remove('hidden');
+      actions.classList.remove('is-disabled');
+      card.style.transform = '';
+      card.style.opacity = '1';
+      $('stampLike').style.opacity = '0';
+      $('stampPass').style.opacity = '0';
+      const p = currentDatingProfile;
+      $('datingName').textContent = p.nombre || 'Perfil';
+      $('datingAge').textContent = p.edad || '';
+      $('datingCity').textContent = p.ciudad ? `📍 ${p.ciudad}` : '📍 Ciudad no indicada';
+      $('datingBio').textContent = p.bio || 'Prefiero que me conozcas jugando.';
+      const interestBox = $('datingInterests');
+      interestBox.innerHTML = '';
+      (Array.isArray(p.intereses) ? p.intereses : []).forEach(item => {
+        const chip = document.createElement('span'); chip.textContent = item; interestBox.appendChild(chip);
+      });
+      const photo = $('datingPhoto');
+      photo.style.backgroundImage = '';
+      $('datingAvatarLarge').style.display = '';
+      if (p.avatar && p.avatar.startsWith('data:image/')) {
+        photo.style.backgroundImage = `linear-gradient(180deg,transparent 35%,rgba(5,5,10,.92) 100%), url(${p.avatar})`;
+        $('datingAvatarLarge').style.display = 'none';
+      } else {
+        $('datingAvatarLarge').textContent = p.avatar || (p.nombre || '?').charAt(0).toUpperCase();
+      }
+    }
+
+    function animarSalidaDating(direccion, despues) {
+      const card = $('datingCard');
+      if (!currentDatingProfile || card.classList.contains('hidden')) return;
+      const x = direccion === 'right' ? 520 : -520;
+      card.style.transition = 'transform .28s ease, opacity .28s ease';
+      card.style.transform = `translateX(${x}px) rotate(${direccion === 'right' ? 16 : -16}deg)`;
+      card.style.opacity = '.15';
+      setTimeout(() => {
+        card.style.transition = '';
+        despues && despues();
+        renderDatingCard();
+      }, 290);
+    }
+
+    function pasarPerfil() {
+      if (!currentDatingProfile) return;
+      const id = currentDatingProfile.id;
+      $('stampPass').style.opacity = '1';
+      animarSalidaDating('left', () => datingPassed.add(id));
+    }
+
+    function darLike() {
+      if (!currentDatingProfile) return;
+      const p = currentDatingProfile;
+      $('stampLike').style.opacity = '1';
+      socket.emit('dating_like', { oponenteID: p.id }, (res) => {
+        if (res && !res.ok) mostrarToast(res.error || 'Ese perfil ya no está disponible.', 'warn');
+      });
+      animarSalidaDating('right', () => datingPassed.add(p.id));
+    }
+
+    function retarPerfilActual() {
+      if (!currentDatingProfile) return;
+      mostrarToast(`Primero necesitas hacer match con ${currentDatingProfile.nombre || 'esa persona'}. Dale ♥ y, si es mutuo, podréis jugar.`, 'info');
+      darLike();
+    }
+
+    function addOrUpdateMatch(data) {
+      if (!data || !data.id) return;
+      const idx = datingMatches.findIndex(m => m.id === data.id);
+      if (idx >= 0) datingMatches[idx] = { ...datingMatches[idx], ...data };
+      else datingMatches.unshift(data);
+      const badge = $('matchCountBadge');
+      badge.textContent = datingMatches.length;
+      badge.classList.toggle('hidden', datingMatches.length === 0);
+      renderMatches();
+    }
+
+    function showMatchModal(data) {
+      currentMatch = data;
+      pintarAvatar($('matchMyAvatar'), avatarJugador, nombreJugador || 'Tú');
+      pintarAvatar($('matchTheirAvatar'), data.avatar || '', data.nombre || 'Match');
+      $('matchModalText').textContent = `Tú y ${data.nombre || 'tu match'} os gustáis. Ahora evitad el “hola” y empezad jugando.`;
+      $('matchModal').classList.remove('hidden');
+      $('matchModal').setAttribute('aria-hidden','false');
+    }
+
+    function cerrarMatchModal() {
+      $('matchModal').classList.add('hidden');
+      $('matchModal').setAttribute('aria-hidden','true');
+    }
+
+    function invitarJuego(matchId) {
+      const match = datingMatches.find(m => m.id === matchId);
+      if (!match) return mostrarToast('Ese match ya no está disponible.', 'warn');
+      currentMatch = match;
+      socket.emit('dating_game_invite', { oponenteID: match.id, mazo: 'rompehielos' }, (res) => {
+        if (!res || !res.ok) return mostrarToast((res && res.error) || 'No se pudo enviar la invitación.', 'warn');
+        mostrarToast(`Invitación enviada a ${match.nombre}.`, 'info');
+      });
+    }
+
+    function invitarJuegoDesdeMatch() {
+      if (!currentMatch) return;
+      const id = currentMatch.id;
+      cerrarMatchModal();
+      invitarJuego(id);
+    }
+
+    function renderMatches() {
+      const box = $('matchesList');
+      if (!box) return;
+      box.innerHTML = '';
+      if (!datingMatches.length) {
+        box.innerHTML = '<div class="dating-empty matches-empty"><span>💕</span><strong>Aún no hay matches</strong><small>Cuando el interés sea mutuo aparecerán aquí.</small></div>';
+        return;
+      }
+      datingMatches.forEach(m => {
+        const row = document.createElement('div'); row.className = 'match-row';
+        const avatar = document.createElement('div'); avatar.className = 'match-row-avatar'; pintarAvatar(avatar, m.avatar || '', m.nombre || 'M');
+        const copy = document.createElement('div'); copy.className = 'match-row-copy';
+        const name = document.createElement('strong'); name.textContent = `${m.nombre || 'Match'}${m.edad ? `, ${m.edad}` : ''}`;
+        const sub = document.createElement('small'); sub.textContent = m.ciudad || 'Match reciente'; copy.append(name, sub);
+        const btn = document.createElement('button'); btn.className = 'btn btn-danger-soft'; btn.textContent = '🎮 Jugar'; btn.onclick = () => invitarJuego(m.id);
+        row.append(avatar, copy, btn); box.appendChild(row);
+      });
+    }
+
+    socket.on('dating_profiles', (lista = []) => {
+      datingProfiles = Array.isArray(lista) ? lista : [];
+      if ($('pantallaDescubrir') && !$('pantallaDescubrir').classList.contains('hidden')) renderDatingCard();
+    });
+
+    socket.on('dating_match', (data = {}) => {
+      addOrUpdateMatch(data);
+      showMatchModal(data);
+    });
+
+    socket.on('dating_game_invite', (data = {}) => {
+      pendingGameInvite = data;
+      $('gameInviteTitle').textContent = `${data.nombre || 'Tu match'} quiere jugar`;
+      $('gameInviteModal').classList.remove('hidden');
+      $('gameInviteModal').setAttribute('aria-hidden','false');
+    });
+
+    function rechazarInvitacionJuego() {
+      pendingGameInvite = null;
+      $('gameInviteModal').classList.add('hidden');
+      $('gameInviteModal').setAttribute('aria-hidden','true');
+    }
+
+    function aceptarInvitacionJuego() {
+      if (!pendingGameInvite) return rechazarInvitacionJuego();
+      const data = pendingGameInvite;
+      rechazarInvitacionJuego();
+      socket.emit('dating_game_accept', { oponenteID: data.id, mazo: data.mazo || 'rompehielos' }, (res) => {
+        if (res && !res.ok) mostrarToast(res.error || 'No se pudo iniciar la partida.', 'error');
+      });
+    }
+
+    function initDatingSwipe() {
+      const card = $('datingCard');
+      if (!card) return;
+      card.addEventListener('pointerdown', e => {
+        if (!currentDatingProfile) return;
+        pointerDragging = true; pointerStartX = e.clientX; pointerDeltaX = 0;
+        card.setPointerCapture && card.setPointerCapture(e.pointerId);
+      });
+      card.addEventListener('pointermove', e => {
+        if (!pointerDragging) return;
+        pointerDeltaX = e.clientX - pointerStartX;
+        const rotate = Math.max(-12, Math.min(12, pointerDeltaX / 18));
+        card.style.transform = `translateX(${pointerDeltaX}px) rotate(${rotate}deg)`;
+        $('stampLike').style.opacity = String(Math.max(0, Math.min(1, pointerDeltaX / 90)));
+        $('stampPass').style.opacity = String(Math.max(0, Math.min(1, -pointerDeltaX / 90)));
+      });
+      const end = () => {
+        if (!pointerDragging) return;
+        pointerDragging = false;
+        if (pointerDeltaX > 90) return darLike();
+        if (pointerDeltaX < -90) return pasarPerfil();
+        card.style.transition = 'transform .2s ease'; card.style.transform = '';
+        $('stampLike').style.opacity = '0'; $('stampPass').style.opacity = '0';
+        setTimeout(() => card.style.transition = '', 220);
+      };
+      card.addEventListener('pointerup', end); card.addEventListener('pointercancel', end);
+    }
+
     function seleccionarMazo(mazo) {
       if (mazo === 'seccionXX' && edadJugador < 18) {
         adultoPendiente = true;
@@ -779,7 +1133,7 @@
       $('connectionText').textContent = online ? 'Conectado' : 'Reconectando';
     }
 
-    socket.on('connect', () => actualizarConexion(true));
+    socket.on('connect', () => { actualizarConexion(true); if (nombreJugador && edadJugador >= 18) registrarDating(); });
     socket.on('disconnect', () => { actualizarConexion(false); mostrarToast('Conexión perdida. Intentando reconectar…','warn'); });
     socket.on('connect_error', () => actualizarConexion(false));
 
@@ -791,18 +1145,21 @@
       e.preventDefault();
       const nombre = limpiarNombre($('nombreUsuario').value);
       const edad = Number($('edadUsuario').value);
-      if (nombre.length < 2) return mostrarToast('Escribe un nombre o apodo válido.', 'warn');
-      if (!Number.isInteger(edad) || edad < 13 || edad > 99) return mostrarToast('La edad debe estar entre 13 y 99 años.', 'warn');
+      if (nombre.length < 2) return mostrarToast('Escribe un nombre válido.', 'warn');
+      if (!Number.isInteger(edad) || edad < 18 || edad > 99) return mostrarToast('Debes tener 18 años o más para usar V/R Match.', 'warn');
       nombreJugador = nombre;
       edadJugador = edad;
-      localStorage.setItem('vr_profile', JSON.stringify({ nombre: nombreJugador, edad: edadJugador, avatar: avatarJugador }));
+      ciudadJugador = String($('ciudadUsuario').value || '').trim().slice(0,40);
+      bioJugador = String($('bioUsuario').value || '').trim().slice(0,180);
+      interesesJugador = normalizarIntereses($('interesesUsuario').value);
+      localStorage.setItem('vr_profile', JSON.stringify({ nombre: nombreJugador, edad: edadJugador, avatar: avatarJugador, ciudad: ciudadJugador, bio: bioJugador, intereses: interesesJugador }));
       $('saludoHeader').textContent = nombreJugador;
       pintarAvatar($('avatarDot'), avatarJugador, nombreJugador);
       $('nombreMazoActivo').textContent = nombreMazo(mazoElegido).toUpperCase();
       if (salaInvitacion) {
         inicializarInvitacion();
       } else {
-        showScreen('pantallaMazos');
+        irADescubrir();
       }
     });
 
@@ -813,6 +1170,10 @@
         if (saved.nombre) $('nombreUsuario').value = saved.nombre;
         if (saved.edad) $('edadUsuario').value = saved.edad;
         if (saved.avatar) avatarJugador = saved.avatar;
+        if (saved.ciudad) $('ciudadUsuario').value = saved.ciudad;
+        if (saved.bio) $('bioUsuario').value = saved.bio;
+        if (Array.isArray(saved.intereses)) $('interesesUsuario').value = saved.intereses.join(', ');
+        $('bioCounter').textContent = String(($('bioUsuario').value || '').length);
         actualizarPreviewAvatar();
       } catch { localStorage.removeItem('vr_profile'); }
     }
@@ -974,6 +1335,8 @@
       mazoElegido = datos.mazo || 'rompehielos';
       rivalNombre = datos.oponenteNombre || 'Tu oponente';
       rivalAvatar = datos.oponenteAvatar || '';
+      origenPartida = datos.origen || 'legacy';
+      cerrarMatchModal(); rechazarInvitacionJuego();
       showScreen('pantallaJuego');
       prepararMesa('Partida online');
       $('opponentName').textContent = rivalNombre;
@@ -1382,12 +1745,14 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
       miSala=''; rivalNombre=''; rivalAvatar=''; rondaActual=1; enlaceSalaActual='';
       limpiarPruebaVisual();
       $('zonaInvitacion').classList.add('hidden'); $('controlesJuego').classList.add('hidden');
-      showScreen('pantallaMenu'); actualizarBarraTurno(false,'Esperando');
+      showScreen(origenPartida === 'dating' ? 'pantallaDescubrir' : 'pantallaMenu'); actualizarBarraTurno(false,'Esperando');
       actualizarCartaAnimada('Esperando oponente…','ESPERANDO');
     }
 
     $('nombreUsuario').addEventListener('input', () => { $('nombreUsuario').value = limpiarNombre($('nombreUsuario').value); });
+    $('bioUsuario').addEventListener('input', () => { $('bioCounter').textContent = String($('bioUsuario').value.length); });
     $('inputAvatar').addEventListener('change', (e) => { procesarAvatar(e.target.files && e.target.files[0]); e.target.value = ''; });
+    initDatingSwipe();
     $('deckAdult').title = 'Solo mayores de 18 años';
     cargarPerfil();
     if (mazoInvitacion) $('mazoSeleccionadoLabel').textContent = `Mazo: ${nombreMazo(mazoInvitacion)}`;
