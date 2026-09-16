@@ -14,6 +14,16 @@ services:
         value: https://verdad-o-reto-zz0k.onrender.com
       - key: VR_REQUIRE_EMAIL_VERIFICATION
         value: "false"
+      - key: VR_LAUNCH_MODE
+        value: beta
+      - key: VR_BILLING_ENABLED
+        value: "false"
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_PLUS_MONTHLY
+        sync: false
       - key: VR_ADMIN_EMAILS
         sync: false
       - key: SMTP_HOST

@@ -239,9 +239,9 @@
     <section id="pantallaPlus" class="screen dating-screen plus-screen hidden">
       <div class="screen-topbar"><button class="link-btn" type="button" onclick="cerrarPlus()">← Volver</button><span class="topbar-title">V/R+</span><span id="plusTopBadge" class="plus-status-badge">FREE</span></div>
       <div class="plus-hero">
-        <span class="plus-kicker">FASE 8 · V/R+</span>
+        <span class="plus-kicker">V/R+ · SUSCRIPCIÓN</span>
         <h2>Más control. Más descubrimiento.</h2>
-        <p>La capa premium ya está integrada en el producto. Los pagos reales se activarán cuando pasemos V/R Match a producción.</p>
+        <p>V/R+ ya está integrado. El checkout se habilita únicamente cuando Stripe y el modo de cobro estén configurados en el servidor.</p>
         <div class="plus-membership-card">
           <div><small>PLAN ACTUAL</small><strong id="plusPlanName">V/R Free</strong><span id="plusExpiryText">Funciones premium bloqueadas.</span></div>
           <div id="plusPlanIcon" class="plus-plan-icon">V/R+</div>
@@ -261,9 +261,10 @@
       </div>
 
       <div class="plus-production-note">
-        <strong>Suscripción preparada, cobro pendiente</strong>
-        <p>La app ya reconoce membresías V/R+, aplica ventajas y permite administrarlas. Stripe/checkout y el dominio propio se conectarán en el cierre de producción, junto con el upgrade de Render.</p>
-        <button id="plusUpgradeButton" class="btn btn-secondary" type="button" onclick="solicitarPlusInfo()">Cómo activar V/R+</button>
+        <strong id="plusBillingTitle">V/R+ en beta</strong>
+        <p id="plusBillingCopy">El acceso premium puede administrarse manualmente mientras preparamos el lanzamiento comercial.</p>
+        <div class="plus-billing-actions"><button id="plusUpgradeButton" class="btn btn-primary" type="button" onclick="solicitarPlusInfo()">Ver estado V/R+</button><button id="plusManageButton" class="btn btn-secondary hidden" type="button" onclick="abrirPortalBilling()">Gestionar suscripción</button></div>
+        <small id="plusBillingMeta" class="plus-billing-meta">Cobro no activado.</small>
       </div>
     </section>
 
@@ -315,7 +316,7 @@
 
     <section id="pantallaAdmin" class="screen admin-screen hidden">
       <div class="screen-topbar"><button class="link-btn" onclick="cerrarAdmin()">← Volver</button><span class="topbar-title">MODERACIÓN</span><span class="live-pill"><i></i> ADMIN</span></div>
-      <div class="section-heading"><span class="eyebrow">ADMIN · FASE 14</span><h2>Centro de control</h2><p>Moderación, métricas, producción, privacidad y mantenimiento técnico en un solo panel.</p></div>
+      <div class="section-heading"><span class="eyebrow">ADMIN · FASE 15</span><h2>Centro de control</h2><p>Moderación, métricas, producción, privacidad y mantenimiento técnico en un solo panel.</p></div>
       <div id="adminStats" class="admin-stats admin-stats-six">
         <div><strong>—</strong><span>activos</span></div><div><strong>—</strong><span>suspendidos</span></div><div><strong>—</strong><span>matches</span></div>
         <div><strong>—</strong><span>denuncias abiertas</span></div><div><strong>—</strong><span>mensajes</span></div><div><strong>—</strong><span>acciones 24h</span></div>
@@ -751,6 +752,7 @@
     let currentUserAdmin = false;
     let currentOnboardingCompleted = true;
     let currentPlus = { active:false, plan:'free', status:'inactive', expiresAt:null, settings:{verifiedOnly:false,minSharedInterests:0,sortMode:'smart'}, boost:{active:false,activeUntil:null,cooldownUntil:null,available:false}, billingEnabled:false };
+    let currentBilling = {enabled:false,prepared:false,mode:'off',launchMode:'beta',customer:false,subscription:null};
     let plusReturnScreen = 'pantallaDescubrir';
     let currentPrivacy = { discoverable:true, showOnline:true, allowGameInvites:true };
     let authMode = 'login';
@@ -1199,6 +1201,7 @@
     const mazoInvitacion = params.get('mazo');
     let resetToken = params.get('reset') || '';
     const verificationResult = params.get('verification') || '';
+    const billingResult = params.get('billing') || '';
     let pendingNotificationId = params.get('notification') || '';
 
     const $ = (id) => document.getElementById(id);
@@ -1589,8 +1592,9 @@
       if(!$('pantallaDescubrir').classList.contains('hidden'))plusReturnScreen='pantallaDescubrir';
       else if(!$('pantallaPerfil').classList.contains('hidden'))plusReturnScreen='pantallaPerfil';
       else if(!$('pantallaMatches').classList.contains('hidden'))plusReturnScreen='pantallaMatches';
-      const res=await api('/api/plus');
+      const [res,billing]=await Promise.all([api('/api/plus'),api('/api/billing/status')]);
       if(res.ok)aplicarPlusState(res.plus||{});
+      if(billing.ok)currentBilling=billing.billing||currentBilling;
       showScreen('pantallaPlus');
       renderPlusScreen();
     }
@@ -1612,7 +1616,21 @@
       } else $('plusBoostStatus').textContent='Disponible cuando V/R+ esté activo.';
       $('plusBoostButton').disabled=!currentPlus.active || Boolean(boost.active) || !Boolean(boost.available);
       $('plusBoostButton').textContent=boost.active?'Boost activo':(!currentPlus.active?'Requiere V/R+':(boost.available?'Activar Boost':'En cooldown'));
-      $('plusUpgradeButton').textContent=currentPlus.active?'V/R+ activo':'Cómo activar V/R+';
+      const bill=currentBilling||{}; const paid=currentPlus.source==='stripe';
+      const title=$('plusBillingTitle'),copy=$('plusBillingCopy'),meta=$('plusBillingMeta'),manage=$('plusManageButton'),upgrade=$('plusUpgradeButton');
+      manage.classList.add('hidden');
+      if(bill.enabled){
+        title.textContent=paid?'Suscripción V/R+ activa':'V/R+ disponible';
+        copy.textContent=paid?'Tu membresía se sincroniza con Stripe. Puedes gestionar cancelación y método de pago desde el portal seguro.':'Completa la suscripción en el checkout seguro de Stripe. V/R Match no almacena los datos de tu tarjeta.';
+        meta.textContent=`Stripe ${bill.mode==='live'?'producción':(bill.mode==='test'?'sandbox':'configurado')} · ${bill.launchMode==='production'?'modo producción':'modo beta'}`;
+        if(paid){upgrade.textContent='V/R+ activo';upgrade.disabled=true;manage.classList.remove('hidden');}
+        else{upgrade.disabled=currentPlus.active;upgrade.textContent=currentPlus.active?'V/R+ beta activo':'Suscribirme a V/R+';}
+      }else{
+        title.textContent=currentPlus.active?'V/R+ beta activo':'V/R+ en beta';
+        copy.textContent=currentPlus.active?'Tu acceso premium actual es manual y no genera ningún cobro.':'El checkout comercial todavía está desactivado. Puedes seguir probando las funciones de la beta.';
+        meta.textContent=bill.prepared?'Stripe preparado · activación de cobro pendiente':'Cobro no configurado';
+        upgrade.disabled=currentPlus.active;upgrade.textContent=currentPlus.active?'V/R+ activo':'V/R+ todavía no disponible para compra';
+      }
     }
     async function activarPlusBoost() {
       if(!currentPlus.active)return solicitarPlusInfo();
@@ -1621,9 +1639,22 @@
       aplicarPlusState(res.plus||{});
       mostrarToast('Boost activado durante 30 minutos.','info');
     }
-    function solicitarPlusInfo() {
-      if(currentPlus.active)return mostrarToast('Tu V/R+ ya está activo.','info');
-      mostrarToast('V/R+ se habilita manualmente durante la beta. El checkout real llegará al pasar a producción.','info');
+    async function solicitarPlusInfo() {
+      if(currentPlus.active){
+        if(currentPlus.source==='stripe')return abrirPortalBilling();
+        return mostrarToast('Tu V/R+ beta ya está activo y no genera cobro.','info');
+      }
+      if(!currentBilling?.enabled)return mostrarToast('El checkout V/R+ todavía está desactivado durante la beta.','info');
+      const btn=$('plusUpgradeButton'),old=btn.textContent;btn.disabled=true;btn.textContent='Abriendo pago…';
+      const res=await api('/api/billing/checkout',{method:'POST',body:{}});
+      if(!res.ok){btn.disabled=false;btn.textContent=old;return mostrarToast(res.error||'No se pudo abrir el pago.','error');}
+      if(res.url)location.href=res.url;else{btn.disabled=false;btn.textContent=old;mostrarToast('Stripe no devolvió una URL válida.','error');}
+    }
+    async function abrirPortalBilling(){
+      if(!currentBilling?.enabled)return mostrarToast('La gestión de suscripción todavía no está habilitada.','warn');
+      const res=await api('/api/billing/portal',{method:'POST',body:{}});
+      if(!res.ok)return mostrarToast(res.error||'No se pudo abrir la gestión de suscripción.','error');
+      if(res.url)location.href=res.url;
     }
     async function guardarFiltrosPlus() {
       if(!currentPlus.active)return {ok:true};
@@ -1815,8 +1846,8 @@
       const res=await api('/api/admin/production-readiness');
       if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudo comprobar')}</strong></div>`;return;}
       const r=res.readiness||{};
-      const items=[['Dominio propio',r.customDomain],['Persistencia de datos',r.persistentStorage],['SMTP',r.smtpConfigured],['Verificación obligatoria',r.emailVerificationRequired],['Administrador',r.adminConfigured],['Web Push',r.webPushConfigured],['Cobro V/R+',r.billingConfigured]];
-      box.innerHTML=`<div class="production-hero ${r.productionReady?'ready':'pending'}"><span>${r.productionReady?'✓':'⚙'}</span><div><strong>${r.productionReady?'Base técnica lista':'Beta funcional · producción pendiente'}</strong><small>Versión ${escapeHtml(r.version||'')} · legal ${escapeHtml(r.legalVersion||'')}</small></div></div><div class="production-grid">${items.map(([label,ok])=>`<div><span class="production-dot ${ok?'ok':'pending'}"></span><strong>${escapeHtml(label)}</strong><small>${ok?'Configurado':'Pendiente'}</small></div>`).join('')}</div><div class="production-pending"><strong>Antes del lanzamiento comercial</strong><ul>${(r.pending||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`;
+      const items=[['Modo producción',r.productionMode],['Dominio propio',r.customDomain],['Persistencia de datos',r.persistentStorage],['SMTP',r.smtpConfigured],['Verificación obligatoria',r.emailVerificationRequired],['Administrador',r.adminConfigured],['Stripe preparado',r.billingPrepared],['Checkout V/R+',r.billingConfigured],['Stripe LIVE',r.billingLive],['Web Push',r.webPushConfigured]];
+      box.innerHTML=`<div class="production-hero ${r.productionReady?'ready':'pending'}"><span>${r.productionReady?'✓':'⚙'}</span><div><strong>${r.productionReady?'Técnicamente listo para lanzamiento':'Beta funcional · activación comercial pendiente'}</strong><small>Versión ${escapeHtml(r.version||'')} · modo ${escapeHtml(r.launchMode||'beta')} · Stripe ${escapeHtml(r.billingMode||'off')}</small></div></div><div class="production-grid">${items.map(([label,ok])=>`<div><span class="production-dot ${ok?'ok':'pending'}"></span><strong>${escapeHtml(label)}</strong><small>${ok?'Configurado':'Pendiente'}</small></div>`).join('')}</div><div class="production-pending"><strong>Antes de cobrar a usuarios reales</strong><ul>${(r.pending||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`;
     }
 
     async function cargarAdminSystem(){
@@ -3435,6 +3466,9 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
     if (mazoInvitacion) $('mazoSeleccionadoLabel').textContent = `Mazo: ${nombreMazo(mazoInvitacion)}`;
     if (verificationResult === 'ok') { history.replaceState({},document.title,location.pathname); setTimeout(()=>mostrarToast('Correo verificado correctamente. Ya puedes entrar.','info'),150); }
     if (verificationResult === 'invalid') { history.replaceState({},document.title,location.pathname); setTimeout(()=>mostrarToast('El enlace de verificación no es válido o ha caducado.','warn'),150); }
+    if (billingResult === 'success') { history.replaceState({},document.title,location.pathname); setTimeout(()=>mostrarToast('Pago recibido. V/R+ se activará al confirmar Stripe.','info'),220); }
+    if (billingResult === 'cancel') { history.replaceState({},document.title,location.pathname); setTimeout(()=>mostrarToast('No se realizó ningún cobro.','info'),220); }
+    if (billingResult === 'portal') { history.replaceState({},document.title,location.pathname); setTimeout(()=>mostrarToast('Cambios de suscripción sincronizados.','info'),220); }
     if (resetToken) { showScreen('pantallaAuth'); setTimeout(abrirResetPassword,100); } else bootstrapAuth();
   </script>
 </body>

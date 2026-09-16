@@ -1113,3 +1113,16 @@ Se añadió una capa operativa para reducir riesgo durante la beta:
 El backup contiene SQLite y uploads, por lo que es sensible y debe almacenarse de forma privada. No contiene secretos de Render ni SMTP porque esas credenciales siguen fuera de la base de datos.
 
 Mientras Render continúe en Free, esta función es una red de seguridad manual y no sustituye almacenamiento persistente, base administrada ni backups automáticos de producción.
+
+
+---
+
+## FASE 15 — Lanzamiento comercial preparado
+
+- Versión 15.0.0.
+- Modo de lanzamiento configurable: beta/production.
+- Stripe Checkout + Customer Portal opcionales y desactivados por defecto.
+- Webhook firmado e idempotente.
+- Sincronización de V/R+ con suscripciones.
+- Checklist de producción ampliado.
+- Render Free sigue siendo solo beta; dominio, persistencia, correo profesional y cobro live se activan al final.

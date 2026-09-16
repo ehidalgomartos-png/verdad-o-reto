@@ -24,7 +24,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '14.0.0';
+const APP_VERSION = '15.0.0';
 const LEGAL_VERSION = 'beta-2026-09-16';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -44,6 +44,16 @@ const PASSWORD_RESET_MINUTES = 45;
 const REQUIRE_EMAIL_VERIFICATION = String(process.env.VR_REQUIRE_EMAIL_VERIFICATION || 'false').toLowerCase() === 'true';
 const ADMIN_EMAILS = new Set(String(process.env.VR_ADMIN_EMAILS || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean));
 const APP_BASE_URL = String(process.env.VR_APP_BASE_URL || '').replace(/\/$/, '');
+const LAUNCH_MODE = String(process.env.VR_LAUNCH_MODE || 'beta').toLowerCase() === 'production' ? 'production' : 'beta';
+const BILLING_ENABLED = String(process.env.VR_BILLING_ENABLED || 'false').toLowerCase() === 'true';
+const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || '').trim();
+const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || '').trim();
+const STRIPE_PRICE_PLUS_MONTHLY = String(process.env.STRIPE_PRICE_PLUS_MONTHLY || '').trim();
+const STRIPE_API_BASE = 'https://api.stripe.com/v1';
+const STRIPE_PREPARED = Boolean(STRIPE_SECRET_KEY && STRIPE_WEBHOOK_SECRET && STRIPE_PRICE_PLUS_MONTHLY);
+const STRIPE_MODE = STRIPE_SECRET_KEY.startsWith('sk_live_') ? 'live' : (STRIPE_SECRET_KEY.startsWith('sk_test_') ? 'test' : (STRIPE_SECRET_KEY ? 'configured' : 'off'));
+// Salvaguarda: una clave LIVE nunca habilita cobros mientras la app siga en modo beta.
+const BILLING_CONFIGURED = Boolean(BILLING_ENABLED && STRIPE_PREPARED && APP_BASE_URL && (STRIPE_MODE !== 'live' || LAUNCH_MODE === 'production'));
 const SMTP_CONFIGURED = Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_FROM);
 const VAPID_PUBLIC_KEY = String(process.env.VAPID_PUBLIC_KEY || '').trim();
 const VAPID_PRIVATE_KEY = String(process.env.VAPID_PRIVATE_KEY || '').trim();
@@ -221,6 +231,31 @@ CREATE TABLE IF NOT EXISTS plus_boosts (
   active_until INTEGER,
   last_used_at INTEGER
 );
+CREATE TABLE IF NOT EXISTS billing_customers (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL DEFAULT 'stripe',
+  customer_id TEXT NOT NULL UNIQUE,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS billing_subscriptions (
+  subscription_id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  customer_id TEXT NOT NULL,
+  provider TEXT NOT NULL DEFAULT 'stripe',
+  status TEXT NOT NULL DEFAULT 'inactive',
+  price_id TEXT NOT NULL DEFAULT '',
+  current_period_end INTEGER,
+  cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_billing_subscriptions_user ON billing_subscriptions(user_id,updated_at DESC);
+CREATE TABLE IF NOT EXISTS billing_events (
+  event_id TEXT PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  received_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS notification_preferences (
   user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   new_match INTEGER NOT NULL DEFAULT 1,
@@ -305,6 +340,19 @@ app.use((req,res,next) => {
   if (process.env.NODE_ENV === 'production' || process.env.RENDER) res.setHeader('Strict-Transport-Security','max-age=15552000; includeSubDomains');
   next();
 });
+app.post('/api/billing/webhook', express.raw({type:'application/json',limit:'1mb'}), async (req,res) => {
+  if(!STRIPE_PREPARED)return res.status(503).send('billing_not_configured');
+  if(!stripeWebhookSignatureValid(req.body,req.headers['stripe-signature']))return res.status(400).send('invalid_signature');
+  let event; try{event=JSON.parse(req.body.toString('utf8'));}catch{return res.status(400).send('invalid_json');}
+  if(!event?.id || !event?.type)return res.status(400).send('invalid_event');
+  if(db.prepare('SELECT 1 FROM billing_events WHERE event_id=?').get(String(event.id)))return res.status(200).json({received:true,duplicate:true});
+  try{
+    await handleStripeEvent(event);
+    db.prepare('INSERT OR IGNORE INTO billing_events(event_id,event_type,received_at) VALUES(?,?,?)').run(String(event.id),String(event.type),now());
+    res.status(200).json({received:true});
+  }catch(e){console.error('Stripe webhook error:',cleanShortText(e.message,220));res.status(500).json({received:false});}
+});
+
 app.use(express.json({ limit: '9mb' }));
 
 const waitingPlayers = new Map();
@@ -662,7 +710,7 @@ function getPlusState(userId) {
     expiresAt: active ? (row?.expires_at || null) : null,
     settings: getPlusSettings(userId),
     boost: plusBoostState(userId),
-    billingEnabled: false
+    billingEnabled: BILLING_CONFIGURED
   };
 }
 function requirePlus(req,res,next) {
@@ -687,6 +735,110 @@ function revokePlus(userId) {
     .run(userId,'inactive','plus','admin',ts);
   db.prepare('DELETE FROM plus_boosts WHERE user_id=?').run(userId);
   return getPlusState(userId);
+}
+
+function billingCustomerForUser(userId){
+  return db.prepare('SELECT customer_id FROM billing_customers WHERE user_id=?').get(userId)?.customer_id || '';
+}
+function billingUserForCustomer(customerId){
+  return db.prepare('SELECT user_id FROM billing_customers WHERE customer_id=?').get(String(customerId||''))?.user_id || '';
+}
+function billingSubscriptionForUser(userId){
+  return db.prepare('SELECT subscription_id,status,price_id,current_period_end,cancel_at_period_end,updated_at FROM billing_subscriptions WHERE user_id=? ORDER BY updated_at DESC LIMIT 1').get(userId) || null;
+}
+function upsertBillingCustomer(userId,customerId){
+  if(!userId || !customerId)return;
+  const ts=now();
+  db.prepare(`INSERT INTO billing_customers(user_id,provider,customer_id,created_at,updated_at) VALUES(?,'stripe',?,?,?)
+    ON CONFLICT(user_id) DO UPDATE SET provider='stripe',customer_id=excluded.customer_id,updated_at=excluded.updated_at`)
+    .run(userId,String(customerId),ts,ts);
+}
+function syncStripeSubscription(subscription){
+  if(!subscription || !subscription.id)return {ok:false};
+  const customerId=String(subscription.customer||'');
+  const metadataUser=String(subscription.metadata?.user_id||'');
+  const userId=metadataUser || billingUserForCustomer(customerId);
+  if(!userId || !db.prepare('SELECT 1 FROM users WHERE id=?').get(userId))return {ok:false};
+  if(customerId)upsertBillingCustomer(userId,customerId);
+  const status=String(subscription.status||'inactive');
+  const priceId=String(subscription.items?.data?.[0]?.price?.id||'');
+  const periodEnd=Number(subscription.current_period_end||0)>0 ? Number(subscription.current_period_end)*1000 : null;
+  const ts=now();
+  db.prepare(`INSERT INTO billing_subscriptions(subscription_id,user_id,customer_id,provider,status,price_id,current_period_end,cancel_at_period_end,created_at,updated_at)
+    VALUES(?,?,?,'stripe',?,?,?,?,?,?) ON CONFLICT(subscription_id) DO UPDATE SET user_id=excluded.user_id,customer_id=excluded.customer_id,
+    status=excluded.status,price_id=excluded.price_id,current_period_end=excluded.current_period_end,cancel_at_period_end=excluded.cancel_at_period_end,updated_at=excluded.updated_at`)
+    .run(String(subscription.id),userId,customerId,status,priceId,periodEnd,subscription.cancel_at_period_end?1:0,ts,ts);
+  const entitled = ['active','trialing'].includes(status) && (!periodEnd || periodEnd>ts);
+  if(entitled){
+    db.prepare(`INSERT INTO plus_memberships(user_id,status,plan,source,started_at,expires_at,updated_at)
+      VALUES(?,'active','plus','stripe',?,?,?) ON CONFLICT(user_id) DO UPDATE SET status='active',plan='plus',source='stripe',
+      started_at=COALESCE(plus_memberships.started_at,excluded.started_at),expires_at=excluded.expires_at,updated_at=excluded.updated_at`)
+      .run(userId,ts,periodEnd,ts);
+  }else{
+    const current=db.prepare('SELECT source FROM plus_memberships WHERE user_id=?').get(userId);
+    if(current?.source==='stripe'){
+      db.prepare("UPDATE plus_memberships SET status='inactive',expires_at=NULL,updated_at=? WHERE user_id=?").run(ts,userId);
+      db.prepare('DELETE FROM plus_boosts WHERE user_id=?').run(userId);
+    }
+  }
+  emitToUser(userId,'plus_state',getPlusState(userId));
+  broadcastDiscovery();
+  return {ok:true,userId,status};
+}
+async function stripeRequest(pathname,{method='POST',params=null}={}){
+  if(!STRIPE_SECRET_KEY)throw new Error('Stripe no está configurado.');
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
+  try{
+    const init={method,headers:{Authorization:`Bearer ${STRIPE_SECRET_KEY}`},signal:controller.signal};
+    if(params){init.headers['Content-Type']='application/x-www-form-urlencoded';init.body=new URLSearchParams(params).toString();}
+    const response=await fetch(`${STRIPE_API_BASE}${pathname}`,init);
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(cleanShortText(data?.error?.message,220)||'Stripe rechazó la solicitud.');
+    return data;
+  }finally{clearTimeout(timer);}
+}
+async function ensureStripeCustomer(userId,email){
+  const existing=billingCustomerForUser(userId); if(existing)return existing;
+  const customer=await stripeRequest('/customers',{params:{email:String(email||''),'metadata[user_id]':userId}});
+  upsertBillingCustomer(userId,customer.id); return String(customer.id);
+}
+async function retrieveStripeSubscription(subscriptionId){
+  return stripeRequest(`/subscriptions/${encodeURIComponent(String(subscriptionId||''))}`,{method:'GET'});
+}
+async function cancelStripeSubscription(subscriptionId){
+  return stripeRequest(`/subscriptions/${encodeURIComponent(String(subscriptionId||''))}`,{method:'DELETE'});
+}
+function stripeWebhookSignatureValid(rawBody,signatureHeader){
+  if(!STRIPE_WEBHOOK_SECRET || !Buffer.isBuffer(rawBody))return false;
+  const pieces=String(signatureHeader||'').split(',').map(x=>x.trim()).filter(Boolean);
+  const timestamp=pieces.find(x=>x.startsWith('t='))?.slice(2)||'';
+  const signatures=pieces.filter(x=>x.startsWith('v1=')).map(x=>x.slice(3)).filter(Boolean);
+  const ts=Number(timestamp); if(!Number.isFinite(ts) || Math.abs(Math.floor(Date.now()/1000)-ts)>300 || !signatures.length)return false;
+  const expected=crypto.createHmac('sha256',STRIPE_WEBHOOK_SECRET).update(`${timestamp}.${rawBody.toString('utf8')}`,'utf8').digest('hex');
+  const expectedBuffer=Buffer.from(expected,'hex');
+  return signatures.some(sig=>{try{const candidate=Buffer.from(sig,'hex');return candidate.length===expectedBuffer.length&&crypto.timingSafeEqual(candidate,expectedBuffer);}catch{return false;}});
+}
+async function handleStripeEvent(event){
+  const type=String(event?.type||''),obj=event?.data?.object||{};
+  if(type==='checkout.session.completed' && obj.mode==='subscription'){
+    const userId=String(obj.metadata?.user_id||obj.client_reference_id||'');
+    if(userId && obj.customer)upsertBillingCustomer(userId,String(obj.customer));
+    if(obj.subscription){const sub=await retrieveStripeSubscription(String(obj.subscription));syncStripeSubscription(sub);}
+    return;
+  }
+  if(['customer.subscription.created','customer.subscription.updated','customer.subscription.deleted'].includes(type))syncStripeSubscription(obj);
+}
+function billingPublicState(userId){
+  const sub=billingSubscriptionForUser(userId);
+  return {
+    enabled:BILLING_CONFIGURED,
+    prepared:STRIPE_PREPARED,
+    mode:STRIPE_MODE,
+    launchMode:LAUNCH_MODE,
+    customer:Boolean(billingCustomerForUser(userId)),
+    subscription:sub?{status:sub.status,currentPeriodEnd:sub.current_period_end||null,cancelAtPeriodEnd:Boolean(sub.cancel_at_period_end)}:null,
+    plus:getPlusState(userId)
+  };
 }
 
 const NOTIFICATION_TYPES = new Set(['match','message','game_invite','game_turn']);
@@ -1272,13 +1424,49 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
   } catch(e){console.error('Error exportando cuenta:',e);res.status(500).json({ok:false,error:'No se pudieron preparar tus datos.'});}
 });
 
-app.post('/api/account/delete', requireAuth, rateLimit({limit:3,windowMs:24*60*60*1000,key:req=>req.user.id}), (req,res) => {
+app.post('/api/account/delete', requireAuth, rateLimit({limit:3,windowMs:24*60*60*1000,key:req=>req.user.id}), async (req,res) => {
   const password=String(req.body?.password||''); const row=db.prepare('SELECT password_hash FROM users WHERE id=?').get(req.user.id);
   if(!row||!verifyPassword(password,row.password_hash))return res.status(400).json({ok:false,error:'Contraseña incorrecta.'});
+  const billing=billingSubscriptionForUser(req.user.id);
+  if(billing && ['active','trialing','past_due'].includes(billing.status)){
+    if(!STRIPE_SECRET_KEY)return res.status(503).json({ok:false,error:'Tu cuenta tiene una suscripción vinculada y el servidor no puede cancelarla ahora. Contacta con soporte antes de borrar la cuenta.'});
+    try{const canceled=await cancelStripeSubscription(billing.subscription_id);syncStripeSubscription(canceled);}catch(e){console.error('Cancelación antes de borrar cuenta:',cleanShortText(e.message,220));return res.status(502).json({ok:false,error:'No pudimos cancelar la suscripción. La cuenta no se borró para evitar un cobro posterior.'});}
+  }
   disconnectUserSockets(req.user.id,'account_deleted',{}); deleteUserUploads(req.user.id); db.prepare('DELETE FROM users WHERE id=?').run(req.user.id); onlineUsers.delete(req.user.id); broadcastDiscovery();
   res.json({ok:true});
 });
 
+
+app.get('/api/billing/status', requireAuth, (req,res) => res.json({ok:true,billing:billingPublicState(req.user.id)}));
+
+app.post('/api/billing/checkout', requireAuth, rateLimit({limit:8,windowMs:60*60*1000,key:req=>req.user.id}), async (req,res) => {
+  if(!BILLING_CONFIGURED)return res.status(503).json({ok:false,error:'El cobro V/R+ todavía no está activado.'});
+  const full=db.prepare('SELECT email,email_verified FROM users WHERE id=?').get(req.user.id);
+  if(!full?.email_verified)return res.status(403).json({ok:false,error:'Verifica tu correo antes de contratar V/R+.'});
+  const current=getPlusState(req.user.id);
+  if(current.active && current.source!=='stripe')return res.status(409).json({ok:false,error:'Tu V/R+ beta ya está activo. Podrás suscribirte cuando finalice ese acceso.'});
+  const existing=billingSubscriptionForUser(req.user.id);
+  if(existing && ['active','trialing'].includes(existing.status))return res.status(409).json({ok:false,error:'Ya tienes una suscripción V/R+ activa. Usa Gestionar suscripción.'});
+  try{
+    const customer=await ensureStripeCustomer(req.user.id,full.email);
+    const session=await stripeRequest('/checkout/sessions',{params:{
+      mode:'subscription',customer,'line_items[0][price]':STRIPE_PRICE_PLUS_MONTHLY,'line_items[0][quantity]':'1',
+      client_reference_id:req.user.id,'metadata[user_id]':req.user.id,'subscription_data[metadata][user_id]':req.user.id,
+      success_url:`${APP_BASE_URL}/?billing=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url:`${APP_BASE_URL}/?billing=cancel`,allow_promotion_codes:'true'
+    }});
+    res.json({ok:true,url:String(session.url||'')});
+  }catch(e){console.error('Stripe checkout:',cleanShortText(e.message,220));res.status(502).json({ok:false,error:'No se pudo abrir el pago. Inténtalo de nuevo.'});}
+});
+
+app.post('/api/billing/portal', requireAuth, rateLimit({limit:12,windowMs:60*60*1000,key:req=>req.user.id}), async (req,res) => {
+  if(!BILLING_CONFIGURED)return res.status(503).json({ok:false,error:'La gestión de cobros todavía no está activada.'});
+  const customer=billingCustomerForUser(req.user.id); if(!customer)return res.status(404).json({ok:false,error:'No hay una suscripción de pago asociada a esta cuenta.'});
+  try{
+    const session=await stripeRequest('/billing_portal/sessions',{params:{customer,return_url:`${APP_BASE_URL}/?billing=portal`}});
+    res.json({ok:true,url:String(session.url||'')});
+  }catch(e){console.error('Stripe portal:',cleanShortText(e.message,220));res.status(502).json({ok:false,error:'No se pudo abrir la gestión de suscripción.'});}
+});
 
 app.get('/api/plus', requireAuth, (req,res) => {
   res.json({ok:true,plus:getPlusState(req.user.id)});
@@ -1616,23 +1804,39 @@ function productionReadiness() {
   try { hostname = APP_BASE_URL ? new URL(APP_BASE_URL).hostname : ''; } catch {}
   const customDomain = Boolean(hostname && !hostname.endsWith('.onrender.com') && hostname !== 'localhost');
   const persistentStorage = path.resolve(STORAGE_DIR) !== path.resolve(ROOT);
+  const productionMode = LAUNCH_MODE === 'production';
+  const billingConfigured = BILLING_CONFIGURED;
+  const billingLive = Boolean(BILLING_CONFIGURED && STRIPE_MODE === 'live');
+  const coreReady = Boolean(customDomain && persistentStorage && SMTP_CONFIGURED && REQUIRE_EMAIL_VERIFICATION && ADMIN_EMAILS.size > 0);
   return {
     version: APP_VERSION,
     legalVersion: LEGAL_VERSION,
+    launchMode:LAUNCH_MODE,
+    productionMode,
     customDomain,
     persistentStorage,
     smtpConfigured: SMTP_CONFIGURED,
     emailVerificationRequired: REQUIRE_EMAIL_VERIFICATION,
     adminConfigured: ADMIN_EMAILS.size > 0,
     webPushConfigured: PUSH_CONFIGURED,
-    billingConfigured: false,
-    productionReady: Boolean(customDomain && persistentStorage && SMTP_CONFIGURED && REQUIRE_EMAIL_VERIFICATION && ADMIN_EMAILS.size > 0),
+    billingPrepared:STRIPE_PREPARED,
+    billingEnabled:BILLING_ENABLED,
+    billingConfigured,
+    billingMode:STRIPE_MODE,
+    billingLive,
+    productionReady: Boolean(coreReady && billingLive && productionMode),
     pending: [
-      !customDomain ? 'Dominio propio' : null,
-      !persistentStorage ? 'Persistencia de datos / Render de pago o base administrada' : null,
-      !REQUIRE_EMAIL_VERIFICATION ? 'Verificación de email obligatoria' : null,
-      !PUSH_CONFIGURED ? 'Web Push VAPID (opcional)' : null,
-      'Checkout real V/R+ y revisión legal final'
+      !customDomain ? 'Dominio propio y VR_APP_BASE_URL definitivo' : null,
+      !persistentStorage ? 'Render de pago + Persistent Disk en /var/data (o almacenamiento administrado)' : null,
+      !REQUIRE_EMAIL_VERIFICATION ? 'VR_REQUIRE_EMAIL_VERIFICATION=true' : null,
+      !SMTP_CONFIGURED ? 'SMTP profesional con dominio verificado' : null,
+      !STRIPE_PREPARED ? 'Claves, webhook y Price ID de Stripe' : null,
+      STRIPE_PREPARED && !BILLING_ENABLED ? 'VR_BILLING_ENABLED=true después de probar Stripe en sandbox' : null,
+      STRIPE_PREPARED && STRIPE_MODE !== 'live' ? 'Cambiar Stripe de sandbox a claves/Price ID live solo al final' : null,
+      STRIPE_MODE === 'live' && !productionMode ? 'La clave Stripe live está protegida: no se habilitará el checkout hasta VR_LAUNCH_MODE=production' : null,
+      !productionMode ? 'VR_LAUNCH_MODE=production cuando termine la validación final' : null,
+      !PUSH_CONFIGURED ? 'Web Push VAPID (recomendado, no bloquea el lanzamiento)' : null,
+      'Revisión legal/fiscal final antes de cobrar a usuarios reales'
     ].filter(Boolean)
   };
 }
@@ -1918,5 +2122,5 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v13.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);
-  console.log('Resiliencia F14: mantenimiento + backup manual protegidos');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad beta: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad F13: sesiones + bloqueados + exportación de datos');});
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v15.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);
+  console.log('Resiliencia F14: mantenimiento + backup manual protegidos');console.log(`Lanzamiento F15: ${LAUNCH_MODE} | Stripe ${BILLING_CONFIGURED?`${STRIPE_MODE} activo`:(STRIPE_PREPARED?'preparado / desactivado':'no configurado')}`);console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad beta: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad F13: sesiones + bloqueados + exportación de datos');});
