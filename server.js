@@ -1263,11 +1263,17 @@ app.post('/api/report', requireAuth, rateLimit({limit:10,windowMs:60*60*1000,key
   res.json({ok:true});
 });
 
-app.get('/healthz', (req,res) => { try { db.prepare('SELECT 1').get(); res.status(200).json({ok:true,db:true,version:'9.0.0'}); } catch { res.status(503).json({ok:false,db:false}); } });
+app.get('/healthz', (req,res) => { try { db.prepare('SELECT 1').get(); res.status(200).json({ok:true,db:true,version:'10.0.0'}); } catch { res.status(503).json({ok:false,db:false}); } });
 app.use('/uploads', express.static(UPLOAD_DIR, { fallthrough:false, maxAge:'7d', dotfiles:'deny' }));
 app.get(['/', '/index.html'], (req,res) => res.sendFile(path.join(ROOT,'index.html')));
 app.get('/styles.css', (req,res) => res.sendFile(path.join(ROOT,'styles.css')));
-app.get('/sw.js', (req,res) => { res.setHeader('Cache-Control','no-cache'); res.sendFile(path.join(ROOT,'sw.js')); });
+app.get('/manifest.webmanifest', (req,res) => { res.type('application/manifest+json'); res.setHeader('Cache-Control','public, max-age=3600'); res.sendFile(path.join(ROOT,'manifest.webmanifest')); });
+app.get('/offline.html', (req,res) => res.sendFile(path.join(ROOT,'offline.html')));
+app.get('/icons/icon-192.png', (req,res) => res.sendFile(path.join(ROOT,'icons','icon-192.png')));
+app.get('/icons/icon-512.png', (req,res) => res.sendFile(path.join(ROOT,'icons','icon-512.png')));
+app.get('/icons/icon-maskable-512.png', (req,res) => res.sendFile(path.join(ROOT,'icons','icon-maskable-512.png')));
+app.get('/icons/apple-touch-icon.png', (req,res) => res.sendFile(path.join(ROOT,'icons','apple-touch-icon.png')));
+app.get('/sw.js', (req,res) => { res.type('application/javascript'); res.setHeader('Cache-Control','no-cache, no-store, must-revalidate'); res.sendFile(path.join(ROOT,'sw.js')); });
 app.get('/preview.html', (req,res) => res.sendFile(path.join(ROOT,'preview.html')));
 
 function socketSet(userId) {
@@ -1475,4 +1481,4 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{console.log(`V/R Match v9.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);});
+server.listen(PORT, '0.0.0.0', ()=>{console.log(`V/R Match v10.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);});

@@ -1,6 +1,6 @@
 # V/R MATCH — CONTEXTO MAESTRO DEL PROYECTO
 
-**Última actualización:** 16 de septiembre de 2026  
+**Última actualización:** 16 de septiembre de 2026 · Fase 10 PWA preparada  
 **Estado:** Fases 4, 5 y 6 validadas; Fase 7 preparada para desplegar  
 **Proyecto:** V/R Match  
 **Concepto:** App de citas donde, después de hacer match, dos personas pueden conversar y jugar dinámicas tipo Verdad o Reto / Rompehielos dentro de la propia experiencia de dating.
@@ -975,3 +975,52 @@ Incluye centro de notificaciones, contador de no leídas, preferencias por usuar
 El Web Push de fondo puede permanecer sin configurar durante la beta. Las claves VAPID, si se activan, deben vivir únicamente en Render Environment y nunca en GitHub.
 
 Siguiente paso después de validar Fase 9: **Fase 10 — producto móvil / PWA y evaluación de empaquetado móvil**.
+
+
+---
+
+# ACTUALIZACIÓN — FASE 10 · PWA INSTALABLE
+
+**Versión preparada:** 10.0.0
+
+V/R Match pasa a ser una Progressive Web App instalable sin abandonar el stack actual HTML/CSS/JavaScript + Node/Express/Socket.IO.
+
+## Componentes añadidos
+
+- `manifest.webmanifest`.
+- Iconos 192, 512, maskable y Apple Touch Icon.
+- Service Worker con app shell, actualización de caché y soporte de Web Push de Fase 9.
+- Instalación nativa en navegadores compatibles mediante `beforeinstallprompt`.
+- Guía de instalación para iPhone/iPad mediante Safari.
+- Modo standalone y safe areas.
+- Fallback offline.
+
+## Política de caché
+
+No cachear datos personales ni contenido dinámico. Se excluyen de caché:
+
+- `/api/`;
+- `/socket.io/`;
+- `/uploads/`.
+
+El modo offline no sustituye al backend: dating, chat, juego, geolocalización, moderación y V/R+ requieren conexión.
+
+## Producción pendiente
+
+Se mantiene para el cierre:
+
+- dominio propio;
+- Render Starter / almacenamiento persistente o migración de base de datos;
+- almacenamiento persistente de imágenes;
+- remitente de correo profesional;
+- verificación obligatoria de correo;
+- VAPID para push real si se activa;
+- pagos reales V/R+.
+
+## Health check esperado
+
+```json
+{"ok":true,"db":true,"version":"10.0.0"}
+```
+
+Después de validar la PWA, el siguiente bloque debe centrarse en **estabilización de producto móvil, QA general y preparación para producción**, antes de empaquetar con React Native/Flutter o publicar en stores.

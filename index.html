@@ -5,7 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#09090d">
   <meta name="description" content="V/R Match - conecta, haz match y rompe el hielo jugando">
+  <meta name="application-name" content="V/R Match">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="V/R Match">
   <title>V/R Match • Haz match y juega</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="stylesheet" href="/styles.css">
 
   <!-- =========================================================
@@ -33,6 +41,7 @@
         <small>HAZ MATCH. ROMPE EL HIELO.</small>
       </div>
       <div class="brand-actions">
+        <button id="installAppButton" class="pwa-install-chip hidden" type="button" onclick="instalarPWA()" aria-label="Instalar V/R Match">⇩ <span>Instalar</span></button>
         <button id="notificationBell" class="notification-bell hidden" type="button" onclick="abrirNotificaciones()" aria-label="Notificaciones">🔔<i id="notificationBadge" class="notification-count hidden">0</i></button>
         <div id="connectionBadge" class="connection-badge offline"><span class="connection-dot"></span><span id="connectionText">Conectando</span></div>
       </div>
@@ -575,6 +584,7 @@
       <div class="account-email-card"><div><small>CORREO</small><strong id="settingsEmail">—</strong></div><span id="emailVerifiedBadge" class="security-badge">Pendiente</span></div>
       <button id="resendVerificationButton" class="mini-link account-resend" type="button" onclick="reenviarVerificacion()">Reenviar verificación</button>
       <div class="settings-section"><strong>Privacidad</strong><label class="setting-switch"><span><b>Mostrarme en Descubrir</b><small>Desactívalo para pausar temporalmente tu perfil.</small></span><input id="privacyDiscoverable" type="checkbox" checked></label><label class="setting-switch"><span><b>Mostrar estado online</b><small>Oculta el indicador de conexión a otros usuarios.</small></span><input id="privacyShowOnline" type="checkbox" checked></label><label class="setting-switch"><span><b>Permitir invitaciones a jugar</b><small>Tus matches podrán proponerte una partida.</small></span><input id="privacyGameInvites" type="checkbox" checked></label><button class="btn btn-secondary" type="button" onclick="guardarPrivacidad()">Guardar privacidad</button></div>
+      <div id="pwaInstallSection" class="settings-section"><strong>Aplicación</strong><div class="pwa-install-card"><div class="pwa-install-icon">V/R</div><div><b>Instalar V/R Match</b><small id="pwaInstallStatus">Añade V/R Match a tu pantalla de inicio y ábrelo como una app.</small></div></div><button id="pwaInstallButton" class="btn btn-secondary" type="button" onclick="instalarPWA()">⇩ Instalar aplicación</button></div>
       <div class="settings-section"><strong>Cambiar contraseña</strong><div class="field"><input id="currentPassword" type="password" maxlength="72" autocomplete="current-password" placeholder="Contraseña actual"></div><div class="field"><input id="newPassword" type="password" maxlength="72" autocomplete="new-password" placeholder="Nueva contraseña · mínimo 8"></div><button class="btn btn-secondary" type="button" onclick="cambiarPasswordCuenta()">Actualizar contraseña</button></div>
       <button id="accountPlusButton" class="btn btn-secondary" type="button" onclick="cerrarCuenta();abrirPlus()">✦ Ver V/R+</button>
       <button id="adminPanelButton" class="btn btn-secondary hidden" type="button" onclick="abrirAdmin()">⚑ Abrir panel de moderación</button>
@@ -587,6 +597,16 @@
       <button class="modal-close" onclick="cerrarEliminarCuenta()">×</button><span class="modal-icon">⚠️</span><h3>Eliminar cuenta</h3><p>Esta acción es permanente. Escribe tu contraseña para confirmar.</p>
       <div class="field"><label for="deleteAccountPassword">Contraseña</label><input id="deleteAccountPassword" type="password" maxlength="72" autocomplete="current-password"></div>
       <div class="modal-actions"><button class="btn btn-ghost" onclick="cerrarEliminarCuenta()">Cancelar</button><button class="btn btn-danger-soft" onclick="eliminarCuentaDefinitiva()">Eliminar definitivamente</button></div>
+    </div>
+  </div>
+
+  <div id="pwaInstallModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card account-modal-card pwa-install-modal-card">
+      <button class="modal-close" type="button" onclick="cerrarInstalacionPWA()">×</button>
+      <span class="modal-icon">📲</span><span class="eyebrow">FASE 10 · PWA</span><h3>Instalar V/R Match</h3>
+      <p id="pwaInstallHelp">Puedes añadir V/R Match a tu pantalla de inicio y abrirlo como una aplicación independiente.</p>
+      <div id="pwaInstallSteps" class="pwa-install-steps"></div>
+      <button class="btn btn-primary" type="button" onclick="cerrarInstalacionPWA()">Entendido</button>
     </div>
   </div>
 
@@ -707,6 +727,8 @@
     let pushConfigured = false;
     let pushSubscriptionActive = false;
     let notificationBrowserEnabled = localStorage.getItem('vr_browser_notifications') === '1';
+    let deferredInstallPrompt = null;
+    let pwaInstalled = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
     const baseDeDatos = {
       rompehielos: {
@@ -1286,6 +1308,50 @@
       pushConfigured=Boolean(res.pushConfigured);
       actualizarControlesNotificaciones();mostrarToast('Preferencias de notificaciones guardadas.','info');
     }
+    function esIOSPWA() { return /iphone|ipad|ipod/i.test(navigator.userAgent); }
+    function esSafariIOSPWA() { return esIOSPWA() && /safari/i.test(navigator.userAgent) && !/crios|fxios|edgios/i.test(navigator.userAgent); }
+    function actualizarEstadoPWA() {
+      pwaInstalled = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      const header=$('installAppButton'), button=$('pwaInstallButton'), status=$('pwaInstallStatus'), section=$('pwaInstallSection');
+      if(status) status.textContent = pwaInstalled
+        ? 'V/R Match ya está instalado en este dispositivo.'
+        : deferredInstallPrompt
+          ? 'Instalación disponible. No necesitas descargar nada desde una tienda.'
+          : esIOSPWA()
+            ? 'En iPhone/iPad se instala desde Safari → Compartir → Añadir a pantalla de inicio.'
+            : 'Puedes instalar V/R Match desde el navegador cuando la opción esté disponible.';
+      if(button){ button.disabled=pwaInstalled; button.textContent=pwaInstalled?'✓ Aplicación instalada':'⇩ Instalar aplicación'; }
+      if(section)section.classList.toggle('pwa-installed',pwaInstalled);
+      if(header)header.classList.toggle('hidden',pwaInstalled || (!deferredInstallPrompt && !esIOSPWA()));
+    }
+    function abrirAyudaInstalacionPWA() {
+      const box=$('pwaInstallSteps'), help=$('pwaInstallHelp');
+      if(esIOSPWA()) {
+        help.textContent='En iPhone y iPad la instalación se realiza desde Safari.';
+        box.innerHTML='<div><b>1</b><span>Pulsa el botón <strong>Compartir</strong> de Safari.</span></div><div><b>2</b><span>Elige <strong>Añadir a pantalla de inicio</strong>.</span></div><div><b>3</b><span>Confirma con <strong>Añadir</strong>. V/R Match aparecerá junto a tus apps.</span></div>';
+      } else {
+        help.textContent='Tu navegador no ha mostrado todavía el instalador automático.';
+        box.innerHTML='<div><b>1</b><span>Abre el menú del navegador.</span></div><div><b>2</b><span>Busca <strong>Instalar aplicación</strong> o <strong>Añadir a pantalla de inicio</strong>.</span></div><div><b>3</b><span>Confirma la instalación de V/R Match.</span></div>';
+      }
+      $('pwaInstallModal').classList.remove('hidden');$('pwaInstallModal').setAttribute('aria-hidden','false');
+    }
+    function cerrarInstalacionPWA() { $('pwaInstallModal').classList.add('hidden');$('pwaInstallModal').setAttribute('aria-hidden','true'); }
+    async function instalarPWA() {
+      if(pwaInstalled)return mostrarToast('V/R Match ya está instalado.','info');
+      if(deferredInstallPrompt) {
+        const prompt=deferredInstallPrompt; deferredInstallPrompt=null;
+        try { prompt.prompt(); const choice=await prompt.userChoice; if(choice?.outcome==='accepted')mostrarToast('Instalando V/R Match…','info'); }
+        catch { abrirAyudaInstalacionPWA(); }
+        actualizarEstadoPWA(); return;
+      }
+      abrirAyudaInstalacionPWA();
+    }
+    window.addEventListener('beforeinstallprompt',(event)=>{ event.preventDefault(); deferredInstallPrompt=event; actualizarEstadoPWA(); });
+    window.addEventListener('appinstalled',()=>{ deferredInstallPrompt=null;pwaInstalled=true;actualizarEstadoPWA();mostrarToast('V/R Match se instaló correctamente.','info'); });
+    window.matchMedia('(display-mode: standalone)').addEventListener?.('change',actualizarEstadoPWA);
+    window.addEventListener('online',()=>mostrarToast('Conexión recuperada.','info'));
+    window.addEventListener('offline',()=>mostrarToast('Sin conexión. Algunas funciones no estarán disponibles.','warn'));
+
     function urlBase64ToUint8Array(base64String) {
       const padding='='.repeat((4-base64String.length%4)%4);
       const base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');
@@ -1547,6 +1613,7 @@
     async function restablecerPassword() { const p1=$('resetPassword').value,p2=$('resetPassword2').value; if(p1.length<8)return mostrarToast('La contraseña debe tener al menos 8 caracteres.','warn'); if(p1!==p2)return mostrarToast('Las contraseñas no coinciden.','warn'); const res=await api('/api/auth/reset',{method:'POST',body:{token:resetToken,password:p1}}); if(!res.ok)return mostrarToast(res.error||'No se pudo restablecer.','error'); resetToken=''; history.replaceState({},document.title,location.pathname); $('resetModal').classList.add('hidden'); await completarAcceso(res); mostrarToast('Contraseña actualizada.','info'); }
 
     function abrirCuenta() {
+      actualizarEstadoPWA();
       $('settingsEmail').textContent=currentUserEmail||'—';
       $('emailVerifiedBadge').textContent=currentUserEmailVerified?'Verificado':'Pendiente'; $('emailVerifiedBadge').classList.toggle('verified',currentUserEmailVerified);
       $('resendVerificationButton').classList.toggle('hidden',currentUserEmailVerified);
@@ -3073,10 +3140,12 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
     $('inputAvatar').addEventListener('change', async (e) => { await procesarFotosPerfil(e.target.files); e.target.value = ''; });
     $('chatForm').addEventListener('submit', (e) => { e.preventDefault(); const input=$('chatInput'); enviarChat(input.value); input.value=''; });
     if('serviceWorker' in navigator) {
+      registrarServiceWorker();
       navigator.serviceWorker.addEventListener('message',(event)=>{
         if(event.data?.type==='VR_NOTIFICATION_CLICK'&&event.data.notificationId)abrirNotificacion(String(event.data.notificationId));
       });
     }
+    actualizarEstadoPWA();
     initDatingSwipe();
     $('deckAdult').title = 'Solo mayores de 18 años';
     if (mazoInvitacion) $('mazoSeleccionadoLabel').textContent = `Mazo: ${nombreMazo(mazoInvitacion)}`;

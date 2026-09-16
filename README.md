@@ -1,90 +1,55 @@
-# V/R Match — Fase 9 · Notificaciones
+# V/R Match — Fase 10 · PWA instalable
 
-Versión: **9.0.0**
+Versión: **10.0.0**
 
-Esta versión continúa directamente sobre la Fase 8. Mantiene cuentas, perfiles, descubrimiento por proximidad, matches, chat, juego integrado, email/recuperación, moderación avanzada y V/R+.
+Esta fase convierte V/R Match en una **Progressive Web App instalable**, conservando todas las funciones de las fases anteriores.
 
-## Qué añade Fase 9
+## Qué añade Fase 10
 
-### Centro de notificaciones dentro de V/R Match
-- Campana de notificaciones en la cabecera.
-- Contador de avisos no leídos.
-- Historial persistente en SQLite.
-- Marcar una notificación como leída.
-- Marcar todas como leídas.
+- `manifest.webmanifest` con identidad V/R Match.
+- Iconos 192×192, 512×512, maskable y Apple Touch Icon.
+- Instalación desde Chrome/Edge/Android mediante el prompt nativo cuando está disponible.
+- Instrucciones específicas para iPhone/iPad: Safari → Compartir → Añadir a pantalla de inicio.
+- Botón de instalación en la cabecera cuando el navegador permite instalar.
+- Sección **Aplicación** dentro de Cuenta y seguridad.
+- Modo `standalone`: al abrir desde la pantalla de inicio se comporta como una app independiente.
+- Service Worker actualizado con caché controlada del shell público.
+- Pantalla offline de respaldo.
+- Web Push de Fase 9 conservado en el mismo Service Worker.
+- Safe areas para móviles con notch/isla dinámica.
 
-### Eventos que generan notificaciones
-- Nuevo match.
-- Nuevo mensaje.
-- Invitación a jugar.
-- Turno de juego.
+## Importante sobre el modo offline
 
-### Preferencias por usuario
-Cada usuario puede activar o desactivar de forma independiente:
-- nuevos matches,
-- nuevos mensajes,
-- invitaciones a jugar,
-- turnos de juego.
+V/R Match puede arrancar como PWA, pero perfiles, matches, mensajes, ubicación y partidas siguen necesitando conexión con el backend. No se guardan datos privados de usuarios en la caché del Service Worker.
 
-### Avisos del navegador
-- Con permiso del usuario, V/R Match puede mostrar avisos del navegador mientras la app está abierta.
-- Se incluye `sw.js` y la arquitectura de Web Push para recibir avisos en segundo plano.
-- El Web Push de fondo es **opcional durante la beta** y solo se activa si se configuran claves VAPID en Render.
+La caché excluye expresamente:
 
-### Web Push / VAPID
-Variables opcionales:
+- `/api/*`
+- `/socket.io/*`
+- `/uploads/*`
 
-```text
-VAPID_PUBLIC_KEY
-VAPID_PRIVATE_KEY
-VAPID_SUBJECT
-```
+## Render
 
-Generar un par de claves localmente:
+No se necesitan variables de entorno nuevas para instalar la PWA.
 
-```bash
-npm install
-npm run vapid
-```
+Continúan pendientes para producción:
 
-No guardar la clave privada en GitHub. Configurar las claves únicamente en `Render → Environment`.
+- dominio propio;
+- Render de pago y persistencia;
+- remitente de correo con dominio propio;
+- VAPID si se decide activar push real de fondo;
+- checkout real de V/R+.
 
-Durante la beta se puede dejar VAPID sin configurar. En ese caso las notificaciones internas siguen funcionando y el navegador puede avisar mientras la app está abierta.
-
-## Deploy
-
-1. Descomprimir el ZIP.
-2. Sustituir los archivos del repositorio GitHub.
-3. Commit y push a `main`.
-4. Render desplegará automáticamente.
-5. Revisar logs.
-6. Comprobar `/healthz`.
-
-Respuesta esperada:
+## Health check
 
 ```json
-{"ok":true,"db":true,"version":"9.0.0"}
+{"ok":true,"db":true,"version":"10.0.0"}
 ```
 
-En logs debe aparecer:
+En logs:
 
 ```text
-V/R Match v9.0 escuchando en puerto 10000
-Web Push: opcional / no configurado
+V/R Match v10.0 escuchando en puerto 10000
 ```
 
-Si VAPID se configura correctamente:
-
-```text
-Web Push: configurado
-```
-
-## Beta / producción
-
-Se mantiene durante la beta:
-- `VR_REQUIRE_EMAIL_VERIFICATION=false`.
-- Render Free y filesystem temporal.
-- V/R+ sin cobro real.
-- dominio propio pendiente.
-
-Para producción siguen pendientes el dominio, remitente propio de email, almacenamiento persistente/upgrade de Render, checkout real y activación definitiva de Web Push.
+Consulta `PRUEBA-FASE10.md` después del deploy.
