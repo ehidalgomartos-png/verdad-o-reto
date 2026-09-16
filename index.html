@@ -315,7 +315,7 @@
 
     <section id="pantallaAdmin" class="screen admin-screen hidden">
       <div class="screen-topbar"><button class="link-btn" onclick="cerrarAdmin()">← Volver</button><span class="topbar-title">MODERACIÓN</span><span class="live-pill"><i></i> ADMIN</span></div>
-      <div class="section-heading"><span class="eyebrow">SEGURIDAD · FASE 7</span><h2>Centro de moderación</h2><p>Denuncias, usuarios, contenido y trazabilidad de acciones en un solo panel.</p></div>
+      <div class="section-heading"><span class="eyebrow">ADMIN · FASE 14</span><h2>Centro de control</h2><p>Moderación, métricas, producción, privacidad y mantenimiento técnico en un solo panel.</p></div>
       <div id="adminStats" class="admin-stats admin-stats-six">
         <div><strong>—</strong><span>activos</span></div><div><strong>—</strong><span>suspendidos</span></div><div><strong>—</strong><span>matches</span></div>
         <div><strong>—</strong><span>denuncias abiertas</span></div><div><strong>—</strong><span>mensajes</span></div><div><strong>—</strong><span>acciones 24h</span></div>
@@ -327,6 +327,7 @@
         <button id="adminTabMetrics" type="button" onclick="cambiarAdminTab('metrics')">📈 Métricas</button>
         <button id="adminTabFeedback" type="button" onclick="cambiarAdminTab('feedback')">💬 Feedback</button>
         <button id="adminTabProduction" type="button" onclick="cambiarAdminTab('production')">🚀 Producción</button>
+        <button id="adminTabSystem" type="button" onclick="cambiarAdminTab('system')">🛠 Sistema</button>
       </div>
 
       <div id="adminPaneReports" class="admin-pane">
@@ -370,6 +371,15 @@
       <div id="adminPaneProduction" class="admin-pane hidden">
         <div class="admin-history-head"><div><strong>Preparación de producción</strong><small>Checklist técnico sin mostrar secretos.</small></div><button class="btn btn-secondary" type="button" onclick="cargarProductionReadiness()">↻ Actualizar</button></div>
         <div id="productionReadiness" class="production-readiness"><div class="empty-state"><span>🚀</span><strong>Comprueba el estado del producto</strong></div></div>
+      </div>
+
+      <div id="adminPaneSystem" class="admin-pane hidden">
+        <div class="admin-history-head"><div><strong>Resiliencia y mantenimiento</strong><small>Diagnóstico, limpieza segura y copia manual antes de despliegues importantes.</small></div><button class="btn btn-secondary" type="button" onclick="cargarAdminSystem()">↻ Actualizar</button></div>
+        <div id="adminSystem" class="admin-system"><div class="empty-state"><span>🛠</span><strong>Comprueba el sistema</strong></div></div>
+        <div class="admin-backup-card">
+          <div><span>🧰</span><div><strong>Copia manual de seguridad</strong><small>Incluye SQLite y fotos. Contiene datos sensibles: guárdala de forma privada. Requiere tu contraseña admin.</small></div></div>
+          <div class="admin-backup-actions"><input id="adminBackupPassword" type="password" minlength="8" maxlength="72" autocomplete="current-password" placeholder="Contraseña de tu cuenta"><button id="adminBackupButton" class="btn btn-primary" type="button" onclick="descargarBackupAdmin()">Descargar backup</button></div>
+        </div>
       </div>
     </section>
 
@@ -1809,6 +1819,56 @@
       box.innerHTML=`<div class="production-hero ${r.productionReady?'ready':'pending'}"><span>${r.productionReady?'✓':'⚙'}</span><div><strong>${r.productionReady?'Base técnica lista':'Beta funcional · producción pendiente'}</strong><small>Versión ${escapeHtml(r.version||'')} · legal ${escapeHtml(r.legalVersion||'')}</small></div></div><div class="production-grid">${items.map(([label,ok])=>`<div><span class="production-dot ${ok?'ok':'pending'}"></span><strong>${escapeHtml(label)}</strong><small>${ok?'Configurado':'Pendiente'}</small></div>`).join('')}</div><div class="production-pending"><strong>Antes del lanzamiento comercial</strong><ul>${(r.pending||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`;
     }
 
+    async function cargarAdminSystem(){
+      if(!currentUserAdmin)return;
+      const box=$('adminSystem'); box.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Comprobando sistema…</strong></div>';
+      const res=await api('/api/admin/system');
+      if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudo comprobar')}</strong></div>`;return;}
+      renderAdminSystem(res.system||{});
+    }
+    function renderAdminSystem(sys){
+      const integrityOk=Boolean(sys.integrity?.ok);
+      const cleanupTotal=(Number(sys.expiredSessions)||0)+(Number(sys.staleAuthTokens)||0)+(Number(sys.oldClientErrors)||0)+(Number(sys.oldReadNotifications)||0)+(Number(sys.orphanUploadFiles)||0);
+      $('adminSystem').innerHTML=`
+        <div class="system-health-hero ${integrityOk?'ok':'warn'}"><span>${integrityOk?'✓':'!'}</span><div><strong>${integrityOk?'SQLite íntegro':'Revisar SQLite'}</strong><small>Versión ${escapeHtml(sys.version||'')} · uptime ${Math.round((Number(sys.uptimeSeconds)||0)/60)} min · almacenamiento ${sys.storagePersistent?'persistente':'temporal'}</small></div></div>
+        <div class="system-maintenance-grid">
+          <div><b>${bytesLegibles(sys.dbBytes)}</b><span>base SQLite</span><small>WAL ${bytesLegibles(sys.walBytes)}</small></div>
+          <div><b>${Number(sys.uploadFiles)||0}</b><span>fotos guardadas</span><small>${bytesLegibles(sys.uploadBytes)}</small></div>
+          <div><b>${Number(sys.activeSessions)||0}</b><span>sesiones activas</span><small>${Number(sys.expiredSessions)||0} caducadas</small></div>
+          <div><b>${Number(sys.orphanUploadFiles)||0}</b><span>archivos huérfanos</span><small>${bytesLegibles(sys.orphanUploadBytes)}</small></div>
+          <div><b>${Number(sys.oldClientErrors)||0}</b><span>errores &gt;30 días</span><small>telemetría depurable</small></div>
+          <div><b>${Number(sys.oldReadNotifications)||0}</b><span>avisos leídos &gt;90 días</span><small>retención depurable</small></div>
+        </div>
+        <div class="system-maintenance-actions">
+          <button type="button" onclick="mantenimientoAdmin('cleanup_expired')">Limpiar sesiones/tokens caducados</button>
+          <button type="button" onclick="mantenimientoAdmin('cleanup_telemetry')">Depurar telemetría antigua</button>
+          <button type="button" onclick="mantenimientoAdmin('cleanup_orphan_uploads')">Eliminar fotos huérfanas</button>
+          <button type="button" onclick="mantenimientoAdmin('optimize')">Optimizar SQLite</button>
+        </div>
+        <div class="system-maintenance-note ${cleanupTotal?'attention':''}"><strong>${cleanupTotal?`${cleanupTotal} elemento(s) pueden depurarse`:'No hay limpieza urgente pendiente'}</strong><small>Las acciones no eliminan perfiles, matches ni mensajes activos. Las fotos huérfanas solo se borran si ya no están referenciadas y llevan al menos una hora sin uso.</small></div>`;
+    }
+    const maintenanceLabels={cleanup_expired:'limpiar sesiones y tokens caducados',cleanup_telemetry:'depurar telemetría antigua',cleanup_orphan_uploads:'eliminar fotos huérfanas',optimize:'optimizar SQLite'};
+    async function mantenimientoAdmin(action){
+      const label=maintenanceLabels[action]||'ejecutar mantenimiento';
+      if(!confirm(`¿Quieres ${label}?`))return;
+      const res=await api('/api/admin/system/maintenance',{method:'POST',body:{action}});
+      if(!res.ok)return mostrarToast(res.error||'No se pudo completar.','error');
+      mostrarToast('Mantenimiento completado.','info'); renderAdminSystem(res.system||{}); await cargarAdminHistory();
+    }
+    async function descargarBackupAdmin(){
+      const password=String($('adminBackupPassword').value||'');
+      if(password.length<8)return mostrarToast('Escribe la contraseña de tu cuenta administradora.','warn');
+      const btn=$('adminBackupButton'),old=btn.textContent;btn.disabled=true;btn.textContent='Preparando…';
+      try{
+        const response=await fetch('/api/admin/system/backup',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${authToken}`},body:JSON.stringify({password})});
+        if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.error||'No se pudo crear el backup.');}
+        const blob=await response.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');
+        a.href=url;a.download=`vr-match-backup-${new Date().toISOString().slice(0,10)}.tar.gz`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+        $('adminBackupPassword').value='';mostrarToast('Backup descargado. Guárdalo de forma privada.','info');
+      }catch(e){mostrarToast(e.message||'No se pudo descargar el backup.','error');}
+      finally{btn.disabled=false;btn.textContent=old;}
+    }
+
     function cerrarAdmin() { cerrarAdminUsuario(); showScreen('pantallaPerfil'); }
     async function cargarAdminStats() {
       const res=await api('/api/admin/stats');
@@ -1818,28 +1878,31 @@
       [...$('adminStats').querySelectorAll('strong')].forEach((el,i)=>el.textContent=String(vals[i]??'—'));
     }
     async function cambiarAdminTab(tab='reports') {
-      adminCurrentTab=['reports','users','history','metrics','feedback','production'].includes(tab)?tab:'reports';
+      adminCurrentTab=['reports','users','history','metrics','feedback','production','system'].includes(tab)?tab:'reports';
       $('adminPaneReports').classList.toggle('hidden',adminCurrentTab!=='reports');
       $('adminPaneUsers').classList.toggle('hidden',adminCurrentTab!=='users');
       $('adminPaneHistory').classList.toggle('hidden',adminCurrentTab!=='history');
       $('adminPaneMetrics').classList.toggle('hidden',adminCurrentTab!=='metrics');
       $('adminPaneFeedback').classList.toggle('hidden',adminCurrentTab!=='feedback');
       $('adminPaneProduction').classList.toggle('hidden',adminCurrentTab!=='production');
+      $('adminPaneSystem').classList.toggle('hidden',adminCurrentTab!=='system');
       $('adminTabReports').classList.toggle('active',adminCurrentTab==='reports');
       $('adminTabUsers').classList.toggle('active',adminCurrentTab==='users');
       $('adminTabHistory').classList.toggle('active',adminCurrentTab==='history');
       $('adminTabMetrics').classList.toggle('active',adminCurrentTab==='metrics');
       $('adminTabFeedback').classList.toggle('active',adminCurrentTab==='feedback');
       $('adminTabProduction').classList.toggle('active',adminCurrentTab==='production');
+      $('adminTabSystem').classList.toggle('active',adminCurrentTab==='system');
       if(adminCurrentTab==='reports')await cargarAdminReports();
       if(adminCurrentTab==='users')await cargarAdminUsers();
       if(adminCurrentTab==='history')await cargarAdminHistory();
       if(adminCurrentTab==='metrics')await cargarAdminMetrics();
       if(adminCurrentTab==='feedback')await cargarAdminFeedback();
       if(adminCurrentTab==='production')await cargarProductionReadiness();
+      if(adminCurrentTab==='system')await cargarAdminSystem();
     }
     const adminReasonLabels={harassment:'Acoso',fake:'Perfil falso',spam:'Spam / estafa',sexual:'Contenido sexual no consentido',underage:'Posible menor de edad',other:'Otro'};
-    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',suspend:'Cuenta suspendida',reactivate:'Cuenta reactivada',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado',feedback_resolve:'Feedback resuelto',feedback_dismiss:'Feedback descartado',feedback_reopen:'Feedback reabierto'};
+    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',suspend:'Cuenta suspendida',reactivate:'Cuenta reactivada',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado',feedback_resolve:'Feedback resuelto',feedback_dismiss:'Feedback descartado',feedback_reopen:'Feedback reabierto',system_cleanup_expired:'Limpieza de sesiones/tokens',system_cleanup_telemetry:'Depuración de telemetría',system_cleanup_orphan_uploads:'Limpieza de fotos huérfanas',system_optimize:'Optimización SQLite',system_backup_download:'Backup manual descargado'};
     function adminFecha(ts){return ts?new Date(Number(ts)).toLocaleString('es-ES'):'—';}
     async function cargarAdminReports() {
       if(!currentUserAdmin)return;

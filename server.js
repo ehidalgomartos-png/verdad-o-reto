@@ -3,6 +3,8 @@ const http = require('http');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const zlib = require('zlib');
 const Database = require('better-sqlite3');
 const nodemailer = require('nodemailer');
 const webpush = require('web-push');
@@ -22,7 +24,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '13.0.0';
+const APP_VERSION = '14.0.0';
 const LEGAL_VERSION = 'beta-2026-09-16';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -327,6 +329,94 @@ function folderStatsSafe(dirPath){
     }
   } catch {}
   return {files,bytes};
+}
+
+function referencedUploadNames(){
+  const names=new Set();
+  const add=value=>{
+    const str=String(value||'');
+    if(/^\/uploads\/[a-zA-Z0-9_.-]+$/.test(str)) names.add(path.basename(str));
+  };
+  for(const row of db.prepare('SELECT avatar,photos_json FROM profiles').all()){
+    add(row.avatar);
+    for(const item of safeJsonArray(row.photos_json)) add(item);
+  }
+  return names;
+}
+function orphanUploadFiles(minAgeMs=60*60*1000){
+  const refs=referencedUploadNames(), result=[];
+  try{
+    for(const entry of fs.readdirSync(UPLOAD_DIR,{withFileTypes:true})){
+      if(!entry.isFile()) continue;
+      const full=path.join(UPLOAD_DIR,entry.name);
+      if(refs.has(entry.name)) continue;
+      let st; try{st=fs.statSync(full);}catch{continue;}
+      if(now()-st.mtimeMs < minAgeMs) continue;
+      result.push({name:entry.name,path:full,bytes:st.size||0,mtime:st.mtimeMs});
+    }
+  }catch{}
+  return result;
+}
+function quickCheckDatabase(){
+  try{
+    const value=db.pragma('quick_check',{simple:true});
+    return String(value||'').toLowerCase()==='ok' ? {ok:true,message:'ok'} : {ok:false,message:String(value||'resultado desconocido')};
+  }catch(e){return {ok:false,message:cleanShortText(e.message,180)||'No disponible'};}
+}
+function systemMaintenanceStatus(){
+  const ts=now(), uploads=folderStatsSafe(UPLOAD_DIR), orphans=orphanUploadFiles();
+  const integrity=quickCheckDatabase();
+  return {
+    version:APP_VERSION,
+    integrity,
+    uptimeSeconds:Math.round(process.uptime()),
+    dbBytes:fileSizeSafe(DB_PATH),
+    walBytes:fileSizeSafe(`${DB_PATH}-wal`),
+    shmBytes:fileSizeSafe(`${DB_PATH}-shm`),
+    uploadFiles:uploads.files,
+    uploadBytes:uploads.bytes,
+    orphanUploadFiles:orphans.length,
+    orphanUploadBytes:orphans.reduce((a,x)=>a+(x.bytes||0),0),
+    activeSessions:db.prepare('SELECT COUNT(*) n FROM sessions WHERE expires_at>?').get(ts).n,
+    expiredSessions:db.prepare('SELECT COUNT(*) n FROM sessions WHERE expires_at<=?').get(ts).n,
+    staleAuthTokens:db.prepare('SELECT COUNT(*) n FROM auth_tokens WHERE expires_at<=? OR used_at IS NOT NULL').get(ts).n,
+    oldClientErrors:db.prepare('SELECT COUNT(*) n FROM client_errors WHERE created_at<?').get(ts-30*86400000).n,
+    oldReadNotifications:db.prepare('SELECT COUNT(*) n FROM notifications WHERE read_at IS NOT NULL AND created_at<?').get(ts-90*86400000).n,
+    backupIncludes:['SQLite','uploads','manifest'],
+    storagePersistent:path.resolve(STORAGE_DIR)!==path.resolve(ROOT)
+  };
+}
+function tarOctal(value,length){
+  const raw=Math.max(0,Math.floor(Number(value)||0)).toString(8);
+  return raw.padStart(Math.max(1,length-1),'0').slice(-(length-1))+'\0';
+}
+function tarHeader(name,size,mtimeMs){
+  const buf=Buffer.alloc(512,0);
+  const put=(value,offset,length)=>{const b=Buffer.from(String(value));b.copy(buf,offset,0,Math.min(length,b.length));};
+  const safeName=String(name||'file').replace(/\\/g,'/').replace(/^\/+/, '');
+  if(Buffer.byteLength(safeName)>100) throw new Error('Ruta demasiado larga para backup TAR.');
+  put(safeName,0,100); put('0000644\0',100,8); put('0000000\0',108,8); put('0000000\0',116,8);
+  put(tarOctal(size,12),124,12); put(tarOctal(Math.floor((Number(mtimeMs)||Date.now())/1000),12),136,12);
+  for(let i=148;i<156;i++)buf[i]=0x20;
+  buf[156]='0'.charCodeAt(0); put('ustar\0',257,6); put('00',263,2);
+  let sum=0; for(const byte of buf)sum+=byte;
+  put(sum.toString(8).padStart(6,'0')+'\0 ',148,8);
+  return buf;
+}
+async function createTarGz(entries,outPath){
+  await new Promise((resolve,reject)=>{
+    const output=fs.createWriteStream(outPath), gzip=zlib.createGzip({level:6});
+    let settled=false; const fail=e=>{if(!settled){settled=true;reject(e);}};
+    output.on('error',fail); gzip.on('error',fail); output.on('finish',()=>{if(!settled){settled=true;resolve();}}); gzip.pipe(output);
+    try{
+      for(const entry of entries){
+        const st=fs.statSync(entry.path), data=fs.readFileSync(entry.path);
+        gzip.write(tarHeader(entry.name,data.length,st.mtimeMs)); gzip.write(data);
+        const pad=(512-(data.length%512))%512; if(pad)gzip.write(Buffer.alloc(pad));
+      }
+      gzip.write(Buffer.alloc(1024)); gzip.end();
+    }catch(e){fail(e); try{gzip.destroy();}catch{}}
+  });
 }
 function hashToken(token) { return crypto.createHash('sha256').update(String(token || '')).digest('hex'); }
 function hashPassword(password) {
@@ -1547,6 +1637,65 @@ function productionReadiness() {
   };
 }
 
+
+app.get('/api/admin/system', requireAuth, requireAdmin, (req,res) => {
+  try { res.json({ok:true,system:systemMaintenanceStatus()}); }
+  catch(e){console.error('Error leyendo estado de sistema:',e.message);res.status(500).json({ok:false,error:'No se pudo comprobar el sistema.'});}
+});
+
+app.post('/api/admin/system/maintenance', requireAuth, requireAdmin, rateLimit({limit:20,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  try{
+    const action=String(req.body?.action||''); const ts=now(); let result={};
+    if(action==='cleanup_expired'){
+      const sessions=db.prepare('DELETE FROM sessions WHERE expires_at<=?').run(ts).changes;
+      const tokens=db.prepare('DELETE FROM auth_tokens WHERE expires_at<=? OR used_at IS NOT NULL').run(ts).changes;
+      result={sessions,tokens};
+    } else if(action==='cleanup_telemetry'){
+      const errors=db.prepare('DELETE FROM client_errors WHERE created_at<?').run(ts-30*86400000).changes;
+      const notifications=db.prepare('DELETE FROM notifications WHERE read_at IS NOT NULL AND created_at<?').run(ts-90*86400000).changes;
+      result={clientErrors:errors,notifications};
+    } else if(action==='cleanup_orphan_uploads'){
+      const files=orphanUploadFiles(); let deleted=0,bytes=0;
+      for(const file of files){try{fs.unlinkSync(file.path);deleted++;bytes+=file.bytes||0;}catch{}}
+      result={deleted,bytes};
+    } else if(action==='optimize'){
+      db.pragma('optimize');
+      let checkpoint=null; try{checkpoint=db.pragma('wal_checkpoint(TRUNCATE)');}catch{}
+      result={optimized:true,checkpoint};
+    } else return res.status(400).json({ok:false,error:'Acción de mantenimiento no válida.'});
+    logModerationAction(req.user.id,null,`system_${action}`,'Mantenimiento manual desde panel de administración',null);
+    res.json({ok:true,result,system:systemMaintenanceStatus()});
+  }catch(e){console.error('Error de mantenimiento:',e);res.status(500).json({ok:false,error:'No se pudo completar el mantenimiento.'});}
+});
+
+app.post('/api/admin/system/backup', requireAuth, requireAdmin, rateLimit({limit:2,windowMs:60*60*1000,key:req=>req.user.id}), async (req,res) => {
+  const password=String(req.body?.password||'');
+  const account=db.prepare('SELECT password_hash FROM users WHERE id=?').get(req.user.id);
+  if(!account || !verifyPassword(password,account.password_hash)) return res.status(400).json({ok:false,error:'La contraseña de administrador no es correcta.'});
+  const tmpRoot=fs.mkdtempSync(path.join(os.tmpdir(),'vrmatch-backup-'));
+  const dbCopy=path.join(tmpRoot,'vrmatch.db'), manifestPath=path.join(tmpRoot,'backup-manifest.json');
+  const stamp=new Date().toISOString().replace(/[:.]/g,'-');
+  const archivePath=path.join(tmpRoot,`vr-match-backup-${stamp}.tar.gz`);
+  try{
+    await db.backup(dbCopy);
+    const uploads=folderStatsSafe(UPLOAD_DIR);
+    const manifest={product:'V/R Match',appVersion:APP_VERSION,generatedAt:new Date().toISOString(),format:'vrmatch-beta-backup-v1',sensitive:true,notes:['Contiene hashes de contraseña y datos privados almacenados en SQLite.','No contiene secretos de Render ni claves SMTP porque esos valores viven en variables de entorno.','Guarda esta copia en un lugar privado y elimínala cuando deje de ser necesaria.'],database:{file:'data/vrmatch.db',bytes:fileSizeSafe(dbCopy)},uploads:{directory:'uploads/',files:uploads.files,bytes:uploads.bytes}};
+    fs.writeFileSync(manifestPath,JSON.stringify(manifest,null,2));
+    const entries=[{path:manifestPath,name:'backup-manifest.json'},{path:dbCopy,name:'data/vrmatch.db'}];
+    try{for(const entry of fs.readdirSync(UPLOAD_DIR,{withFileTypes:true})){if(entry.isFile())entries.push({path:path.join(UPLOAD_DIR,entry.name),name:`uploads/${entry.name}`});}}catch{}
+    await createTarGz(entries,archivePath);
+    logModerationAction(req.user.id,req.user.id,'system_backup_download','Copia manual de seguridad descargada',null);
+    res.setHeader('Cache-Control','no-store');
+    res.download(archivePath,`vr-match-backup-${new Date().toISOString().slice(0,10)}.tar.gz`,err=>{
+      try{fs.rmSync(tmpRoot,{recursive:true,force:true});}catch{}
+      if(err && !res.headersSent){console.error('Error descargando backup:',err.message);res.status(500).json({ok:false,error:'No se pudo descargar la copia.'});}
+    });
+  }catch(e){
+    try{fs.rmSync(tmpRoot,{recursive:true,force:true});}catch{}
+    console.error('Error creando backup:',e); if(!res.headersSent)res.status(500).json({ok:false,error:'No se pudo crear la copia de seguridad.'});
+  }
+});
+
 app.get('/api/admin/production-readiness', requireAuth, requireAdmin, (req,res) => res.json({ok:true,readiness:productionReadiness()}));
 app.get('/healthz', (req,res) => { try { db.prepare('SELECT 1').get(); res.status(200).json({ok:true,db:true,version:APP_VERSION}); } catch { res.status(503).json({ok:false,db:false}); } });
 app.use('/uploads', express.static(UPLOAD_DIR, { fallthrough:false, maxAge:'7d', dotfiles:'deny' }));
@@ -1769,4 +1918,5 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v13.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad beta: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad F13: sesiones + bloqueados + exportación de datos');});
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v13.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);
+  console.log('Resiliencia F14: mantenimiento + backup manual protegidos');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad beta: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad F13: sesiones + bloqueados + exportación de datos');});

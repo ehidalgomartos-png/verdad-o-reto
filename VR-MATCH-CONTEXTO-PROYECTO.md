@@ -1091,3 +1091,25 @@ Se añadió un centro de control de cuenta con:
 La gestión de sesiones evita recopilar IP o huella de dispositivo. La exportación no incluye contraseñas, tokens ni hashes de sesión. Puede incluir la ubicación que el propio usuario decidió guardar porque forma parte de sus datos personales almacenados.
 
 Esta fase mejora la privacidad y el control del usuario, pero no sustituye una revisión jurídica antes de producción.
+
+
+---
+
+# FASE 14 — RESILIENCIA, MANTENIMIENTO Y BACKUP DE BETA
+
+Versión: **14.0.0**
+
+Se añadió una capa operativa para reducir riesgo durante la beta:
+
+- panel Admin → Sistema;
+- quick check de SQLite;
+- diagnóstico DB/WAL/uploads/sesiones;
+- limpieza controlada de sesiones y tokens caducados;
+- retención de telemetría antigua;
+- detección y limpieza de fotos huérfanas;
+- `PRAGMA optimize` + checkpoint WAL;
+- backup manual `.tar.gz` protegido por contraseña admin.
+
+El backup contiene SQLite y uploads, por lo que es sensible y debe almacenarse de forma privada. No contiene secretos de Render ni SMTP porque esas credenciales siguen fuera de la base de datos.
+
+Mientras Render continúe en Free, esta función es una red de seguridad manual y no sustituye almacenamiento persistente, base administrada ni backups automáticos de producción.
