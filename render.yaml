@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: vr-match
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: VR_STORAGE_DIR
+        value: /var/data
+    disk:
+      name: vr-match-data
+      mountPath: /var/data
+      sizeGB: 1

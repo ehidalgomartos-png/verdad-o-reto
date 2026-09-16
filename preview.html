@@ -1,95 +1,43 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#09090d">
-  <title>V/R Match · Step 2 Preview</title>
-  <link rel="stylesheet" href="styles.css">
-  <style>
-    .demo-photo-art{position:absolute;inset:0;display:grid;place-items:center;font-size:115px;background-size:cover;background-position:center}
-    .demo-photo-art small{position:absolute;right:14px;bottom:14px;font-size:7px;opacity:.55;letter-spacing:.12em}
-  </style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#09090d">
+<title>V/R Match · Step 3 Preview</title><link rel="stylesheet" href="styles.css">
+<style>.demo-photo-art{position:absolute;inset:0;display:grid;place-items:center;font-size:110px}.demo-badge{font-size:8px;padding:5px 8px;border-radius:999px;background:rgba(43,213,118,.1);color:#82e2a8;border:1px solid rgba(43,213,118,.14)}</style>
 </head>
-<body>
-  <div class="bg-orb orb-1"></div><div class="bg-orb orb-2"></div><div class="bg-grid"></div>
-  <main class="app-shell">
-    <header class="brand-bar">
-      <div class="brand-mark"><span>V</span><i>/</i><span>R</span></div>
-      <div class="brand-copy"><strong>V/R MATCH</strong><small>HAZ MATCH. ROMPE EL HIELO.</small></div>
-      <div class="connection-badge online"><span class="connection-dot"></span><span>Demo</span></div>
-    </header>
+<body><div class="bg-orb orb-1"></div><div class="bg-orb orb-2"></div><div class="bg-grid"></div>
+<main class="app-shell">
+<header class="brand-bar"><div class="brand-mark"><span>V</span><i>/</i><span>R</span></div><div class="brand-copy"><strong>V/R MATCH</strong><small>HAZ MATCH. ROMPE EL HIELO.</small></div><div class="connection-badge online"><span class="connection-dot"></span><span>Demo Step 3</span></div></header>
 
-    <section id="demoDiscover" class="screen dating-screen">
-      <div class="dating-topbar">
-        <div><span class="eyebrow">DESCUBRIR</span><h2>Encuentra tu vibra.</h2></div>
-        <div class="dating-top-actions"><button class="vr-plus-pill">V/R+</button><button class="filter-button" onclick="demoFilter.classList.toggle('hidden')">☷</button><button class="dating-profile-button">😎</button></div>
-      </div>
-      <div id="demoFilter" class="dating-filters hidden">
-        <div class="filter-row"><label>Edad mínima<input value="24"></label><label>Edad máxima<input value="35"></label></div>
-        <div class="filter-row"><label>Ciudad<input placeholder="Valencia"></label><label>Interés<input placeholder="Fotografía"></label></div>
-        <div class="filter-actions"><button class="mini-link">Limpiar</button><button class="btn btn-primary" onclick="demoFilter.classList.add('hidden')">Aplicar filtros</button></div>
-      </div>
-      <div class="dating-stage">
-        <article id="demoCard" class="dating-card">
-          <div class="dating-photo" id="demoPhoto">
-            <div class="photo-progress" id="demoProgress"></div>
-            <button class="photo-zone photo-prev" onclick="changePhoto(-1)"></button><button class="photo-zone photo-next" onclick="changePhoto(1)"></button>
-            <div id="demoArt" class="demo-photo-art">📷</div>
-            <div class="swipe-stamp stamp-like" id="demoLikeStamp">ME GUSTA</div><div class="swipe-stamp stamp-pass" id="demoPassStamp">PASAR</div>
-            <div class="dating-photo-shade"></div>
-            <div class="dating-card-main"><div class="dating-name-row"><h3 id="demoName">Laura</h3><span id="demoAge">29</span></div><div class="dating-city" id="demoCity">📍 Valencia</div></div>
-          </div>
-          <div class="dating-card-copy"><p id="demoBio"></p><div class="interest-chips" id="demoInterests"></div></div>
-        </article>
-      </div>
-      <div class="swipe-actions"><button class="swipe-btn rewind">↶</button><button class="swipe-btn pass" onclick="swipe(false)">✕</button><button class="swipe-btn game" onclick="swipe(true,true)">🎲</button><button class="swipe-btn like" onclick="swipe(true)">♥</button></div>
-      <p class="dating-tip">Preview interactiva · toca los lados de la foto · el segundo like simula un match</p>
-      <nav class="dating-nav"><button class="active"><span>🔥</span><small>Descubrir</small></button><button onclick="showMatches()"><span>💕</span><small>Matches</small></button><button><span>🎮</span><small>Jugar</small></button><button><span>👤</span><small>Perfil</small></button></nav>
-    </section>
+<section id="pAuth" class="screen auth-screen">
+  <div class="hero-icon auth-heart">♥</div><span class="eyebrow">V/R MATCH</span><h1>Conecta de verdad.</h1><p class="subtitle">Ahora con cuenta, matches y conversaciones persistentes.</p>
+  <div class="auth-tabs"><button class="active">Entrar</button><button>Crear cuenta</button></div>
+  <div class="form-stack"><div class="field"><label>Correo</label><input value="demo@vrmatch.app"></div><div class="field"><label>Contraseña</label><input type="password" value="12345678"></div><button class="btn btn-primary btn-xl" onclick="go('pDiscover')"><span>Entrar en la demo</span><b>→</b></button></div>
+  <p class="legal-note">Solo +18 · En la app real la sesión se guarda de forma segura.</p>
+</section>
 
-    <section id="demoMatches" class="screen dating-screen hidden">
-      <div class="dating-topbar"><div><span class="eyebrow">CONEXIONES</span><h2>Tus matches</h2></div><button class="link-btn" onclick="showDiscover()">Volver</button></div>
-      <div class="matches-list">
-        <div class="match-row" onclick="openChat(0)"><div class="match-row-avatar">📷</div><div class="match-row-copy"><strong>Laura, 29</strong><small>Valencia · match reciente</small></div><button class="btn btn-danger-soft">💬 Abrir</button></div>
-        <div class="match-row" onclick="openChat(1)"><div class="match-row-avatar">🎨</div><div class="match-row-copy"><strong>Marta, 31</strong><small>Torrent · os gusta el diseño</small></div><button class="btn btn-danger-soft">💬 Abrir</button></div>
-      </div>
-      <nav class="dating-nav"><button onclick="showDiscover()"><span>🔥</span><small>Descubrir</small></button><button class="active"><span>💕</span><small>Matches</small></button><button><span>🎮</span><small>Jugar</small></button><button><span>👤</span><small>Perfil</small></button></nav>
-    </section>
+<section id="pDiscover" class="screen dating-screen hidden">
+  <div class="dating-topbar"><div><span class="eyebrow">DESCUBRIR</span><h2>Encuentra tu vibra.</h2></div><div class="dating-top-actions"><span class="demo-badge">● GUARDADO</span><button class="filter-button" onclick="demoFilters.classList.toggle('hidden')">☷</button><button class="dating-profile-button" onclick="go('pProfile')">😎</button></div></div>
+  <div id="demoFilters" class="dating-filters hidden"><p class="filter-note">Tus preferencias permanentes se guardan en Perfil.</p><div class="filter-row"><label>Edad mínima<input value="25"></label><label>Edad máxima<input value="35"></label></div><div class="filter-row"><label>Ciudad<input value="Valencia"></label><label>Interés<input placeholder="Fotografía"></label></div></div>
+  <div class="dating-stage"><article id="card" class="dating-card"><div class="dating-photo" style="background:radial-gradient(circle at 70% 18%,rgba(255,255,255,.18),transparent 22%),linear-gradient(145deg,#47213b,#16213c)"><div class="photo-progress"><i class="active"></i><i></i><i></i></div><div class="demo-photo-art">📷</div><div class="dating-photo-shade"></div><div class="dating-card-main"><div class="dating-name-row"><h3>Laura</h3><span>29</span></div><div class="dating-city">📍 Valencia · <b style="color:#7fe0a5">en línea</b></div></div></div><div class="dating-card-copy"><p>Arquitectura, café fuerte y viajes improvisados. Si sabes elegir buena música, ya sumas puntos.</p><div class="interest-chips"><span>Viajes</span><span>Fotografía</span><span>Perros</span></div></div></article></div>
+  <div class="swipe-actions"><button class="swipe-btn pass" onclick="toast('Perfil guardado como pasado')">✕</button><button class="swipe-btn game" onclick="toast('Primero haz match para jugar')">🎲</button><button class="swipe-btn like" onclick="matchModal.classList.remove('hidden')">♥</button></div>
+  <p class="dating-tip">Los likes, passes y matches ya se guardan en SQLite.</p>
+  <nav class="dating-nav"><button class="active"><span>🔥</span><small>Descubrir</small></button><button onclick="go('pMatches')"><span>💕</span><small>Matches</small><i class="nav-badge">2</i></button><button><span>🎮</span><small>Jugar</small></button><button onclick="go('pProfile')"><span>👤</span><small>Perfil</small></button></nav>
+</section>
 
-    <section id="demoChat" class="screen dating-screen chat-screen hidden">
-      <div class="chat-header"><button class="chat-back" onclick="showMatches()">←</button><div id="demoChatAvatar" class="chat-avatar">📷</div><div class="chat-person"><strong id="demoChatName">Laura, 29</strong><small>Valencia · match activo</small></div><button class="chat-game-button" onclick="demoGameTray.classList.toggle('hidden')">🎮</button></div>
-      <div id="demoGameTray" class="chat-game-tray hidden"><div><strong>Convierte el chat en juego</strong><small>Los dos tenéis que aceptar.</small></div><button onclick="gameInvite('🧊 Rompehielos')">🧊 Rompehielos</button><button onclick="gameInvite('❤️ Conóceme')">❤️ Conóceme</button><button onclick="gameInvite('🔥 After Dark')">🔥 After Dark</button></div>
-      <div id="demoMessages" class="chat-messages"><div class="chat-intro"><span>✨</span><strong>Hiciste match</strong><small>No empieces con el típico “hola”. Usa una idea o lanza un juego.</small></div></div>
-      <div id="demoStarters" class="chat-starters"><button onclick="starter(this)">¿Qué plan improvisado nunca rechazarías?</button><button onclick="starter(this)">¿Qué canción pondrías en nuestra primera playlist?</button><button onclick="starter(this)">Descríbete usando solo 3 emojis.</button></div>
-      <form class="chat-composer" onsubmit="sendDemo(event)"><input id="demoChatInput" placeholder="Escribe algo mejor que “hola”…"><button>➤</button></form>
-    </section>
-  </main>
+<section id="pMatches" class="screen dating-screen hidden"><div class="dating-topbar"><div><span class="eyebrow">CONEXIONES</span><h2>Tus matches</h2></div><button class="link-btn" onclick="go('pDiscover')">Volver</button></div><div class="matches-list"><div class="match-row" onclick="go('pChat')"><div class="match-row-avatar">📷</div><div class="match-row-copy"><strong>Laura, 29</strong><small>¿Qué plan improvisado nunca rechazarías?</small></div><button class="btn btn-danger-soft">💬 Abrir</button></div><div class="match-row"><div class="match-row-avatar">🎨</div><div class="match-row-copy"><strong>Marta, 31</strong><small>Match guardado · Torrent</small></div><button class="btn btn-danger-soft">💬 Abrir</button></div></div><nav class="dating-nav"><button onclick="go('pDiscover')"><span>🔥</span><small>Descubrir</small></button><button class="active"><span>💕</span><small>Matches</small></button><button><span>🎮</span><small>Jugar</small></button><button onclick="go('pProfile')"><span>👤</span><small>Perfil</small></button></nav></section>
 
-  <div id="demoMatch" class="modal hidden" aria-hidden="true"><div class="modal-card match-modal-card"><button class="modal-close" onclick="closeMatch()">×</button><span class="match-kicker">✨ ES MUTUO</span><div class="match-hearts"><div class="match-avatar">😎</div><div class="match-heart">♥</div><div class="match-avatar" id="matchAvatar">📷</div></div><h3>¡Hay match!</h3><p id="matchText"></p><div class="match-modal-actions"><button class="btn btn-ghost" onclick="closeMatch()">Seguir viendo</button><button class="btn btn-primary" onclick="closeMatch();openChat(currentIndex)">💬 Abrir conversación</button></div><button class="match-game-link" onclick="closeMatch();openChat(currentIndex);gameInvite('🧊 Rompehielos')">o empezar directamente con 🎮 Rompehielos</button><div id="demoConfetti" class="match-confetti"></div></div></div>
+<section id="pChat" class="screen dating-screen chat-screen hidden"><div class="chat-header"><button class="chat-back" onclick="go('pMatches')">←</button><div class="chat-avatar">📷</div><div class="chat-person"><strong>Laura, 29</strong><small>Valencia · historial guardado</small></div><button class="chat-game-button" onclick="gameTray.classList.toggle('hidden')">🎮</button><button class="chat-more-button" onclick="safetyTray.classList.toggle('hidden')">•••</button></div><div id="safetyTray" class="chat-safety-tray hidden"><button onclick="reportModal.classList.remove('hidden')">⚑ Denunciar</button><button class="danger" onclick="toast('En la app real, bloquear deshace el match')">⊘ Bloquear y deshacer match</button></div><div id="gameTray" class="chat-game-tray hidden"><div><strong>Convierte el chat en juego</strong><small>Los dos tenéis que aceptar.</small></div><button onclick="bubble('🎮 Invitación enviada: Rompehielos')">🧊 Rompehielos</button><button onclick="bubble('🎮 Invitación enviada: Conóceme')">❤️ Conóceme</button><button onclick="bubble('🎮 Invitación enviada: After Dark')">🔥 After Dark</button></div><div id="messages" class="chat-messages"><div class="chat-bubble-row mine"><div class="chat-bubble">¿Qué plan improvisado nunca rechazarías?</div></div><div class="chat-bubble-row theirs"><div class="chat-bubble">Una escapada sin mirar demasiado el mapa 😄</div></div></div><form class="chat-composer" onsubmit="send(event)"><input id="msg" placeholder="Este historial se guarda…"><button>➤</button></form></section>
 
-  <script>
-    const profiles=[
-      {n:'Laura',a:29,c:'Valencia',e:'📷',b:'Arquitectura, café fuerte y viajes improvisados. Si sabes elegir buena música, ya sumas puntos.',i:['Viajes','Fotografía','Perros'],photos:[['📷','#421f38','#151b35'],['☕','#46311d','#17131d'],['✈️','#17374b','#24162f']]},
-      {n:'Marta',a:31,c:'Torrent',e:'🎨',b:'Diseñadora, exposiciones y domingos sin despertador. Me gustan las conversaciones que se salen del guion.',i:['Diseño','Cine','Brunch'],photos:[['🎨','#502039','#16152d'],['🎬','#192d43','#351829']]},
-      {n:'Andrea',a:27,c:'Burjassot',e:'🚲',b:'Ruta en bici, montaña y algún plan improvisado. Competitiva solo cuando hay juegos de por medio.',i:['Ciclismo','Naturaleza','Música'],photos:[['🚲','#173c36','#27182f'],['⛰️','#253c2c','#171827'],['🎧','#32254c','#172538']]}
-    ];
-    let currentIndex=0,likes=0,photoIndex=0;
-    function paint(){const p=profiles[currentIndex%profiles.length];photoIndex=0;demoName.textContent=p.n;demoAge.textContent=p.a;demoCity.textContent='📍 '+p.c;demoBio.textContent=p.b;demoInterests.innerHTML=p.i.map(x=>'<span>'+x+'</span>').join('');paintPhoto();demoCard.animate([{opacity:.3,transform:'scale(.985)'},{opacity:1,transform:'scale(1)'}],{duration:220});}
-    function paintPhoto(){const p=profiles[currentIndex%profiles.length],ph=p.photos[photoIndex];demoArt.textContent=ph[0];demoArt.style.background=`radial-gradient(circle at 70% 18%,rgba(255,255,255,.18),transparent 22%),linear-gradient(145deg,${ph[1]},${ph[2]})`;demoProgress.innerHTML=p.photos.map((_,i)=>`<i class="${i===photoIndex?'active':''}"></i>`).join('');}
-    function changePhoto(d){const p=profiles[currentIndex%profiles.length];photoIndex=(photoIndex+d+p.photos.length)%p.photos.length;paintPhoto();}
-    function swipe(like,challenge=false){if(like){demoLikeStamp.style.opacity=1;likes++;if(likes===2||challenge){setTimeout(matchNow,160);likes=0;}}else demoPassStamp.style.opacity=1;demoCard.animate([{transform:'translateX(0)'},{transform:`translateX(${like?420:-420}px) rotate(${like?13:-13}deg)`,opacity:.15}],{duration:260});setTimeout(()=>{currentIndex=(currentIndex+1)%profiles.length;demoLikeStamp.style.opacity=0;demoPassStamp.style.opacity=0;paint();},280)}
-    function matchNow(){const p=profiles[currentIndex%profiles.length];matchAvatar.textContent=p.e;matchText.textContent=`Tú y ${p.n} os gustáis. Ahora evitad el “hola” y haced que el match empiece con algo que contar.`;demoMatch.classList.remove('hidden');burst();}
-    function burst(){demoConfetti.innerHTML='';for(let i=0;i<28;i++){let s=document.createElement('span');s.textContent=i%3?'♥':'✦';s.style.setProperty('--x',(Math.random()*220-110)+'px');s.style.setProperty('--r',(Math.random()*300-150)+'deg');s.style.setProperty('--d',(Math.random()*.5)+'s');demoConfetti.appendChild(s)}}
-    function closeMatch(){demoMatch.classList.add('hidden')}
-    function screens(id){[demoDiscover,demoMatches,demoChat].forEach(x=>x.classList.toggle('hidden',x.id!==id))}
-    function showDiscover(){screens('demoDiscover')}function showMatches(){screens('demoMatches')}
-    function openChat(i=0){currentIndex=i%profiles.length;const p=profiles[currentIndex];demoChatAvatar.textContent=p.e;demoChatName.textContent=p.n+', '+p.a;screens('demoChat')}
-    function addBubble(text,mine=true){const intro=demoMessages.querySelector('.chat-intro');if(intro)intro.remove();const r=document.createElement('div');r.className='chat-bubble-row '+(mine?'mine':'theirs');const b=document.createElement('div');b.className='chat-bubble';b.textContent=text;r.appendChild(b);demoMessages.appendChild(r);demoMessages.scrollTop=demoMessages.scrollHeight;demoStarters.classList.add('hidden')}
-    function starter(btn){addBubble(btn.textContent);setTimeout(()=>addBubble('Vale, esa respuesta me ha gustado 😄 Ahora te toca a ti.',false),500)}
-    function sendDemo(e){e.preventDefault();let t=demoChatInput.value.trim();if(!t)return;addBubble(t);demoChatInput.value='';setTimeout(()=>addBubble('Mucho mejor que un “hola” 👀',false),550)}
-    function gameInvite(deck){demoGameTray.classList.add('hidden');addBubble('🎮 Invitación enviada: '+deck);setTimeout(()=>addBubble('Acepto. A ver qué sale 😏',false),650)}
-    paint();
-  </script>
-</body>
-</html>
+<section id="pProfile" class="screen screen-profile hidden"><span class="eyebrow">PERFIL Y PREFERENCIAS</span><h2>Tu cuenta</h2><div class="account-strip"><span>demo@vrmatch.app</span><button onclick="go('pAuth')">Cerrar sesión</button></div><div class="form-stack"><div class="field"><label>Me identifico como</label><select class="profile-select"><option>Hombre</option><option>Mujer</option><option>No binario</option></select></div><div class="profile-preferences-card"><div><span class="eyebrow">PREFERENCIAS</span><strong>¿A quién quieres descubrir?</strong></div><div class="field"><label>Quiero conocer</label><select class="profile-select"><option>Personas</option><option>Mujeres</option><option>Hombres</option></select></div><div class="preference-age-row"><label>Edad mínima<input value="25"></label><label>Edad máxima<input value="35"></label></div><div class="field"><label>Ciudad preferida</label><input value="Valencia"></div><div class="field"><label>Interés compartido</label><input value="Fotografía"></div></div><button class="btn btn-primary" onclick="toast('Preferencias guardadas');go('pDiscover')">Guardar preferencias</button></div></section>
+</main>
+
+<div id="matchModal" class="modal hidden"><div class="modal-card match-modal-card"><button class="modal-close" onclick="matchModal.classList.add('hidden')">×</button><span class="match-kicker">✨ ES MUTUO</span><div class="match-hearts"><div class="match-avatar">😎</div><div class="match-heart">♥</div><div class="match-avatar">📷</div></div><h3>¡Hay match!</h3><p>Este match quedará guardado aunque cierres la app.</p><div class="match-modal-actions"><button class="btn btn-ghost" onclick="matchModal.classList.add('hidden')">Seguir viendo</button><button class="btn btn-primary" onclick="matchModal.classList.add('hidden');go('pChat')">💬 Abrir conversación</button></div></div></div>
+<div id="reportModal" class="modal hidden"><div class="modal-card safety-modal-card"><button class="modal-close" onclick="reportModal.classList.add('hidden')">×</button><span class="modal-icon">⚑</span><h3>Denunciar perfil</h3><div class="field"><label>Motivo</label><select class="profile-select"><option>Acoso o comportamiento ofensivo</option><option>Perfil falso / suplantación</option><option>Spam o estafa</option></select></div><div class="field"><label>Detalles</label><textarea class="profile-textarea" placeholder="Describe brevemente qué ocurrió"></textarea></div><button class="btn btn-primary" onclick="reportModal.classList.add('hidden');toast('Denuncia guardada para revisión')">Enviar denuncia</button></div></div>
+<div id="toast" class="toast"></div>
+<script>
+function go(id){['pAuth','pDiscover','pMatches','pChat','pProfile'].forEach(x=>document.getElementById(x).classList.toggle('hidden',x!==id));scrollTo(0,0)}
+function toast(t){toastEl=document.getElementById('toast');toastEl.textContent=t;toastEl.className='toast show info';clearTimeout(toastEl._t);toastEl._t=setTimeout(()=>toastEl.classList.remove('show'),2200)}
+function bubble(t){gameTray.classList.add('hidden');const r=document.createElement('div');r.className='chat-bubble-row mine';r.innerHTML='<div class="chat-bubble"></div>';r.firstChild.textContent=t;messages.appendChild(r);messages.scrollTop=messages.scrollHeight}
+function send(e){e.preventDefault();const t=msg.value.trim();if(!t)return;bubble(t);msg.value=''}
+</script></body></html>

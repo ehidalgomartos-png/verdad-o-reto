@@ -1,20 +1,25 @@
-# V/R Match — MVP Step 2
+# V/R Match · Step 3 — cuentas, persistencia y seguridad
 
-V/R Match mezcla una experiencia de dating con el juego multijugador de Verdad o Reto ya existente.
+V/R Match combina una experiencia de dating con un juego multijugador de preguntas y retos para romper el hielo después del match.
 
-## Qué incluye esta versión
+## Lo nuevo en Step 3
 
-- App solo para mayores de 18 años.
-- Perfil con nombre, edad, ciudad, bio, intereses y galería de hasta 4 fotos.
-- Descubrir con tarjetas, swipe táctil, galería por perfil y filtros por edad, ciudad e interés.
-- Likes mutuos y animación de match.
-- Lista de matches.
-- Chat en tiempo real entre matches mediante Socket.IO.
-- Inicios de conversación para evitar el chat vacío.
-- Invitación a jugar desde el propio chat: Rompehielos, Conóceme o After Dark.
-- El juego original conserva turnos, texto, cámara, vídeo y reacciones.
-- Al terminar un juego iniciado desde un chat, se vuelve a esa conversación.
-- V/R+ aparece solo como preparación visual; no bloquea el núcleo del MVP.
+- Registro e inicio de sesión con correo y contraseña.
+- Contraseñas derivadas con `scrypt` + salt aleatorio usando `crypto` de Node.js.
+- Sesiones persistentes de 30 días mediante token aleatorio almacenado de forma hasheada en SQLite.
+- Base de datos SQLite para usuarios, perfiles, likes, passes, matches, mensajes, bloqueos y denuncias.
+- Matches y conversaciones sobreviven reinicios del servidor.
+- Hasta 4 fotos por perfil almacenadas en `/uploads` en lugar de mantenerlas solo en memoria/base64.
+- Preferencias permanentes: rango de edad, género/personas que deseas conocer, ciudad e interés compartido.
+- Descubrimiento compatible en ambos sentidos: no muestra perfiles que quedan fuera de las preferencias mutuas.
+- Historial de chat persistente.
+- Bloquear elimina el match activo e impide que ambos perfiles vuelvan a descubrirse.
+- Denunciar guarda un registro separado para revisión.
+- El juego multijugador existente se conserva y sigue iniciándose desde un match activo.
+
+## Requisitos
+
+- Node.js 20 o superior.
 
 ## Ejecutar
 
@@ -23,12 +28,43 @@ npm install
 npm start
 ```
 
-Abre `http://localhost:3000` en dos navegadores, perfiles o dispositivos que puedan acceder al mismo servidor. Crea dos usuarios, da like desde ambos y prueba match → chat → juego.
+Abre `http://localhost:3000`.
 
-## Preview sin servidor
+Para probar un match real, crea dos cuentas diferentes en dos navegadores o perfiles de navegador. Completa ambos perfiles, asegúrate de que las preferencias sean compatibles y da like desde ambos lados.
 
-Abre `preview.html`. Es una demo visual local con perfiles simulados, galería, match y chat.
+## Datos locales
 
-## Importante para una siguiente fase
+- Base de datos: `data/vrmatch.db`
+- Fotos: `uploads/`
 
-Este MVP guarda perfiles, likes y relaciones de sockets en memoria. Las fotos viajan comprimidas como Data URLs para facilitar la prueba. Antes de producción conviene migrar a base de datos, autenticación, almacenamiento de imágenes/medios, moderación/reportes, presencia, bloqueo y gestión de privacidad.
+Ambas rutas están ignoradas por Git salvo el `.gitkeep` de `uploads`.
+
+## Antes de producción pública
+
+Este Step 3 es una arquitectura funcional para validación. Antes de lanzar públicamente conviene añadir verificación de correo, recuperación de contraseña, rate limiting, CSRF/origin hardening, moderación de imágenes, panel de administración para denuncias, términos/privacidad, eliminación/exportación de cuenta y almacenamiento de imágenes en un servicio externo (S3/R2/Cloudinary equivalente).
+
+## Deploy en GitHub + Render
+
+### GitHub
+Sube al root del repositorio al menos: `index.html`, `styles.css`, `server.js`, `package.json`, `.gitignore` y `render.yaml`.
+No subas `node_modules/`, `data/*.db*`, `uploads/*` ni `.env`.
+
+### Render (recomendado: persistencia)
+Este proyecto está preparado para un Persistent Disk montado en `/var/data`.
+La variable `VR_STORAGE_DIR=/var/data` hace que SQLite y las fotos se guarden en ese disco.
+
+Opción Blueprint:
+1. Sube `render.yaml` a GitHub.
+2. En Render: New > Blueprint.
+3. Selecciona el repositorio.
+4. Revisa el servicio y crea el Blueprint.
+
+Opción manual sobre un Web Service existente:
+- Runtime: Node
+- Build Command: `npm install`
+- Start Command: `npm start`
+- Health Check Path: `/healthz`
+- Environment: `VR_STORAGE_DIR=/var/data`
+- Persistent Disk mount path: `/var/data`
+
+Render proporciona `PORT` automáticamente; no hace falta configurarlo manualmente.
