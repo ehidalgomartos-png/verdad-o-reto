@@ -183,6 +183,8 @@ app.use(express.json({ limit: '9mb' }));
 
 const waitingPlayers = new Map();
 const rooms = new Map();
+const pendingGameInvites = new Map(); // `from:to` -> { from, to, mazo, expiresAt }
+const GAME_INVITE_TTL_MS = 5 * 60 * 1000;
 const onlineUsers = new Map(); // userId -> Set(socket.id)
 
 function now() { return Date.now(); }
@@ -244,11 +246,30 @@ function cleanupUnusedUploads(userId, keepPaths = []) {
   } catch (e) { console.warn('No se pudieron limpiar uploads huérfanos:', e.message); }
 }
 const actionBuckets = new Map();
+const MAX_ACTION_BUCKETS = 10000;
 function allowAction(key, limit, windowMs) {
   const ts = now();
   const arr = (actionBuckets.get(key) || []).filter(t => ts - t < windowMs);
+  if (!actionBuckets.has(key) && actionBuckets.size >= MAX_ACTION_BUCKETS) {
+    // Evita crecimiento ilimitado de memoria ante claves únicas maliciosas.
+    let remove = Math.ceil(MAX_ACTION_BUCKETS * 0.2);
+    for (const oldKey of actionBuckets.keys()) { actionBuckets.delete(oldKey); if (--remove <= 0) break; }
+  }
   if (arr.length >= limit) { actionBuckets.set(key, arr); return false; }
   arr.push(ts); actionBuckets.set(key, arr); return true;
+}
+function gameInviteKey(fromUser, toUser) { return `${fromUser}:${toUser}`; }
+function clearGameInvitesFor(userId) {
+  for (const [key, invite] of pendingGameInvites) {
+    if (invite.from === userId || invite.to === userId || invite.expiresAt <= now()) pendingGameInvites.delete(key);
+  }
+}
+function getPendingGameInvite(fromUser, toUser) {
+  const key = gameInviteKey(fromUser, toUser);
+  const invite = pendingGameInvites.get(key);
+  if (!invite) return null;
+  if (invite.expiresAt <= now()) { pendingGameInvites.delete(key); return null; }
+  return invite;
 }
 function rateLimit({ limit, windowMs, key = req => req.ip }) {
   return (req,res,next) => {
@@ -272,8 +293,9 @@ function consumeAuthToken(token, kind) {
 }
 async function sendEmail({to,subject,text,html}) {
   if (!SMTP_CONFIGURED) {
-    console.log(`[EMAIL NO CONFIGURADO] Para ${to}: ${subject}
-${text}`);
+    // Nunca imprimir enlaces/tokens de verificación o recuperación en logs de producción.
+    const safeRecipient = String(to || '').replace(/^(.{1,2}).*(@.*)$/, '$1***$2');
+    console.warn(`[EMAIL NO CONFIGURADO] No se envió "${subject}" a ${safeRecipient || 'destinatario'}.`);
     return { sent:false };
   }
   await mailTransport.sendMail({ from:process.env.SMTP_FROM, to, subject, text, html });
@@ -297,9 +319,18 @@ function mimeExt(mime) {
   if (mime === 'image/webp') return 'webp';
   return 'jpg';
 }
+function ownedUploadPath(userId, value) {
+  const str = String(value || '');
+  if (!/^\/uploads\/[a-zA-Z0-9_.-]+$/.test(str)) return '';
+  const filename = path.basename(str);
+  if (!filename.startsWith(`${userId}_`)) return '';
+  const fullPath = path.join(UPLOAD_DIR, filename);
+  return fs.existsSync(fullPath) ? `/uploads/${filename}` : '';
+}
 function saveDataImage(userId, value) {
   const str = String(value || '');
-  if (/^\/uploads\/[a-zA-Z0-9_.-]+$/.test(str)) return str;
+  const owned = ownedUploadPath(userId, str);
+  if (owned) return owned;
   const m = str.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/i);
   if (!m) return '';
   const buffer = Buffer.from(m[2], 'base64');
@@ -317,8 +348,7 @@ function cleanAvatar(userId, value) {
   if (/^[\p{Extended_Pictographic}\uFE0F\u200D]{1,16}$/u.test(avatar)) return avatar;
   const saved = saveDataImage(userId, avatar);
   if (saved) return saved;
-  if (/^\/uploads\/[a-zA-Z0-9_.-]+$/.test(avatar)) return avatar;
-  return '';
+  return ownedUploadPath(userId, avatar);
 }
 
 function profileFromRow(row) {
@@ -516,8 +546,10 @@ app.put('/api/profile', requireAuth, (req,res) => {
     const existing = getProfile(userId);
     const photosInput = Array.isArray(req.body?.fotos) ? req.body.fotos : (existing?.fotos || []);
     const photos = savePhotos(userId, photosInput);
-    const avatarInput = req.body?.avatar || photos[0] || existing?.avatar || '';
-    const avatar = cleanAvatar(userId, avatarInput) || photos[0] || '';
+    const hasAvatarField = Object.prototype.hasOwnProperty.call(req.body || {}, 'avatar');
+    const safeExistingAvatar = cleanAvatar(userId, existing?.avatar || '');
+    const avatarInput = hasAvatarField ? req.body.avatar : (photos[0] || safeExistingAvatar || '');
+    const avatar = cleanAvatar(userId, avatarInput) || (hasAvatarField ? '' : (photos[0] || safeExistingAvatar || ''));
     const ageMin = Math.max(18, Math.min(99, Number(req.body?.preferences?.ageMin) || 18));
     const ageMax = Math.max(ageMin, Math.min(99, Number(req.body?.preferences?.ageMax) || 99));
     const values = {
@@ -618,9 +650,10 @@ function emitToUser(userId,event,payload) {
   for (const sid of set) io.sockets.sockets.get(sid)?.emit(event,payload);
 }
 function disconnectUserSockets(userId, event, payload={}) {
-  const set=onlineUsers.get(userId); if(!set)return;
-  for(const sid of [...set]){const sock=io.sockets.sockets.get(sid);if(sock){if(event)sock.emit(event,payload);sock.disconnect(true);}}
+  const set=onlineUsers.get(userId);
+  if(set){for(const sid of [...set]){const sock=io.sockets.sockets.get(sid);if(sock){if(event)sock.emit(event,payload);sock.disconnect(true);}}}
   onlineUsers.delete(userId);
+  clearGameInvitesFor(userId);
 }
 function emitMatches(userId) { emitToUser(userId,'dating_matches',matchesFor(userId)); }
 function broadcastDiscovery() {
@@ -677,7 +710,10 @@ io.on('connection', socket => {
     try{
       const current=getProfile(userId);
       const photos=savePhotos(userId,Array.isArray(data.fotos)?data.fotos:(current?.fotos||[]));
-      const avatar=cleanAvatar(userId,data.avatar||photos[0]||current?.avatar||'')||photos[0]||'';
+      const hasAvatarField=Object.prototype.hasOwnProperty.call(data,'avatar');
+      const safeCurrentAvatar=cleanAvatar(userId,current?.avatar||'');
+      const avatarInput=hasAvatarField?data.avatar:(photos[0]||safeCurrentAvatar||'');
+      const avatar=cleanAvatar(userId,avatarInput)||(hasAvatarField?'':(photos[0]||safeCurrentAvatar||''));
       const pref=data.preferences||{};
       const ageMin=Math.max(18,Math.min(99,Number(pref.ageMin)||18)); const ageMax=Math.max(ageMin,Math.min(99,Number(pref.ageMax)||99));
       db.prepare(`INSERT INTO profiles(user_id,name,age,gender,city,bio,interests_json,avatar,photos_json,age_min,age_max,looking_for,city_pref,interest_pref,updated_at)
@@ -712,7 +748,7 @@ io.on('connection', socket => {
   socket.on('dating_chat_history',(data={},ack)=>{
     const done=typeof ack==='function'?ack:()=>{}; const target=String(data.oponenteID||''); const match=getActiveMatch(userId,target);
     if(!match)return done({ok:false,error:'Ese match ya no está disponible.',messages:[]});
-    const messages=db.prepare('SELECT id,from_user AS `from`, text, created_at AS ts FROM messages WHERE match_id=? ORDER BY created_at ASC LIMIT 150').all(match.id);
+    const messages=db.prepare('SELECT * FROM (SELECT id,from_user AS `from`,text,created_at AS ts FROM messages WHERE match_id=? ORDER BY created_at DESC LIMIT 150) ORDER BY ts ASC').all(match.id);
     done({ok:true,messages});
   });
 
@@ -731,13 +767,18 @@ io.on('connection', socket => {
     if(!getActiveMatch(userId,target)||blockedEitherWay(userId,target))return done({ok:false,error:'Solo puedes jugar con un match activo.'});
     const targetProfile=getProfile(target); if(targetProfile?.privacy?.allowGameInvites===false)return done({ok:false,error:'Este match ha desactivado las invitaciones a jugar.'});
     if(!opponent)return done({ok:false,error:'Tu match no está conectado ahora mismo.'});
-    const me=getProfile(userId); const mazo=validDeck(data.mazo); emitToUser(target,'dating_game_invite',{...me,mazo});done({ok:true});
+    const me=getProfile(userId); const mazo=validDeck(data.mazo);
+    pendingGameInvites.set(gameInviteKey(userId,target),{from:userId,to:target,mazo,expiresAt:now()+GAME_INVITE_TTL_MS});
+    emitToUser(target,'dating_game_invite',{...me,mazo});done({ok:true});
   });
 
   socket.on('dating_game_accept',(data={},ack)=>{
     const done=typeof ack==='function'?ack:()=>{}; const target=String(data.oponenteID||''); const opponent=socketForUser(target);
-    if(!opponent||!getActiveMatch(userId,target))return done({ok:false,error:'Ese match ya no está disponible.'});
-    const salaID=createDatingRoom(opponent,socket,data.mazo);done({ok:true,salaID});
+    if(!opponent||!getActiveMatch(userId,target)||blockedEitherWay(userId,target))return done({ok:false,error:'Ese match ya no está disponible.'});
+    const invite=getPendingGameInvite(target,userId);
+    if(!invite)return done({ok:false,error:'La invitación ha caducado o ya no está disponible.'});
+    pendingGameInvites.delete(gameInviteKey(target,userId));
+    const salaID=createDatingRoom(opponent,socket,invite.mazo);done({ok:true,salaID});
   });
 
   // Compatibilidad con el modo de juego/lobby original.
@@ -763,7 +804,7 @@ io.on('connection', socket => {
   socket.on('abandonar_partida',salaID=>{if(socket.room&&socket.room===salaID)leaveRoom(socket,true);});
 
   socket.on('disconnect',()=>{
-    removeFromLobby(socket.id);leaveRoom(socket,true);const set=onlineUsers.get(userId);if(set){set.delete(socket.id);if(!set.size)onlineUsers.delete(userId);}db.prepare('UPDATE users SET last_seen_at=? WHERE id=?').run(now(),userId);setTimeout(()=>broadcastDiscovery(),20);
+    removeFromLobby(socket.id);leaveRoom(socket,true);const set=onlineUsers.get(userId);if(set){set.delete(socket.id);if(!set.size){onlineUsers.delete(userId);clearGameInvitesFor(userId);}}db.prepare('UPDATE users SET last_seen_at=? WHERE id=?').run(now(),userId);setTimeout(()=>broadcastDiscovery(),20);
   });
 });
 

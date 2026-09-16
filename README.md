@@ -149,3 +149,15 @@ Usa dos navegadores/perfiles distintos:
 ## Seguridad pendiente antes de una apertura grande
 
 Esta fase mejora mucho el MVP, pero para una plataforma de citas pública con volumen todavía conviene añadir: moderación automática/manual de imágenes, política de privacidad y términos legales definitivos, exportación de datos, almacenamiento de objetos externo, backups de base de datos, observabilidad, auditoría más extensa y mecanismos reforzados contra abuso automatizado.
+
+## Ajustes de validación antes del despliegue
+
+Esta copia incluye una revisión adicional previa a producción:
+
+- Las rutas `/uploads/...` que se reutilicen en un perfil deben pertenecer al propio usuario y existir en disco.
+- Los enlaces/tokens de recuperación o verificación no se imprimen en los logs cuando SMTP no está configurado.
+- La aceptación de una partida de dating exige una invitación pendiente real; la invitación caduca a los 5 minutos y el servidor conserva el mazo autorizado.
+- El historial de chat carga los 150 mensajes más recientes y los entrega en orden cronológico.
+- Al eliminar la última foto del perfil también se limpia el avatar asociado.
+- El rate limiting en memoria tiene un límite de buckets para evitar crecimiento ilimitado ante claves únicas.
+

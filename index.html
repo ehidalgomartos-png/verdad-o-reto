@@ -391,6 +391,8 @@
     FIN GOOGLE ADSENSE -->
   </aside>
 
+  <footer class="app-copyright" aria-label="Copyright">Copyright © 2026 Hidalgo Entertainment</footer>
+
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <div id="confirmModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card">
@@ -2277,7 +2279,7 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
         const img = document.createElement('img'); img.src = src; img.alt = `Foto ${index+1}`;
         const badge = document.createElement('span'); badge.textContent = index === 0 ? 'PRINCIPAL' : String(index+1);
         const remove = document.createElement('button'); remove.type='button'; remove.textContent='×'; remove.setAttribute('aria-label','Quitar foto');
-        remove.onclick = () => { fotosJugador.splice(index,1); if (fotosJugador[0]) avatarJugador=fotosJugador[0]; renderProfilePhotoGrid(); actualizarPreviewAvatar(); };
+        remove.onclick = () => { fotosJugador.splice(index,1); avatarJugador=fotosJugador[0] || ''; renderProfilePhotoGrid(); actualizarPreviewAvatar(); };
         wrap.append(img,badge,remove); grid.appendChild(wrap);
       });
       if (fotosJugador.length < 4) {
