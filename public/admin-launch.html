@@ -5,7 +5,8 @@
 <title>Admin · Lanzamiento V/R Match</title>
 <style>
 :root{--bg:#09090d;--panel:#13131a;--line:#292934;--text:#f8f8fb;--muted:#9694a0;--pink:#ff2f78}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}.wrap{width:min(1240px,calc(100% - 34px));margin:auto}.top{height:78px;border-bottom:1px solid #24242d;display:flex;align-items:center;justify-content:space-between}.brand{font-weight:950;letter-spacing:.08em}.brand b{background:var(--pink);padding:8px;border-radius:9px;margin-right:8px}.muted{color:var(--muted)}.title{margin:36px 0 22px}.title h1{font-size:40px;letter-spacing:-.045em;margin:0}.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}.stat,.city,.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px}.stat{padding:18px}.stat b{display:block;font-size:28px;margin-top:6px}.cities{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:25px 0}.city{padding:20px;cursor:pointer}.city.active{border-color:var(--pink)}.citytop{display:flex;justify-content:space-between;gap:12px}.badge{font-size:10px;font-weight:900;padding:6px 8px;border-radius:99px;background:#24242e}.badge.ACTIVE{background:#123c28;color:#8effbd}.badge.READY{background:#4a2c12;color:#ffc27b}.track{height:9px;background:#292933;border-radius:99px;overflow:hidden;margin:15px 0}.fill{height:100%;background:linear-gradient(90deg,var(--pink),#8c5cff)}.panel{padding:20px;margin-bottom:50px}.city-manager{margin:24px 0 0}.manager-head{display:flex;justify-content:space-between;align-items:end;gap:18px;margin-bottom:14px}.manager-head strong{font-size:18px}.manager-grid{display:grid;grid-template-columns:1fr 180px auto;gap:10px}.manager-grid input{width:100%;background:#0c0c12;border:1px solid #30303b;color:#fff;padding:12px 13px;border-radius:10px}.base-note{font-size:11px;color:#7d7b87;margin-top:8px}@media(max-width:720px){.manager-grid{grid-template-columns:1fr}.manager-head{align-items:start;flex-direction:column}}.toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:17px}.toolbar input{background:#0c0c12;border:1px solid #30303b;color:#fff;padding:11px 13px;border-radius:10px}.btn{border:0;background:var(--pink);color:#fff;padding:11px 14px;border-radius:10px;font-weight:850;cursor:pointer;text-decoration:none}.btn.alt{background:#22222b}.btn.danger{background:#4a1b29;color:#ff9ab6;border:1px solid #733047}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:12px 10px;border-bottom:1px solid #25252f;white-space:nowrap}th{color:#9997a3}.empty{padding:35px;text-align:center;color:#9997a3}.notice{margin:12px 0;color:#9bffbf}.error{color:#ff8fab}.modal{display:none;position:fixed;inset:0;background:#000b;place-items:center;padding:20px}.modal.open{display:grid}.dialog{width:min(520px,100%);background:#15151d;border:1px solid #333340;border-radius:22px;padding:26px}.dialog h2{margin-top:0}.row{display:flex;gap:10px;justify-content:flex-end}.authbox{max-width:650px;margin:80px auto;padding:30px;border:1px solid var(--line);border-radius:22px;background:var(--panel);text-align:center}@media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}.cities{grid-template-columns:1fr 1fr}}@media(max-width:600px){.cities,.stats{grid-template-columns:1fr}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}.wrap{width:min(1240px,calc(100% - 34px));margin:auto}.top{height:78px;border-bottom:1px solid #24242d;display:flex;align-items:center;justify-content:space-between}.brand{font-weight:950;letter-spacing:.08em}.brand b{background:var(--pink);padding:8px;border-radius:9px;margin-right:8px}.muted{color:var(--muted)}.title{margin:36px 0 22px}.title h1{font-size:40px;letter-spacing:-.045em;margin:0}.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}.stat,.city,.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px}.stat{padding:18px}.stat b{display:block;font-size:28px;margin-top:6px}.cities{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:25px 0}.city{padding:20px;cursor:pointer}.city.active{border-color:var(--pink)}.citytop{display:flex;justify-content:space-between;gap:12px}.badge{font-size:10px;font-weight:900;padding:6px 8px;border-radius:99px;background:#24242e}.badge.ACTIVE{background:#123c28;color:#8effbd}.badge.READY{background:#4a2c12;color:#ffc27b}.track{height:9px;background:#292933;border-radius:99px;overflow:hidden;margin:15px 0}.fill{height:100%;background:linear-gradient(90deg,var(--pink),#8c5cff)}.panel{padding:20px;margin-bottom:50px}.city-manager{margin:24px 0 0}.manager-head{display:flex;justify-content:space-between;align-items:end;gap:18px;margin-bottom:14px}.manager-head strong{font-size:18px}.manager-grid{display:grid;grid-template-columns:1fr 180px auto;gap:10px}.manager-grid input{width:100%;background:#0c0c12;border:1px solid #30303b;color:#fff;padding:12px 13px;border-radius:10px}.base-note{font-size:11px;color:#7d7b87;margin-top:8px}@media(max-width:720px){.manager-grid{grid-template-columns:1fr}.manager-head{align-items:start;flex-direction:column}}.toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:17px}.toolbar input{background:#0c0c12;border:1px solid #30303b;color:#fff;padding:11px 13px;border-radius:10px}.btn{border:0;background:var(--pink);color:#fff;padding:11px 14px;border-radius:10px;font-weight:850;cursor:pointer;text-decoration:none}.btn.alt{background:#22222b}.btn.danger{background:#4a1b29;color:#ff9ab6;border:1px solid #733047}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:12px 10px;border-bottom:1px solid #25252f;white-space:nowrap}th{color:#9997a3}.empty{padding:35px;text-align:center;color:#9997a3}.notice{margin:12px 0;color:#9bffbf}.error{color:#ff8fab}.modal{display:none;position:fixed;inset:0;background:#000b;place-items:center;padding:20px}.modal.open{display:grid}.dialog{width:min(520px,100%);background:#15151d;border:1px solid #333340;border-radius:22px;padding:26px}.dialog h2{margin-top:0}.row{display:flex;gap:10px;justify-content:flex-end}.authbox{max-width:650px;margin:80px auto;padding:30px;border:1px solid var(--line);border-radius:22px;background:var(--panel);text-align:center}
+.analytics{margin:24px 0}.analytics-head{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:16px}.analytics-head h2{margin:0;font-size:24px}.analytics-head select{background:#0c0c12;border:1px solid #30303b;color:#fff;padding:10px 12px;border-radius:10px}.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.metric-card{background:#0d0d13;border:1px solid #282832;border-radius:14px;padding:14px}.metric-card b{display:block;font-size:24px}.metric-card span{display:block;color:#9c99a5;font-size:11px;margin-top:4px}.analytics-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:14px;margin-top:14px}.subpanel{background:#0d0d13;border:1px solid #282832;border-radius:16px;padding:16px}.subpanel h3{margin:0 0 12px;font-size:15px}.daily{display:grid;gap:8px}.daily-row{display:grid;grid-template-columns:70px 1fr 48px;gap:9px;align-items:center;font-size:11px}.daily-bars{height:11px;background:#24242e;border-radius:99px;overflow:hidden;display:flex}.daily-bars i{display:block;height:100%}.daily-bars .wait{background:#ff2f78}.daily-bars .ref{background:#8c5cff}.daily-bars .act{background:#2bd576}.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:10px;color:#918f9a;margin-top:12px}.legend i{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:4px}.city-performance{display:grid;gap:8px}.perf-row{display:grid;grid-template-columns:1fr auto;gap:10px;border-bottom:1px solid #24242e;padding:8px 0}.perf-row:last-child{border-bottom:0}.perf-row small{display:block;color:#85838e;margin-top:3px}.founder-badge{display:inline-flex;padding:4px 7px;border-radius:99px;background:#4a3510;color:#ffd77a;font-size:10px;font-weight:900}.ref-code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;color:#bdbac6}@media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}.cities{grid-template-columns:1fr 1fr}.metric-grid{grid-template-columns:repeat(2,1fr)}.analytics-grid{grid-template-columns:1fr}}@media(max-width:600px){.cities,.stats,.metric-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -15,6 +16,18 @@
 <main id="app" style="display:none">
 <section class="title"><h1>Control de lanzamiento</h1><p class="muted">Ciudades, lista de espera, referidos, emails y activaciones.</p></section>
 <section id="stats" class="stats"></section>
+<section class="panel analytics">
+  <div class="analytics-head">
+    <div><h2>Analítica de lanzamiento</h2><div class="muted">Lista → referidos → invitación → activación.</div></div>
+    <select id="analyticsDays" aria-label="Periodo de analítica"><option value="7">7 días</option><option value="30" selected>30 días</option><option value="90">90 días</option><option value="all">Todo</option></select>
+  </div>
+  <div id="launchMetrics" class="metric-grid"></div>
+  <div class="analytics-grid">
+    <div class="subpanel"><h3>Actividad</h3><div id="launchDaily" class="daily"></div><div class="legend"><span><i style="background:#ff2f78"></i>Altas</span><span><i style="background:#8c5cff"></i>Referidas</span><span><i style="background:#2bd576"></i>Activadas</span></div></div>
+    <div class="subpanel"><h3>Rendimiento por ciudad</h3><div id="launchCityPerformance" class="city-performance"></div></div>
+  </div>
+  <div class="subpanel" style="margin-top:14px"><h3>Referidores con más impacto</h3><div class="tablewrap"><table><thead><tr><th>Alias</th><th>Ciudad</th><th>Altas</th><th>Visitas</th><th>Estado</th><th>Código</th></tr></thead><tbody id="topReferrers"></tbody></table></div></div>
+</section>
 <section class="panel city-manager">
   <div class="manager-head">
     <div><strong>Añadir ciudad</strong><div class="muted">Crea una nueva zona de lanzamiento y define su objetivo inicial.</div></div>
@@ -31,7 +44,7 @@
 <section class="panel">
 <div class="toolbar"><strong id="selectedTitle">Selecciona una ciudad</strong><input id="search" placeholder="Buscar alias, email o código"><button id="searchBtn" class="btn alt">Buscar</button><button id="goalBtn" class="btn alt">Cambiar objetivo</button><button id="unlockBtn" class="btn">Desbloquear ciudad</button><button id="exportBtn" class="btn alt">Exportar CSV</button><button id="mailBtn" class="btn alt">Enviar emails pendientes</button><button id="resetBtn" class="btn danger">♻ Reiniciar ciudad de prueba</button></div>
 <div id="notice"></div>
-<div class="tablewrap"><table><thead><tr><th>Alias</th><th>Edad</th><th>Email</th><th>Estado</th><th>Código</th><th>Invitados</th><th>Visitas</th><th>Registro</th></tr></thead><tbody id="users"><tr><td colspan="8" class="empty">Selecciona una ciudad.</td></tr></tbody></table></div>
+<div class="tablewrap"><table><thead><tr><th>Alias</th><th>Edad</th><th>Email</th><th>Estado</th><th>Founder</th><th>Código</th><th>Invitados</th><th>Visitas</th><th>Registro</th></tr></thead><tbody id="users"><tr><td colspan="9" class="empty">Selecciona una ciudad.</td></tr></tbody></table></div>
 </section>
 </main>
 </div>
@@ -51,15 +64,51 @@ async function boot(){
 }
 async function load(){
   const [s,c]=await Promise.all([api('/api/admin/launch/summary'),api('/api/admin/launch/cities')]);cities=c.cities||[];
-  $('#stats').innerHTML=[['En lista',s.total],['Altas hoy',s.today],['Por referidos',s.referred],['Activados',s.activated],['Emails pendientes',s.pendingMail]].map(x=>`<div class="stat"><span class="muted">${x[0]}</span><b>${fmt(x[1])}</b></div>`).join('');
+  $('#stats').innerHTML=[['En lista',s.total],['Altas hoy',s.today],['Por referidos',s.referred],['Activados',s.activated],['Activación',`${Number(s.activationRate||0)}%`],['V/R Founder',s.founders],['Emails pendientes',s.pendingMail]].map(x=>`<div class="stat"><span class="muted">${x[0]}</span><b>${typeof x[1]==='string'?esc(x[1]):fmt(x[1])}</b></div>`).join('');
   $('#cities').innerHTML=cities.map(x=>`<article class="city ${selected===x.slug?'active':''}" data-slug="${esc(x.slug)}"><div class="citytop"><strong>${esc(x.name)}</strong><span class="badge ${esc(x.status)}">${esc(x.status)}</span></div><div style="font-size:25px;font-weight:950;margin-top:10px">${fmt(x.current)} / ${fmt(x.goal)}</div><div class="track"><div class="fill" style="width:${x.status==='ACTIVE'?100:x.percent}%"></div></div><div class="muted">${x.status==='ACTIVE'?'ABIERTA':x.percent+'%'}${Number(x.defaultGoal)!==Number(x.goal)?` · Base ${fmt(x.defaultGoal)}`:''}</div></article>`).join('');
   document.querySelectorAll('.city').forEach(el=>el.onclick=()=>{selected=el.dataset.slug;load()});
   if(selected){const c=cities.find(x=>x.slug===selected);$('#selectedTitle').textContent=`${c.name} · ${c.current}/${c.goal}`;await loadUsers()}
+  await loadAnalytics();
 }
 async function loadUsers(){
   const q=encodeURIComponent($('#search').value.trim()),d=await api(`/api/admin/launch/cities/${encodeURIComponent(selected)}/users?limit=300&q=${q}`);
-  $('#users').innerHTML=d.users?.length?d.users.map(u=>`<tr><td>${esc(u.alias)}</td><td>${Number(u.age)||''}</td><td>${esc(u.email)}</td><td>${esc(u.status)}</td><td>${esc(u.referralCode)}</td><td>${fmt(u.successfulInvites)}</td><td>${fmt(u.referralVisits)}</td><td>${u.createdAt?new Date(Number(u.createdAt)).toLocaleString('es-ES'):'—'}</td></tr>`).join(''):`<tr><td colspan="8" class="empty">No hay usuarios.</td></tr>`;
+  $('#users').innerHTML=d.users?.length?d.users.map(u=>`<tr><td>${esc(u.alias)}</td><td>${Number(u.age)||''}</td><td>${esc(u.email)}</td><td>${esc(u.status)}</td><td>${u.founderQualifiedAt?'<span class="founder-badge">★ Founder</span>':'—'}</td><td>${esc(u.referralCode)}</td><td>${fmt(u.successfulInvites)}</td><td>${fmt(u.referralVisits)}</td><td>${u.createdAt?new Date(Number(u.createdAt)).toLocaleString('es-ES'):'—'}</td></tr>`).join(''):`<tr><td colspan="9" class="empty">No hay usuarios.</td></tr>`;
 }
+
+async function loadAnalytics(){
+  try{
+    const days=$('#analyticsDays').value||'30',d=await api(`/api/admin/launch/analytics?days=${encodeURIComponent(days)}`),m=d.summary||{};
+    const avg=m.avgActivationHours==null?'—':`${Number(m.avgActivationHours).toLocaleString('es-ES')} h`;
+    $('#launchMetrics').innerHTML=[
+      ['Altas',m.total,'en lista'],
+      ['Altas por referido',m.referred,'atribuidas'],
+      ['Visitas de invitación',m.referralVisits,'eventos'],
+      ['Visita → alta',`${Number(m.referralEventRate||0)}%`,'aprox.'],
+      ['Invitaciones enviadas',m.invited,'accesos'],
+      ['Activaciones',m.activated,'cuentas'],
+      ['Tasa de activación',`${Number(m.activationRate||0)}%`,'email → cuenta'],
+      ['Tiempo medio',avg,'hasta activar'],
+      ['V/R Founder',m.founders,`meta ${d.founderTarget||3}`]
+    ].map(x=>`<article class="metric-card"><b>${typeof x[1]==='string'?esc(x[1]):fmt(x[1])}</b><span>${esc(x[0])} · ${esc(x[2])}</span></article>`).join('');
+
+    const daily=d.daily||[],max=Math.max(1,...daily.map(x=>Math.max(Number(x.waitlist)||0,Number(x.referred)||0,Number(x.activated)||0)));
+    $('#launchDaily').innerHTML=daily.length?daily.map(x=>{
+      const w=Math.max(1,Math.round((Number(x.waitlist)||0)*100/max));
+      const r=Math.max(0,Math.round((Number(x.referred)||0)*100/max));
+      const a=Math.max(0,Math.round((Number(x.activated)||0)*100/max));
+      const sum=Math.max(1,w+r+a);
+      return `<div class="daily-row"><span>${esc(String(x.day||'').slice(5))}</span><div class="daily-bars" title="Altas ${x.waitlist} · Referidas ${x.referred} · Activadas ${x.activated}"><i class="wait" style="width:${w*100/sum}%"></i><i class="ref" style="width:${r*100/sum}%"></i><i class="act" style="width:${a*100/sum}%"></i></div><b>${fmt(x.waitlist)}</b></div>`;
+    }).join(''):'<div class="muted">Aún no hay actividad en este periodo.</div>';
+
+    $('#launchCityPerformance').innerHTML=(d.cities||[]).map(c=>`<div class="perf-row"><div><strong>${esc(c.name)}</strong><small>${fmt(c.signups)} altas · ${fmt(c.referred)} referidas · ${fmt(c.referralVisits)} visitas</small></div><div style="text-align:right"><b>${Number(c.activationRate)||0}%</b><small>activación</small></div></div>`).join('')||'<div class="muted">Sin ciudades.</div>';
+
+    $('#topReferrers').innerHTML=(d.topReferrers||[]).filter(x=>Number(x.successfulInvites)>0||Number(x.visits)>0).map(r=>`<tr><td>${esc(r.alias)}</td><td>${esc(r.city)}</td><td>${fmt(r.successfulInvites)}</td><td>${fmt(r.visits)}</td><td>${r.founderQualified?'<span class="founder-badge">★ Founder</span>':'—'}</td><td><span class="ref-code">${esc(r.referralCode)}</span></td></tr>`).join('')||'<tr><td colspan="6" class="empty">Todavía no hay actividad de referidos.</td></tr>';
+  }catch(e){
+    $('#launchMetrics').innerHTML=`<div class="error">${esc(e.message)}</div>`;
+  }
+}
+$('#analyticsDays').onchange=()=>loadAnalytics();
+
 function modal(title,body,action){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.add('open');$('#confirm').onclick=async()=>{try{await action();$('#modal').classList.remove('open')}catch(e){msg(e.message,true)}}}
 $('#cancel').onclick=()=>$('#modal').classList.remove('open');
 $('#searchBtn').onclick=()=>selected&&loadUsers();
