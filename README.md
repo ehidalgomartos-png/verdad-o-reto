@@ -1,30 +1,79 @@
-# V/R Match — V18 · Producto sin monetización pública
+# V/R Match — Landing viral MVP
 
-Versión **18.1.0**, construida sobre V17.
+Prototipo estático para validar la idea de lanzamiento por ciudades.
 
-## Decisión de producto
+## Incluye
 
-V/R Match se presenta actualmente como una plataforma en beta con sus funciones disponibles. La interfaz pública no muestra mensajes sobre precios, suscripciones, tarjetas, planes Premium ni posibles cobros futuros.
+- Selector de ciudad.
+- Contador de personas y progreso de desbloqueo.
+- Mosaico "V/R People".
+- Perfiles de DEMOSTRACIÓN (no son usuarios reales).
+- Lista de espera.
+- Consentimiento separado para aparecer públicamente.
+- Código de referido.
+- Botón de compartir / copiar.
+- Diseño responsive.
+- Datos guardados localmente en `localStorage` únicamente para la demo.
 
-Las funciones actuales agrupadas bajo **V/R+** —Rewind, filtros avanzados, Boost y ranking inteligente— forman parte de la experiencia disponible para los usuarios.
+## Cómo probarlo
 
-## Cambios principales
+1. Abre `index.html` en el navegador.
+2. Cambia de ciudad.
+3. Completa el formulario.
+4. Se genera un código de invitación.
 
-- Inicio: eliminado el mensaje comercial de Gratis/Premium.
-- `como-funciona.html`: reescrita sin referencias a monetización.
-- `funciones.html`: nueva página pública de **Funciones V/R+**. Las rutas antiguas `/premium` y `/premium.html` redirigen por compatibilidad.
-- Zona V/R+: eliminados textos de plan, checkout, tarjeta, suscripción y cobro.
-- Condiciones y Privacidad: eliminadas referencias a pagos futuros.
-- Admin: la pestaña de Monetización queda oculta en la interfaz.
-- Funciones V/R+ actuales: habilitadas para todos los usuarios.
-- Configuración de Stripe retirada de `.env.example` y `render.yaml`.
-- Service Worker actualizado a `vr-match-shell-v18`.
-- `/healthz` debe mostrar **18.1.0**.
+Para evitar restricciones del navegador con `navigator.share` o portapapeles, puedes servir la carpeta con:
 
-## Regla de esta versión
+```bash
+npx serve .
+```
 
-No presentar las funciones actuales como una prueba de un plan comercial. Cualquier cambio de modelo de negocio deberá diseñarse como una fase nueva y separada, sin alterar silenciosamente las funciones que ya forman parte de la experiencia actual.
+o cualquier servidor local.
 
+## Para conectarlo a V/R Match
 
-### V18.1
-En la pantalla de acceso, Funciones V/R+ se mueve al pie, debajo del aviso +18 y enlaces legales.
+El prototipo NO escribe todavía en SQLite ni usa el backend real. El siguiente paso recomendado es crear:
+
+- `POST /api/waitlist`
+- `GET /api/cities`
+- `GET /api/cities/:slug/people`
+- `POST /api/referrals/visit`
+- `GET /api/referrals/:code`
+
+### Tabla sugerida: waitlist_users
+
+- id
+- alias
+- age
+- email
+- city
+- public_profile (boolean)
+- referral_code
+- referred_by
+- created_at
+- verified_at
+
+### Tabla sugerida: city_launches
+
+- id
+- city
+- target_users
+- current_users
+- is_unlocked
+- unlocked_at
+
+## Privacidad
+
+Para la página pública:
+- alias o nombre de pila;
+- edad;
+- ciudad (nunca ubicación precisa);
+- intereses;
+- foto aprobada por el usuario;
+- consentimiento explícito y revocable.
+
+No publicar apellidos, email, teléfono, distancia exacta ni ubicación exacta.
+
+## Nota
+
+Los números y perfiles incluidos en esta demo son ficticios y sirven únicamente para visualizar la experiencia.
