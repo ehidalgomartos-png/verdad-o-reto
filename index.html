@@ -434,7 +434,7 @@
           <span class="mode-icon">👥</span><span><strong>Retar por WhatsApp</strong><small>Crea una sala privada y comparte el enlace.</small></span><b>→</b>
         </button>
       </div>
-      <div class="stats-row"><div><strong id="statDeckCount">0</strong><span>cartas del mazo</span></div><div><strong>60s</strong><span>por turno</span></div><div><strong>2</strong><span>jugadores</span></div></div>
+      <div class="stats-row"><div><strong id="statDeckCount">0</strong><span>cartas del mazo</span></div><div><strong>30–90s</strong><span>según la carta</span></div><div><strong>2</strong><span>jugadores</span></div></div>
     </section>
 
     <section id="pantallaLobby" class="screen hidden">
@@ -449,6 +449,11 @@
         <button onclick="abandonarPartida()" class="danger-link">🚪 Salir</button>
         <div class="room-title"><span id="nombreMazoActivo">ROMPEHIELOS</span><small id="roomState">Sala privada</small></div>
         <div class="round-badge"><span>RONDA</span><strong id="contadorRonda">1</strong></div>
+      </div>
+
+      <div id="gameProgress" class="game-progress" aria-label="Progreso de la partida">
+        <div class="game-progress-head"><span id="gamePhaseLabel">ROMPER EL HIELO</span><small id="gamePhaseHint">Empezad fácil y coged confianza.</small></div>
+        <div class="game-progress-track" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
       </div>
 
       <div class="opponent-bar">
@@ -494,11 +499,23 @@
         <small class="proof-live-note">Solo se puede responder al reto usando la cámara en ese momento.</small>
       </div>
 
+      <div id="gameFinalPanel" class="game-final-panel hidden" role="status" aria-live="polite">
+        <span class="game-final-kicker">🏁 FINAL DESBLOQUEADO</span>
+        <h3>Habéis llegado hasta el final.</h3>
+        <p>La partida ya ha cumplido su objetivo: romper el hielo. Podéis seguir jugando o volver a la conversación.</p>
+        <div class="game-final-stats">
+          <div><strong id="gameStatTurns">0</strong><small>rondas tuyas</small></div>
+          <div><strong id="gameStatSpecial">0</strong><small>cartas especiales</small></div>
+          <div><strong id="gameStatReactions">0</strong><small>reacciones</small></div>
+        </div>
+        <div class="game-final-actions"><button class="btn btn-secondary" type="button" onclick="continuarPartida()">Seguir jugando</button><button class="btn btn-primary" type="button" onclick="terminarPartidaFinal()">Terminar partida</button></div>
+      </div>
+
       <div class="game-actions hidden" id="controlesJuego">
         <button class="action-btn action-truth" onclick="jugarCarta('verdad')"><span>💬</span><strong>VERDAD</strong><small>Responde con sinceridad</small></button>
         <button class="action-btn action-dare" onclick="jugarCarta('reto')"><span>🔥</span><strong>RETO</strong><small>Demuestra que te atreves</small></button>
       </div>
-      <div class="game-hint" id="gameHint">El turno pasa automáticamente al completar tu respuesta.</div>
+      <div class="game-hint" id="gameHint">La intensidad cambia a medida que avanza la partida.</div>
     </section>
   </main>
   <footer class="app-copyright" aria-label="Copyright"><span>Copyright © 2026 Hidalgo Entertainment</span><nav><a href="/terms.html" target="_blank" rel="noopener">Condiciones</a><a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a><a href="/community.html" target="_blank" rel="noopener">Comunidad</a></nav></footer>
@@ -745,6 +762,13 @@
     let tiempoRestante = 60;
     let timeoutEscribiendo;
     let rondaActual = 1;
+    const GAME_FINAL_ROUND = 8;
+    let gameExtended = false;
+    let gameFinalPending = false;
+    let gamePartnerProfile = null;
+    let currentCardMeta = { special:false, personalized:false, final:false, quick:false, seconds:60 };
+    let gameStats = { turns:0, truths:0, dares:0, special:0, personalized:0, reactions:0 };
+    const specialRoundsUsed = new Set();
     let enlaceSalaActual = '';
     let adultoPendiente = false;
     let avatarJugador = '';
@@ -1167,6 +1191,197 @@
         ]
       }
     };
+
+    const cartasEspeciales = {
+      rompehielos: {
+        verdades: [
+          { text:'RESPUESTA RÁPIDA · ¿Qué plan aceptarías ahora mismo sin pensarlo dos veces?', seconds:30, quick:true },
+          { text:'ESTO O AQUELLO · ¿Noche improvisada o plan organizado? Elige una y explica por qué.', seconds:45, quick:true },
+          { text:'DOS VERDADES Y UNA MENTIRA · Escribe tres afirmaciones sobre ti y deja que tu rival adivine cuál es falsa.', seconds:75 },
+          { text:'PRIMERA IMPRESIÓN · Di algo que te haya llamado la atención de la otra persona hasta ahora.', seconds:75 }
+        ],
+        retos: [
+          { text:'GRABA 15 SEGUNDOS · Vende como si fuera increíble el objeto más cercano que tengas.', seconds:45, quick:true },
+          { text:'FOTO EXPRÉS · Haz una foto representando con una pose cómo ha ido tu día.', seconds:45, quick:true },
+          { text:'VÍDEO · Improvisa una presentación tuya como si fueras el protagonista de una película.', seconds:60 },
+          { text:'FOTO · Busca algo cerca que diga algo de tu personalidad y enséñalo.', seconds:60 }
+        ]
+      },
+      parejas: {
+        verdades: [
+          { text:'LOS DOS EN MENTE · ¿Qué plan sencillo crees que os haría pasarlo especialmente bien juntos?', seconds:90 },
+          { text:'ESTO O AQUELLO · ¿Escapada de fin de semana o cena larga sin mirar el reloj? Elige una.', seconds:45, quick:true },
+          { text:'RECUERDO · Cuenta un momento pequeño que para ti tenga más valor del que parece.', seconds:90 },
+          { text:'CONEXIÓN · ¿Qué gesto hace que te sientas realmente escuchado/a por otra persona?', seconds:90 }
+        ],
+        retos: [
+          { text:'VÍDEO · Dedica 15 segundos a proponer una cita sencilla pero original.', seconds:60 },
+          { text:'FOTO · Haz una imagen con algo que represente un plan que te gustaría compartir.', seconds:60 },
+          { text:'VÍDEO · Describe vuestra cita improvisada ideal usando solo cinco frases.', seconds:60 },
+          { text:'FOTO · Crea con lo que tengas cerca una mini escena que parezca el inicio de una cita.', seconds:75 }
+        ]
+      },
+      seccionXX: {
+        verdades: [
+          { text:'QUÍMICA · ¿Qué detalle sutil hace que alguien te resulte especialmente atractivo?', seconds:90 },
+          { text:'ESTO O AQUELLO · ¿Más importante la mirada o la conversación? Elige una.', seconds:45, quick:true },
+          { text:'COQUETEO · ¿Qué tipo de cumplido te gusta recibir de verdad?', seconds:75 },
+          { text:'CONEXIÓN · ¿Qué hace que una cita pase de correcta a inolvidable para ti?', seconds:90 }
+        ],
+        retos: [
+          { text:'VÍDEO · Haz tu mejor mirada de complicidad a cámara durante unos segundos.', seconds:45, quick:true },
+          { text:'FOTO · Haz un selfie elegante con ambiente de cita.', seconds:60 },
+          { text:'VÍDEO · Improvisa un cumplido coqueto pero respetuoso para tu rival.', seconds:60 },
+          { text:'FOTO · Usa la luz que tengas cerca para crear una imagen con ambiente cinematográfico.', seconds:75 }
+        ]
+      }
+    };
+
+    const cartasFinales = {
+      verdad: [
+        '🏁 FINAL · Después de esta partida, ¿qué te gustaría seguir descubriendo de la otra persona?',
+        '🏁 FINAL · Resume vuestra vibra hasta ahora en tres palabras y explica una de ellas.',
+        '🏁 FINAL · Si la conversación siguiera fuera del juego, ¿qué tema te apetecería continuar?'
+      ],
+      reto: [
+        '🏁 FINAL · VÍDEO · Cierra la partida con una invitación creativa a seguir hablando.',
+        '🏁 FINAL · FOTO · Haz una última foto que represente tu estado de ánimo después de la partida.',
+        '🏁 FINAL · VÍDEO · Resume la partida en una frase y termina con una sonrisa.'
+      ]
+    };
+
+    function limpiarPrefijoCarta(texto='') {
+      return String(texto).replace(/^(?:⚡ V\/R · |✨ EN COMÚN · |🏁 FINAL · )/,'');
+    }
+
+    function analizarCarta(texto='', tipo='verdad') {
+      const raw=String(texto||'');
+      const final=raw.startsWith('🏁 FINAL · ');
+      const personalized=raw.startsWith('✨ EN COMÚN · ');
+      const special=final || personalized || raw.startsWith('⚡ V/R · ');
+      return { raw, text:limpiarPrefijoCarta(raw), tipo, meta:{special,personalized,final,quick:false,seconds:tipo==='verdad'?75:60} };
+    }
+
+    function interesesCompartidosPartida() {
+      const perfil = gamePartnerProfile || currentChatMatch;
+      if (!perfil) return [];
+      const otros = Array.isArray(perfil.intereses) ? perfil.intereses : (Array.isArray(perfil.interests) ? perfil.interests : []);
+      const mine = new Map((interesesJugador||[]).map(x=>[String(x).trim().toLowerCase(),String(x).trim()]));
+      const out=[];
+      for (const item of otros) {
+        const key=String(item||'').trim().toLowerCase();
+        if(key && mine.has(key) && !out.some(x=>x.toLowerCase()===key)) out.push(mine.get(key));
+      }
+      return out.slice(0,3);
+    }
+
+    function crearCartaPersonalizada(tipo) {
+      const comunes=interesesCompartidosPartida();
+      if(!comunes.length) return null;
+      const interes=comunes[Math.floor(Math.random()*comunes.length)];
+      if(tipo==='verdad') return { text:`✨ EN COMÚN · Los dos tenéis “${interes}” entre vuestros intereses. ¿Qué es lo que más disfrutas de eso y qué recomendarías a alguien que quisiera probarlo?`, seconds:90, personalized:true };
+      return { text:`✨ EN COMÚN · VÍDEO · Tenéis “${interes}” en común. En 20 segundos, convence a tu rival de hacer un plan relacionado con ese interés.`, seconds:60, personalized:true };
+    }
+
+    function fasePartida(round=rondaActual) {
+      if(gameExtended || round>GAME_FINAL_ROUND) return {index:4,label:'RONDA EXTRA',hint:'Ya rompisteis el hielo. Ahora mandáis vosotros.'};
+      if(round<=2) return {index:1,label:'ROMPER EL HIELO',hint:'Empezad fácil y coged confianza.'};
+      if(round<=4) return {index:2,label:'CONECTAR',hint:'Más personalidad, menos respuestas automáticas.'};
+      if(round<=6) return {index:3,label:'SUBIR EL NIVEL',hint:'Cartas con más intención y sorpresa.'};
+      return {index:4,label:'FINAL',hint:'Últimas rondas antes de decidir si seguís.'};
+    }
+
+    function actualizarProgresoPartida() {
+      if(!$('gameProgress')) return;
+      const fase=fasePartida();
+      $('contadorRonda').textContent=String(rondaActual);
+      $('gamePhaseLabel').textContent=fase.label;
+      $('gamePhaseHint').textContent=fase.hint;
+      [...$('gameProgress').querySelectorAll('.game-progress-track i')].forEach((el,i)=>{
+        el.classList.toggle('done',i+1<fase.index);
+        el.classList.toggle('active',i+1===fase.index);
+      });
+    }
+
+    function aplicarEstiloCarta(meta={}) {
+      const tarjeta=$('contenedorTarjetaJuego');
+      tarjeta.classList.toggle('is-special',Boolean(meta.special));
+      tarjeta.classList.toggle('is-personalized',Boolean(meta.personalized));
+      tarjeta.classList.toggle('is-final',Boolean(meta.final));
+    }
+
+    function resetExperienciaPartida() {
+      rondaActual=1;
+      gameExtended=false;
+      gameFinalPending=false;
+      currentCardMeta={special:false,personalized:false,final:false,quick:false,seconds:60};
+      gameStats={turns:0,truths:0,dares:0,special:0,personalized:0,reactions:0};
+      specialRoundsUsed.clear();
+      if($('gameFinalPanel')) $('gameFinalPanel').classList.add('hidden');
+      aplicarEstiloCarta({});
+      actualizarProgresoPartida();
+    }
+
+    function obtenerCartaParaRonda(tipo) {
+      if(!gameExtended && rondaActual===GAME_FINAL_ROUND) {
+        const arr=cartasFinales[tipo];
+        const raw=arr[Math.floor(Math.random()*arr.length)];
+        return {raw,text:limpiarPrefijoCarta(raw),meta:{special:true,personalized:false,final:true,quick:false,seconds:tipo==='verdad'?90:75}};
+      }
+      if(!gameExtended && rondaActual===4) {
+        const personalized=crearCartaPersonalizada(tipo);
+        if(personalized) return {raw:personalized.text,text:limpiarPrefijoCarta(personalized.text),meta:{special:true,personalized:true,final:false,quick:false,seconds:personalized.seconds}};
+      }
+      if(!gameExtended && [3,6].includes(rondaActual) && !specialRoundsUsed.has(rondaActual)) {
+        const clave=tipo==='verdad'?'verdades':'retos';
+        const pool=cartasEspeciales[mazoElegido]?.[clave] || cartasEspeciales.rompehielos[clave];
+        const picked=pool[Math.floor(Math.random()*pool.length)];
+        specialRoundsUsed.add(rondaActual);
+        const raw=`⚡ V/R · ${picked.text}`;
+        return {raw,text:picked.text,meta:{special:true,personalized:false,final:false,quick:Boolean(picked.quick),seconds:picked.seconds||60}};
+      }
+      const raw=obtenerCartaSinRepetir(tipo);
+      const personalized=(rondaActual>=5 && Math.random()<.16) ? crearCartaPersonalizada(tipo) : null;
+      if(personalized) return {raw:personalized.text,text:limpiarPrefijoCarta(personalized.text),meta:{special:true,personalized:true,final:false,quick:false,seconds:personalized.seconds}};
+      return {raw,text:raw,meta:{special:false,personalized:false,final:false,quick:false,seconds:tipo==='verdad'?(rondaActual>=5?90:75):60}};
+    }
+
+    function completarTurnoLocal({timeout=false}={}) {
+      gameStats.turns += 1;
+      if(!gameExtended && rondaActual>=GAME_FINAL_ROUND) {
+        mostrarFinalPartida(timeout);
+        return;
+      }
+      rondaActual += 1;
+      actualizarProgresoPartida();
+    }
+
+    function mostrarFinalPartida(timeout=false) {
+      gameFinalPending=true;
+      $('controlesJuego').classList.add('hidden');
+      $('gameFinalPanel').classList.remove('hidden');
+      $('gameStatTurns').textContent=String(gameStats.turns);
+      $('gameStatSpecial').textContent=String(gameStats.special);
+      $('gameStatReactions').textContent=String(gameStats.reactions);
+      $('gamePhaseLabel').textContent='FINAL COMPLETADO';
+      $('gamePhaseHint').textContent=timeout?'El último turno terminó por tiempo. Podéis seguir si queréis.':'Ya tenéis conversación de sobra para continuar fuera del juego.';
+    }
+
+    function continuarPartida() {
+      gameExtended=true;
+      gameFinalPending=false;
+      rondaActual=GAME_FINAL_ROUND+1;
+      $('gameFinalPanel').classList.add('hidden');
+      actualizarProgresoPartida();
+      if(miTurno) $('controlesJuego').classList.remove('hidden');
+      actualizarBarraTurno(miTurno,miTurno?'Tu turno · ronda extra':'Esperando rival');
+      mostrarToast('Ronda extra activada. Sin límite de rondas.','info');
+    }
+
+    function terminarPartidaFinal() {
+      mostrarToast(origenPartida==='dating'?'Partida terminada. Volvemos a la conversación.':'Partida terminada.','info');
+      abandonarPartida();
+    }
 
     const cartasUsadas = {
       rompehielos: { verdades: [], retos: [] },
@@ -2464,6 +2679,7 @@
       const match = datingMatches.find(m => m.id === matchId);
       if (!match) return mostrarToast('Ese match ya no está disponible.', 'warn');
       currentMatch = match;
+      gamePartnerProfile = match;
       socket.emit('dating_game_invite', { oponenteID: match.id, mazo }, (res) => {
         if (!res || !res.ok) return mostrarToast((res && res.error) || 'No se pudo enviar la invitación.', 'warn');
         mostrarToast(`Invitación enviada a ${match.nombre}.`, 'info');
@@ -2657,6 +2873,7 @@
     function aceptarInvitacionJuego() {
       if (!pendingGameInvite) return rechazarInvitacionJuego();
       const data = pendingGameInvite;
+      gamePartnerProfile = datingMatches.find(m=>String(m.id)===String(data.id)) || null;
       rechazarInvitacionJuego();
       socket.emit('dating_game_accept', { oponenteID: data.id, mazo: data.mazo || 'rompehielos' }, (res) => {
         if (res && !res.ok) mostrarToast(res.error || 'No se pudo iniciar la partida.', 'error');
@@ -2846,9 +3063,10 @@
     }
 
     function prepararMesa(estado) {
+      resetExperienciaPartida();
       $('nombreMazoActivo').textContent = nombreMazo(mazoElegido).toUpperCase();
       $('roomState').textContent = estado;
-      $('contadorRonda').textContent = rondaActual;
+      actualizarProgresoPartida();
     }
 
     function actualizarBarraTurno(miTurnoActivo, texto) {
@@ -2867,9 +3085,9 @@
       }, 160);
     }
 
-    function iniciarTemporizador() {
+    function iniciarTemporizador(segundos=60) {
       detenerTemporizador(false);
-      tiempoRestante = 60;
+      tiempoRestante = Math.max(20, Math.min(120, Number(segundos)||60));
       $('cajaTemporizador').classList.remove('hidden','urgent');
       $('textoTemporizador').textContent = tiempoRestante;
       intervaloTimer = setInterval(() => {
@@ -2884,6 +3102,7 @@
           mostrarToast('Tiempo agotado. El turno pasa al otro jugador.', 'warn');
           miTurno = false;
           actualizarBarraTurno(false, 'Tiempo agotado');
+          completarTurnoLocal({timeout:true});
           socket.emit('tiempo_agotado', { sala: miSala });
         }
       }, 1000);
@@ -2909,6 +3128,7 @@
 
     function enviarReaccion(emoji) {
       if (!miSala) return;
+      gameStats.reactions += 1;
       socket.emit('enviar_reaccion', { sala: miSala, emoji });
       mostrarEmojiAnimado(emoji);
     }
@@ -2971,6 +3191,8 @@
       rivalNombre = datos.oponenteNombre || 'Tu oponente';
       rivalAvatar = datos.oponenteAvatar || '';
       origenPartida = datos.origen || 'legacy';
+      const partnerId=datos.oponenteID || datos.opponentId || datos.oponenteId || '';
+      gamePartnerProfile = datingMatches.find(m=>partnerId && String(m.id)===String(partnerId)) || gamePartnerProfile || (currentChatMatch && currentChatMatch.nombre===rivalNombre ? currentChatMatch : null);
       cerrarMatchModal(); rechazarInvitacionJuego();
       showScreen('pantallaJuego');
       prepararMesa('Partida online');
@@ -3055,21 +3277,28 @@
     function jugarCarta(tipo) {
       if (!miTurno) return mostrarToast('Ahora mismo no es tu turno.','warn');
       if (!miSala) return mostrarToast('Primero necesitas una sala activa.','warn');
-      const carta = obtenerCartaSinRepetir(tipo);
+      if(gameFinalPending) return mostrarToast('Elige si quieres terminar o seguir jugando.','info');
+      const cartaInfo = obtenerCartaParaRonda(tipo);
+      const carta = cartaInfo.raw;
       ultimaCartaJugada = carta;
+      currentCardMeta = cartaInfo.meta;
+      gameStats[tipo==='verdad'?'truths':'dares'] += 1;
+      if(cartaInfo.meta.special) gameStats.special += 1;
+      if(cartaInfo.meta.personalized) gameStats.personalized += 1;
       detenerTemporizador();
       limpiarPruebaVisual();
       $('barraReacciones').classList.add('hidden');
       $('controlesJuego').classList.add('hidden');
       $('seccionRespuesta').classList.add('hidden');
       $('seccionPrueba').classList.add('hidden');
-      const etiqueta = tipo === 'verdad' ? 'VERDAD' : 'RETO';
-      actualizarCartaAnimada(`Te ha tocado ${etiqueta}\n\n“${carta}”`, etiqueta);
+      aplicarEstiloCarta(cartaInfo.meta);
+      const etiqueta = cartaInfo.meta.final ? '🏁 FINAL' : cartaInfo.meta.personalized ? '✨ EN COMÚN' : cartaInfo.meta.special ? '⚡ CARTA V/R' : (tipo === 'verdad' ? 'VERDAD' : 'RETO');
+      actualizarCartaAnimada(`Te ha tocado ${tipo==='verdad'?'VERDAD':'RETO'}\n\n“${cartaInfo.text}”`, etiqueta);
       if (tipo === 'verdad') $('seccionRespuesta').classList.remove('hidden');
       else $('seccionPrueba').classList.remove('hidden');
       miTurno = false;
-      actualizarBarraTurno(false, 'Esperando respuesta');
-      iniciarTemporizador();
+      actualizarBarraTurno(false, cartaInfo.meta.quick ? 'Respuesta rápida' : 'Esperando respuesta');
+      iniciarTemporizador(cartaInfo.meta.seconds);
       socket.emit('accion_juego', { sala: miSala, tipo, textoCarta: carta });
     }
 
@@ -3082,9 +3311,12 @@
       $('barraReacciones').classList.add('hidden');
       ultimaCartaJugada = datos.textoCarta;
       miTurno = false;
-      const etiqueta = datos.tipo === 'verdad' ? 'VERDAD' : 'RETO';
+      const info=analizarCarta(datos.textoCarta,datos.tipo);
+      currentCardMeta=info.meta;
+      aplicarEstiloCarta(info.meta);
+      const etiqueta = info.meta.final ? '🏁 FINAL' : info.meta.personalized ? '✨ EN COMÚN' : info.meta.special ? '⚡ CARTA V/R' : (datos.tipo === 'verdad' ? 'VERDAD' : 'RETO');
       const espera = datos.tipo === 'verdad' ? 'Esperando su respuesta…' : 'Esperando su foto o vídeo de prueba…';
-      actualizarCartaAnimada(`Tu oponente eligió ${etiqueta}\n\n“${datos.textoCarta}”\n\n${espera}`, etiqueta);
+      actualizarCartaAnimada(`Tu oponente eligió ${datos.tipo==='verdad'?'VERDAD':'RETO'}\n\n“${info.text}”\n\n${espera}`, etiqueta);
       $('challengeTag').textContent = `OPONENTE · ${etiqueta}`;
       actualizarBarraTurno(false, espera.replace('…',''));
     });
@@ -3100,15 +3332,17 @@
       miTurno = false;
       actualizarBarraTurno(false,'Esperando reacción');
       socket.emit('enviar_respuesta', { sala: miSala, respuesta, pregunta: ultimaCartaJugada });
+      completarTurnoLocal();
     }
 
     socket.on('recibir_respuesta', (data) => {
-      actualizarCartaAnimada(`Pregunta:\n“${data.pregunta}”\n\nRespuesta del oponente:\n“${data.respuesta}”\n\n¡Te toca!`, 'RESPUESTA');
+      const info=analizarCarta(data.pregunta||'','verdad');
+      aplicarEstiloCarta(info.meta);
+      actualizarCartaAnimada(`Pregunta:\n“${info.text}”\n\nRespuesta del oponente:\n“${data.respuesta}”\n\n${gameFinalPending?'Decide si quieres seguir jugando.':'¡Te toca!'}`, info.meta.special?'RESPUESTA · V/R':'RESPUESTA');
       $('barraReacciones').classList.remove('hidden');
-      $('controlesJuego').classList.remove('hidden');
-      rondaActual += 1; $('contadorRonda').textContent = rondaActual;
       miTurno = true;
-      actualizarBarraTurno(true,'Tu turno');
+      if(!gameFinalPending) $('controlesJuego').classList.remove('hidden');
+      actualizarBarraTurno(!gameFinalPending,gameFinalPending?'Final completado': 'Tu turno');
     });
 
     function comprimirImagen(file, maxSide=1280, quality=.78) {
@@ -3342,6 +3576,7 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
           ? '¡Vídeo enviado! Tu oponente ya lo ha recibido.'
           : '¡Foto enviada! Tu oponente ya la ha recibido.', 'PRUEBA ENVIADA');
         actualizarBarraTurno(false, 'Esperando siguiente jugada');
+        completarTurnoLocal();
       });
     }
 
@@ -3352,21 +3587,22 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
         : '¡El oponente ha enviado una foto de prueba!\n\n¡Te toca!', 'PRUEBA');
       mostrarPruebaMedia(tipo, media.dataUrl || '');
       $('barraReacciones').classList.remove('hidden');
-      $('controlesJuego').classList.remove('hidden');
-      rondaActual += 1; $('contadorRonda').textContent = rondaActual;
-      miTurno = true; actualizarBarraTurno(true,'Tu turno');
+      miTurno = true;
+      if(!gameFinalPending) $('controlesJuego').classList.remove('hidden');
+      actualizarBarraTurno(!gameFinalPending,gameFinalPending?'Final completado':'Tu turno');
     });
 
     socket.on('tiempo_agotado_remoto', () => {
       detenerTemporizador();
       actualizarCartaAnimada('El tiempo de tu oponente se ha agotado. Ahora te toca a ti.','NUEVO TURNO');
-      $('controlesJuego').classList.remove('hidden'); miTurno = true; rondaActual += 1; $('contadorRonda').textContent=rondaActual;
-      actualizarBarraTurno(true,'Tu turno');
+      miTurno = true;
+      if(!gameFinalPending) $('controlesJuego').classList.remove('hidden');
+      actualizarBarraTurno(!gameFinalPending,gameFinalPending?'Final completado':'Tu turno');
     });
 
     socket.on('oponente_abandono', () => {
       detenerTemporizador();
-      mostrarToast('Tu oponente ha abandonado la partida.','warn');
+      mostrarToast('Tu oponente ha terminado o salido de la partida.','info');
       setTimeout(() => abandonarPartidaLocal(), 700);
     });
 
@@ -3377,7 +3613,8 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
     }
     function abandonarPartidaLocal() {
       detenerTemporizador(); clearTimeout(timeoutEscribiendo); cerrarCamara();
-      miSala=''; rivalNombre=''; rivalAvatar=''; rondaActual=1; enlaceSalaActual='';
+      miSala=''; rivalNombre=''; rivalAvatar=''; rondaActual=1; enlaceSalaActual=''; gamePartnerProfile=null;
+      resetExperienciaPartida();
       limpiarPruebaVisual();
       $('zonaInvitacion').classList.add('hidden'); $('controlesJuego').classList.add('hidden');
       if (origenPartida === 'dating' && currentChatMatch) { showScreen('pantallaChat'); renderChat(); }
