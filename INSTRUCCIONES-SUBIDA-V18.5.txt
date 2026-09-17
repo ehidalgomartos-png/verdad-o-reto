@@ -1,0 +1,33 @@
+V/R MATCH 18.5.0 — ACTUALIZACIÓN
+=================================
+
+Sustituye en GitHub únicamente estos archivos:
+
+- index.html
+- styles.css
+- server.js
+- package.json
+- sw.js
+- como-funciona.html
+- privacy.html
+
+Los archivos ROADMAP-JUEGO.md, REVISION.txt, LANZAMIENTO-CONTROLADO-V18.5.md y VR-MATCH-CONTEXTO-PROYECTO.md son documentación y puedes subirlos también para mantener el historial del proyecto.
+
+DESPUÉS DEL PUSH
+1. Espera a que Render termine el deploy.
+2. Abre /healthz y confirma version 18.5.0.
+3. Haz una recarga completa/PWA para recoger el Service Worker v18-5-0.
+4. Prueba con dos cuentas diferentes:
+   - login
+   - Match
+   - chat
+   - iniciar partida
+   - completar hasta el final
+   - terminar
+   - comprobar retorno al mismo chat
+   - comprobar que aparece “Ya habéis jugado 1 partida”.
+5. En Admin → Métricas revisa que aparezcan Partidas y Finalizadas.
+
+IMPORTANTE
+No subas .env ni secretos a GitHub.
+Si todavía estás en un filesystem efímero sin almacenamiento persistente, trata el lanzamiento como piloto público pequeño hasta resolver la persistencia.

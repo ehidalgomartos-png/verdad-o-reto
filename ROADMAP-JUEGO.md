@@ -1,30 +1,42 @@
 # V/R Match — evolución del juego
 
-## V18.4 implementado
+## V18.5 implementado
 
-- Mantiene el motor autoritativo de turnos de V18.3.
-- Amplía los bancos de cartas sincronizadas de Rompehielos, Parejas y +18.
-- Las partidas nacidas de un Match pueden recibir una carta sincronizada creada a partir de un interés que ambos perfiles tengan en común.
-- Esa personalización se decide en servidor y no depende del nombre visible del perfil.
-- Revelación renovada con cuenta atrás 3–2–1, comparación visual de respuestas y resultado destacado.
-- Feedback háptico y tono corto de interfaz cuando el navegador lo permite; se respeta `prefers-reduced-motion` para las animaciones.
-- Partículas visuales en coincidencias/aciertos sin recursos externos.
-- Nuevos contadores compartidos: coincidencias A/B, predicciones acertadas y cartas sincronizadas personalizadas.
-- El resumen final utiliza esos contadores sin convertirlos en una puntuación de compatibilidad.
-- Se corrige una llamada duplicada a `prepararMesa()` en el inicio de partida.
-- `server.js`, `package.json` y Service Worker pasan a 18.4.0.
-- Las respuestas secretas sincronizadas continúan viviendo solo en memoria durante la ronda; no se crea historial persistente de respuestas.
+- Historial persistente y seguro de partidas nacidas desde un Match.
+- Guarda únicamente metadatos agregados: Match asociado, mazo, inicio/fin, duración, turnos, rondas sincronizadas, coincidencias, aciertos, reacciones, personalización por intereses y uso de rondas extra.
+- No guarda respuestas, predicciones textuales, contenido de cartas, fotos ni vídeos de pruebas.
+- El chat muestra cuántas partidas habéis completado juntos y un resumen agregado de la relación de juego.
+- El historial se incluye en la exportación de datos de la cuenta.
+- Una partida que queda abierta por reinicio/despliegue se cierra de forma coherente usando el último estado agregado persistido.
+- El panel Admin incorpora Partidas iniciadas, Partidas finalizadas y el paso Jugó dentro del embudo.
+- La gráfica diaria incorpora partidas junto a altas, matches y mensajes.
+- Se refuerza el retorno al chat también cuando la partida se inició desde el modal de Match y no desde un chat ya abierto.
+- `server.js`, `package.json` y Service Worker pasan a 18.5.0.
 
 ## Principio que se mantiene
 
-V/R Match sigue siendo primero una app de citas y después un juego. El recorrido principal continúa siendo:
+V/R Match sigue siendo primero una app de citas y después un juego:
 
 **DESCUBRIR → LIKE → MATCH → CHAT → JUGAR → VOLVER AL CHAT**
 
-## Siguiente bloque recomendado — V18.5
+## Prioridad de lanzamiento
 
-1. Crear un historial opcional de partidas terminadas que guarde solo metadatos seguros: fecha, mazo, duración aproximada, número de rondas, coincidencias y reacciones; nunca respuestas, fotos ni vídeos.
-2. Incorporar métricas agregadas de abandono/completado por tipo de partida para mejorar el diseño sin almacenar contenido privado.
-3. Añadir “favoritos de partida”: permitir marcar una pregunta como interesante para retomarla después en el chat, guardando solo la referencia/tipo de carta y no la respuesta privada.
-4. Mejorar la recuperación ante una reconexión breve para que una partida activa pueda restaurar su estado durante unos segundos en vez de terminar inmediatamente.
-5. Revisar duración real de las partidas con pruebas de dos usuarios y ajustar el objetivo de 8 turnos por jugador si resulta demasiado largo.
+La prioridad inmediata deja de ser añadir muchas mecánicas nuevas y pasa a ser observar uso real:
+
+1. estabilidad de registro, Match, chat y juego;
+2. porcentaje de usuarios que llegan a jugar;
+3. partidas iniciadas frente a finalizadas;
+4. errores del cliente y abandonos;
+5. repetición: cuántos Matches vuelven a jugar.
+
+## Siguiente bloque recomendado — V18.6
+
+1. Reconexión breve de partida con una ventana de gracia antes de dar por abandonada la sala.
+2. “Retomar conversación”: al volver al chat, sugerir una frase basada en el tipo de momento vivido, sin guardar la respuesta privada.
+3. Métricas de repetición de juego por Match y retención 1/7 días.
+4. Revisión de duración real de partidas y ajuste de 8 turnos si los datos indican que es demasiado largo.
+5. Pulido de onboarding para explicar en menos pasos qué hace diferente a V/R Match.
+
+## Regla para actualizaciones diarias
+
+Una actualización diaria debe cambiar un bloque concreto y medible. Evitar mezclar en el mismo deploy cambios grandes de base de datos, diseño, monetización y juego. Las correcciones urgentes sí pueden salir como hotfix independiente.

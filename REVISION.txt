@@ -1,32 +1,26 @@
-V/R MATCH 18.4.0 — REVISIÓN DE ESTA ACTUALIZACIÓN
+V/R MATCH 18.5.0 — REVISIÓN
+===========================
 
-Cambios principales
-- Cartas sincronizadas personalizadas por intereses compartidos desde servidor.
-- Más cartas A/B, Adivina a tu Match y Final a dos voces en los tres mazos.
-- Nueva revelación visual 3–2–1.
-- Comparación separada de la respuesta propia y la del Match.
-- Distintivos de coincidencia y aciertos.
-- Háptica y tono corto de interfaz cuando el dispositivo/navegador lo permite.
-- Partículas de celebración con respeto a prefers-reduced-motion.
-- Contadores compartidos de coincidencias, predicciones acertadas y cartas personalizadas.
-- Resumen final más informativo sin crear un “score de compatibilidad”.
-- Corrección de llamada duplicada a prepararMesa().
-- Privacidad actualizada para explicar el tratamiento temporal de respuestas sincronizadas.
-- Cache PWA actualizada a vr-match-shell-v18-4-0.
+Cambios principales:
+- Historial seguro de partidas por Match.
+- Resumen de partidas jugadas dentro del chat.
+- Métricas de partidas iniciadas/finalizadas en Admin.
+- Paso “Jugó” añadido al embudo de producto.
+- Actividad diaria incluye partidas.
+- Exportación de cuenta incluye metadatos de partidas propias.
+- Recuperación coherente de sesiones de juego abiertas tras reinicio del servidor.
+- Refuerzo del retorno al mismo chat al terminar una partida de dating.
+- Cache PWA actualizada a v18-5-0.
 
-Privacidad
-- No se añade una tabla de respuestas de juego.
-- Las respuestas secretas A/B, predicciones y texto sincronizado viven únicamente en memoria mientras la ronda está activa.
-- No se persisten fotos/vídeos de prueba como historial del juego.
-- La personalización por intereses usa perfiles ya existentes y solo comparte con los jugadores el interés común utilizado en esa carta.
+Privacidad:
+- No se persisten respuestas secretas.
+- No se persiste el texto de las cartas jugadas.
+- No se guardan fotos ni vídeos de retos en el historial de partida.
 
-Validaciones realizadas
-- node --check server.js: OK
-- node --check del JavaScript inline de index.html: OK
-- package.json: JSON válido
-- manifest.webmanifest: JSON válido
-- IDs HTML duplicados: 0
-- Referencias literales $('id') sin elemento HTML: 0
-- onclick con función ausente: 0
-- Llaves CSS equilibradas
-- Sin rótulos internos o de prelanzamiento visibles en los archivos públicos de la actualización
+Validaciones incluidas antes de empaquetar:
+- node --check server.js
+- node --check del JavaScript inline principal
+- package.json válido
+- búsqueda de IDs duplicados
+- comprobación de referencias DOM principales
+- búsqueda de etiquetas internas de desarrollo en archivos públicos de la actualización

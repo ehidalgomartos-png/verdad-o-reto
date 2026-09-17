@@ -24,7 +24,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.4.0';
+const APP_VERSION = '18.5.0';
 const LEGAL_VERSION = '2026-09-17';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -52,7 +52,7 @@ const STRIPE_API_BASE = 'https://api.stripe.com/v1';
 const STRIPE_PREPARED = Boolean(STRIPE_SECRET_KEY && STRIPE_WEBHOOK_SECRET && STRIPE_PRICE_PLUS_MONTHLY);
 const STRIPE_MODE = STRIPE_SECRET_KEY.startsWith('sk_live_') ? 'live' : (STRIPE_SECRET_KEY.startsWith('sk_test_') ? 'test' : (STRIPE_SECRET_KEY ? 'configured' : 'off'));
 // Los secretos de pago viven en Environment. El panel admin solo cambia el modo comercial persistido en SQLite.
-// V18: las funciones V/R+ actuales forman parte de la experiencia disponible para todos.
+// Las funciones V/R+ actuales forman parte de la experiencia disponible para todos.
 const SMTP_CONFIGURED = Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_FROM);
 const VAPID_PUBLIC_KEY = String(process.env.VAPID_PUBLIC_KEY || '').trim();
 const VAPID_PRIVATE_KEY = String(process.env.VAPID_PRIVATE_KEY || '').trim();
@@ -329,6 +329,32 @@ CREATE TABLE IF NOT EXISTS client_errors (
 );
 CREATE INDEX IF NOT EXISTS idx_client_errors_created ON client_errors(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_client_errors_user ON client_errors(user_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS game_sessions (
+  id TEXT PRIMARY KEY,
+  match_id TEXT REFERENCES matches(id) ON DELETE SET NULL,
+  user1 TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user2 TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  deck TEXT NOT NULL,
+  started_at INTEGER NOT NULL,
+  core_completed_at INTEGER,
+  ended_at INTEGER,
+  updated_at INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  finish_reason TEXT NOT NULL DEFAULT '',
+  total_turns INTEGER NOT NULL DEFAULT 0,
+  sync_rounds INTEGER NOT NULL DEFAULT 0,
+  coincidences INTEGER NOT NULL DEFAULT 0,
+  guess_hits INTEGER NOT NULL DEFAULT 0,
+  reactions INTEGER NOT NULL DEFAULT 0,
+  personalized_sync INTEGER NOT NULL DEFAULT 0,
+  extended INTEGER NOT NULL DEFAULT 0,
+  duration_seconds INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_game_sessions_pair_started ON game_sessions(user1,user2,started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_game_sessions_user1_started ON game_sessions(user1,started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_game_sessions_user2_started ON game_sessions(user2,started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_game_sessions_match_started ON game_sessions(match_id,started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_game_sessions_status_started ON game_sessions(status,started_at DESC);
 `);
 
 // Compatibilidad de datos: migra comentarios de instalaciones anteriores sin conservar el nombre histórico en la interfaz ni en el esquema nuevo.
@@ -338,6 +364,15 @@ if (legacyFeedbackExists) {
   db.exec(`INSERT OR IGNORE INTO feedback(id,user_id,kind,message,page,created_at,status,admin_note,updated_at)
     SELECT id,user_id,kind,message,page,created_at,status,admin_note,updated_at FROM "${legacyFeedbackTable}"`);
 }
+
+// Cierra sesiones de juego que quedaron abiertas por un reinicio o despliegue.
+// El historial conserva solo métricas agregadas; nunca respuestas, cartas, fotos ni vídeos.
+db.exec(`UPDATE game_sessions
+  SET status=CASE WHEN core_completed_at IS NOT NULL THEN 'completed' ELSE 'interrupted' END,
+      finish_reason=CASE WHEN finish_reason='' THEN 'server_restart' ELSE finish_reason END,
+      ended_at=COALESCE(ended_at,updated_at),
+      duration_seconds=MAX(0,CAST((COALESCE(ended_at,updated_at)-started_at)/1000 AS INTEGER))
+  WHERE status='active'`);
 
 function appSetting(key) {
   return db.prepare('SELECT value FROM app_settings WHERE key=?').get(String(key || ''))?.value ?? null;
@@ -821,7 +856,7 @@ function getPlusSettings(userId) {
   };
 }
 function plusIsActive(userId) {
-  // V18: todas las funciones V/R+ actuales están disponibles para todos los usuarios.
+  // Todas las funciones V/R+ actuales están disponibles para todos los usuarios.
   return true;
 }
 function plusBoostState(userId) {
@@ -1546,6 +1581,8 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
     const reports=db.prepare('SELECT id,reported,reason,details,created_at,status,updated_at,moderator_note FROM reports WHERE reporter=? ORDER BY created_at ASC').all(userId);
     const feedback=db.prepare('SELECT id,kind,message,page,created_at,status,admin_note,updated_at FROM feedback WHERE user_id=? ORDER BY created_at ASC').all(userId);
     const notifications=db.prepare('SELECT id,source_user,type,title,body,data_json,created_at,read_at FROM notifications WHERE user_id=? ORDER BY created_at ASC').all(userId).map(n=>({...n,data:safeJsonObject(n.data_json),data_json:undefined}));
+    const gameSessions=db.prepare(`SELECT id,match_id,user1,user2,deck,started_at,core_completed_at,ended_at,status,finish_reason,total_turns,sync_rounds,coincidences,guess_hits,reactions,personalized_sync,extended,duration_seconds
+      FROM game_sessions WHERE user1=? OR user2=? ORDER BY started_at ASC`).all(userId,userId).map(g=>({...g,partner_id:g.user1===userId?g.user2:g.user1,user1:undefined,user2:undefined}));
     const matches=db.prepare('SELECT * FROM matches WHERE user1=? OR user2=? ORDER BY created_at ASC').all(userId,userId).map(m=>{
       const partnerId=m.user1===userId?m.user2:m.user1;
       const partner=publicProfile(getProfile(partnerId));
@@ -1557,13 +1594,20 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
       account:{id:user.id,email:user.email,status:user.status,createdAt:user.created_at,lastSeenAt:user.last_seen_at,emailVerified:Boolean(user.email_verified),emailVerifiedAt:user.email_verified_at||null,onboardingCompleted:Boolean(user.onboarding_completed)},
       profile: profile ? {...profile,storedLocation:profileRow&&hasStoredLocation(profileRow)?{lat:Number(profileRow.location_lat),lng:Number(profileRow.location_lng),updatedAt:profileRow.location_updated_at}:null}:null,
       plus:getPlusState(userId),notificationPreferences:notificationPreferences(userId),legalAcceptances:legal,
-      likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,notifications,matches
+      likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,notifications,gameSessions,matches
     };
     res.setHeader('Content-Type','application/json; charset=utf-8');
     res.setHeader('Content-Disposition','attachment; filename="vr-match-mis-datos.json"');
     res.setHeader('Cache-Control','no-store');
     res.send(JSON.stringify(exportData,null,2));
   } catch(e){console.error('Error exportando cuenta:',e);res.status(500).json({ok:false,error:'No se pudieron preparar tus datos.'});}
+});
+
+app.get('/api/game-history', requireAuth, rateLimit({limit:90,windowMs:60*1000,key:req=>req.user.id}), (req,res) => {
+  const partnerId=String(req.query.partnerId||'');
+  if(!partnerId)return res.status(400).json({ok:false,error:'Falta el Match.'});
+  if(!getActiveMatch(req.user.id,partnerId)||blockedEitherWay(req.user.id,partnerId))return res.status(404).json({ok:false,error:'Ese Match ya no está disponible.'});
+  res.json({ok:true,history:gameHistoryForPair(req.user.id,partnerId)});
 });
 
 app.post('/api/account/delete', requireAuth, rateLimit({limit:3,windowMs:24*60*60*1000,key:req=>req.user.id}), async (req,res) => {
@@ -1690,6 +1734,8 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
     likes: db.prepare('SELECT COUNT(*) n FROM likes WHERE created_at>=?').get(since).n,
     matches: db.prepare('SELECT COUNT(*) n FROM matches WHERE created_at>=?').get(since).n,
     messages: db.prepare('SELECT COUNT(*) n FROM messages WHERE created_at>=?').get(since).n,
+    gamesStarted: db.prepare('SELECT COUNT(*) n FROM game_sessions WHERE started_at>=?').get(since).n,
+    gamesCompleted: db.prepare("SELECT COUNT(*) n FROM game_sessions WHERE status='completed' AND ended_at>=?").get(since).n,
     reports: db.prepare('SELECT COUNT(*) n FROM reports WHERE created_at>=?').get(since).n,
     feedback: db.prepare('SELECT COUNT(*) n FROM feedback WHERE created_at>=?').get(since).n,
     clientErrors: db.prepare('SELECT COUNT(*) n FROM client_errors WHERE created_at>=?').get(since).n,
@@ -1700,19 +1746,20 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
     registered: metric.registered,
     profile: db.prepare('SELECT COUNT(*) n FROM users u WHERE u.created_at>=? AND EXISTS(SELECT 1 FROM profiles p WHERE p.user_id=u.id)').get(since).n,
     matched: db.prepare('SELECT COUNT(*) n FROM users u WHERE u.created_at>=? AND EXISTS(SELECT 1 FROM matches m WHERE m.user1=u.id OR m.user2=u.id)').get(since).n,
-    messaged: db.prepare('SELECT COUNT(*) n FROM users u WHERE u.created_at>=? AND EXISTS(SELECT 1 FROM messages m WHERE m.from_user=u.id)').get(since).n
+    messaged: db.prepare('SELECT COUNT(*) n FROM users u WHERE u.created_at>=? AND EXISTS(SELECT 1 FROM messages m WHERE m.from_user=u.id)').get(since).n,
+    played: db.prepare('SELECT COUNT(*) n FROM users u WHERE u.created_at>=? AND EXISTS(SELECT 1 FROM game_sessions g WHERE g.user1=u.id OR g.user2=u.id)').get(since).n
   };
   function grouped(table,col){
     const rows=db.prepare(`SELECT date(${col}/1000,'unixepoch') day,COUNT(*) n FROM ${table} WHERE ${col}>=? GROUP BY day`).all(since);
     return new Map(rows.map(r=>[r.day,Number(r.n)||0]));
   }
-  const registrations=grouped('users','created_at'), matches=grouped('matches','created_at'), messages=grouped('messages','created_at');
+  const registrations=grouped('users','created_at'), matches=grouped('matches','created_at'), messages=grouped('messages','created_at'), games=grouped('game_sessions','started_at');
   const daily=[];
   const first = new Date(since); first.setUTCHours(0,0,0,0);
   const last = new Date(until); last.setUTCHours(0,0,0,0);
   for(let t=first.getTime();t<=last.getTime();t+=24*60*60*1000){
     const day=new Date(t).toISOString().slice(0,10);
-    daily.push({day,registered:registrations.get(day)||0,matches:matches.get(day)||0,messages:messages.get(day)||0});
+    daily.push({day,registered:registrations.get(day)||0,matches:matches.get(day)||0,messages:messages.get(day)||0,games:games.get(day)||0});
   }
   const uploads=folderStatsSafe(UPLOAD_DIR), mem=process.memoryUsage();
   const system={
@@ -2143,16 +2190,77 @@ function broadcastLobby() {
     const list=[...waitingPlayers.values()].filter(p=>p.id!==me&&p.mazo===deck); s.emit('actualizar_lista_espera',list);
   }
 }
+function roomUserIds(room) {
+  if(!room)return [];
+  return [...room.players].map(sid=>roomSocket(room,sid)?.userId).filter(Boolean);
+}
+function gameHistoryStart(room, matchId=null) {
+  if(!room?.dating || room.historyId)return room?.historyId||null;
+  const users=roomUserIds(room);
+  if(users.length!==2)return null;
+  const [user1,user2]=pair(users[0],users[1]);
+  const ts=now(), id=safeId('game');
+  db.prepare(`INSERT INTO game_sessions(
+    id,match_id,user1,user2,deck,started_at,updated_at,status,total_turns,sync_rounds,coincidences,guess_hits,reactions,personalized_sync,extended,duration_seconds
+  ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    id,matchId||null,user1,user2,validDeck(room.mazo),ts,ts,'active',0,0,0,0,0,0,0,0
+  );
+  room.historyId=id;room.matchId=matchId||null;room.startedAt=ts;room.historyFinalized=false;
+  return id;
+}
+function gameHistoryPersist(room) {
+  if(!room?.historyId || room.historyFinalized || !room.game)return;
+  const ts=now();
+  const totalTurns=Object.values(room.game.turns||{}).reduce((sum,n)=>sum+(Number(n)||0),0);
+  const started=Number(room.startedAt)||ts;
+  db.prepare(`UPDATE game_sessions SET
+    core_completed_at=COALESCE(core_completed_at,?),updated_at=?,total_turns=?,sync_rounds=?,coincidences=?,guess_hits=?,reactions=?,personalized_sync=?,extended=?,duration_seconds=?
+    WHERE id=?`).run(
+      room.game.coreCompletedAt||null,ts,totalTurns,Number(room.game.syncRounds||0),Number(room.game.coincidences||0),Number(room.game.guessHits||0),
+      Number(room.game.reactions||0),Number(room.game.personalizedSync||0),room.game.extended?1:0,Math.max(0,Math.round((ts-started)/1000)),room.historyId
+    );
+}
+function gameHistoryFinalize(room, reason='finish') {
+  if(!room?.historyId || room.historyFinalized)return;
+  gameHistoryPersist(room);
+  const ts=now(), completed=Boolean(room.game?.coreCompletedAt), started=Number(room.startedAt)||ts;
+  db.prepare(`UPDATE game_sessions SET status=?,finish_reason=?,ended_at=?,updated_at=?,duration_seconds=? WHERE id=? AND ended_at IS NULL`).run(
+    completed?'completed':'abandoned',cleanShortText(reason,40)||'finish',ts,ts,Math.max(0,Math.round((ts-started)/1000)),room.historyId
+  );
+  room.historyFinalized=true;
+}
+function gameHistoryForPair(userId, partnerId) {
+  const [user1,user2]=pair(userId,partnerId);
+  const aggregate=db.prepare(`SELECT
+    COUNT(*) AS started,
+    SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS completed,
+    MAX(CASE WHEN status='completed' THEN ended_at ELSE NULL END) AS last_played_at,
+    SUM(CASE WHEN status='completed' THEN total_turns ELSE 0 END) AS total_turns,
+    SUM(CASE WHEN status='completed' THEN sync_rounds ELSE 0 END) AS sync_rounds,
+    SUM(CASE WHEN status='completed' THEN coincidences ELSE 0 END) AS coincidences,
+    SUM(CASE WHEN status='completed' THEN guess_hits ELSE 0 END) AS guess_hits,
+    SUM(CASE WHEN status='completed' THEN reactions ELSE 0 END) AS reactions,
+    SUM(CASE WHEN status='completed' THEN personalized_sync ELSE 0 END) AS personalized_sync
+    FROM game_sessions WHERE user1=? AND user2=?`).get(user1,user2)||{};
+  const recent=db.prepare(`SELECT id,deck,started_at,ended_at,duration_seconds,total_turns,sync_rounds,coincidences,guess_hits,reactions,personalized_sync,extended
+    FROM game_sessions WHERE user1=? AND user2=? AND status='completed' ORDER BY ended_at DESC LIMIT 6`).all(user1,user2);
+  return {
+    started:Number(aggregate.started||0),completed:Number(aggregate.completed||0),lastPlayedAt:Number(aggregate.last_played_at||0)||null,
+    totals:{turns:Number(aggregate.total_turns||0),syncRounds:Number(aggregate.sync_rounds||0),coincidences:Number(aggregate.coincidences||0),guessHits:Number(aggregate.guess_hits||0),reactions:Number(aggregate.reactions||0),personalizedSync:Number(aggregate.personalized_sync||0)},
+    recent:recent.map(row=>({id:row.id,deck:validDeck(row.deck),startedAt:row.started_at,endedAt:row.ended_at,durationSeconds:Number(row.duration_seconds||0),turns:Number(row.total_turns||0),syncRounds:Number(row.sync_rounds||0),coincidences:Number(row.coincidences||0),guessHits:Number(row.guess_hits||0),reactions:Number(row.reactions||0),personalizedSync:Number(row.personalized_sync||0),extended:Boolean(row.extended)}))
+  };
+}
+
 function buildRoomState(playerIds, creatorId, mazo, dating=false) {
   const ids=[...playerIds];
   return {
     players:new Set(ids), creatorId, mazo:validDeck(mazo), dating:Boolean(dating),
-    turnSocketId:creatorId, activeCard:null, syncRound:null,
-    game:{turns:Object.fromEntries(ids.map(id=>[id,0])),reactions:0,syncRounds:0,coincidences:0,guessHits:0,personalizedSync:0,personalizedSyncUsed:false,completed:false,extended:false,decisions:{},resumeTurnSocketId:creatorId}
+    turnSocketId:creatorId, activeCard:null, syncRound:null,historyId:null,matchId:null,startedAt:now(),historyFinalized:false,
+    game:{turns:Object.fromEntries(ids.map(id=>[id,0])),reactions:0,syncRounds:0,coincidences:0,guessHits:0,personalizedSync:0,personalizedSyncUsed:false,completed:false,extended:false,coreCompletedAt:null,decisions:{},resumeTurnSocketId:creatorId}
   };
 }
 function ensureRoomPlayerState(room, socketId) {
-  if(!room.game)room.game={turns:{},reactions:0,syncRounds:0,coincidences:0,guessHits:0,personalizedSync:0,personalizedSyncUsed:false,completed:false,extended:false,decisions:{},resumeTurnSocketId:room.creatorId||socketId};
+  if(!room.game)room.game={turns:{},reactions:0,syncRounds:0,coincidences:0,guessHits:0,personalizedSync:0,personalizedSyncUsed:false,completed:false,extended:false,coreCompletedAt:null,decisions:{},resumeTurnSocketId:room.creatorId||socketId};
   if(!room.game.turns)room.game.turns={};
   if(!(socketId in room.game.turns))room.game.turns[socketId]=0;
   if(!room.turnSocketId)room.turnSocketId=room.creatorId||socketId;
@@ -2161,15 +2269,24 @@ function ensureRoomPlayerState(room, socketId) {
   if(!Number.isFinite(Number(room.game.guessHits)))room.game.guessHits=0;
   if(!Number.isFinite(Number(room.game.personalizedSync)))room.game.personalizedSync=0;
   if(typeof room.game.personalizedSyncUsed!=='boolean')room.game.personalizedSyncUsed=false;
+  if(!('coreCompletedAt' in room.game))room.game.coreCompletedAt=null;
+  if(!('historyFinalized' in room))room.historyFinalized=false;
 }
 function clearRoomSyncTimer(room){if(room?.syncRound?.timer){clearTimeout(room.syncRound.timer);room.syncRound.timer=null;}}
-function leaveRoom(socket, notifyOpponent=false) {
+function leaveRoom(socket, notifyOpponent=false, reason='left') {
   const roomId=socket.room; if(!roomId)return;
-  const room=rooms.get(roomId); socket.leave(roomId); socket.room=null; if(!room)return;
+  const room=rooms.get(roomId);
+  if(room)gameHistoryFinalize(room,reason);
+  socket.leave(roomId); socket.room=null; if(!room)return;
   room.players.delete(socket.id);
   if(room.game?.turns)delete room.game.turns[socket.id];
   if(notifyOpponent)socket.to(roomId).emit('oponente_abandono');
   if(room.syncRound?.submissions)delete room.syncRound.submissions[socket.id];
+  if(notifyOpponent&&room.players.size){
+    clearRoomSyncTimer(room);
+    for(const sid of [...room.players]){const other=roomSocket(room,sid);if(other){other.leave(roomId);other.room=null;}}
+    rooms.delete(roomId);return;
+  }
   if(room.players.size===0){clearRoomSyncTimer(room);rooms.delete(roomId);}
   else {
     if(room.creatorId===socket.id)room.creatorId=[...room.players][0];
@@ -2194,12 +2311,14 @@ function roomForSocket(socket, sala=''){
   ensureRoomPlayerState(room,socket.id); return room;
 }
 function createDatingRoom(socket, opponent, mazo) {
-  const deck=validDeck(mazo); leaveRoom(socket);leaveRoom(opponent);removeFromLobby(socket.id);removeFromLobby(opponent.id);
+  const deck=validDeck(mazo); leaveRoom(socket,false,'room_changed');leaveRoom(opponent,false,'room_changed');removeFromLobby(socket.id);removeFromLobby(opponent.id);
   const salaID=safeRoomId(); socket.join(salaID);opponent.join(salaID);socket.room=salaID;opponent.room=salaID;socket.mazo=opponent.mazo=deck;
-  rooms.set(salaID,buildRoomState([socket.id,opponent.id],socket.id,deck,true));
-  socket.emit('partida_iniciada',{salaID,creadorID:socket.id,mazo:deck,origen:'dating',oponenteID:opponent.userId||'',oponenteNombre:opponent.nombre||'Tu match',oponenteAvatar:opponent.avatar||''});
-  opponent.emit('partida_iniciada',{salaID,creadorID:socket.id,mazo:deck,origen:'dating',oponenteID:socket.userId||'',oponenteNombre:socket.nombre||'Tu match',oponenteAvatar:socket.avatar||''});
-  emitGameProgress(rooms.get(salaID));
+  const room=buildRoomState([socket.id,opponent.id],socket.id,deck,true);
+  const match=getActiveMatch(socket.userId,opponent.userId);
+  rooms.set(salaID,room);gameHistoryStart(room,match?.id||null);
+  socket.emit('partida_iniciada',{salaID,creadorID:socket.id,mazo:deck,origen:'dating',matchId:match?.id||'',oponenteID:opponent.userId||'',oponenteNombre:opponent.nombre||'Tu match',oponenteAvatar:opponent.avatar||''});
+  opponent.emit('partida_iniciada',{salaID,creadorID:socket.id,mazo:deck,origen:'dating',matchId:match?.id||'',oponenteID:socket.userId||'',oponenteNombre:socket.nombre||'Tu match',oponenteAvatar:socket.avatar||''});
+  emitGameProgress(room);
   return salaID;
 }
 function roomOpponentSocket(socket) {
@@ -2247,13 +2366,13 @@ function completeRoomTurn(room, actingSocket, meta={}){
   room.turnSocketId=next?.id||null;
   room.game.resumeTurnSocketId=room.turnSocketId;
   room.activeCard=null;
-  emitGameProgress(room);
   const ids=[...room.players];
   const reached=!room.game.extended&&ids.length===2&&ids.every(id=>Number(room.game.turns?.[id]||0)>=GAME_TARGET_TURNS);
   if(reached){
-    room.game.completed=true;room.game.decisions={};room.game.resumeTurnSocketId=room.turnSocketId;room.turnSocketId=null;
-    emitGameComplete(room);return {completed:true,next};
+    room.game.completed=true;room.game.coreCompletedAt=room.game.coreCompletedAt||now();room.game.decisions={};room.game.resumeTurnSocketId=room.turnSocketId;room.turnSocketId=null;
+    gameHistoryPersist(room);emitGameProgress(room);emitGameComplete(room);return {completed:true,next};
   }
+  gameHistoryPersist(room);emitGameProgress(room);
   return {completed:false,next};
 }
 function normalizedInterests(profile){
@@ -2291,7 +2410,7 @@ function pickSyncCard(room,mode){
 }
 function closeRoomForAll(roomId,event='vr_game_finished',payload={}){
   const room=rooms.get(roomId);if(!room)return;
-  clearRoomSyncTimer(room);
+  clearRoomSyncTimer(room);gameHistoryFinalize(room,cleanShortText(payload?.reason,40)||'finish');
   for(const sid of [...room.players]){const sock=roomSocket(room,sid);if(!sock)continue;sock.emit(event,payload);sock.leave(roomId);sock.room=null;}
   rooms.delete(roomId);
 }
@@ -2510,6 +2629,7 @@ io.on('connection', socket => {
     if(matched)room.game.coincidences=Number(room.game.coincidences||0)+1;
     if(guessHits)room.game.guessHits=Number(room.game.guessHits||0)+guessHits;
     if(round.personalized)room.game.personalizedSync=Number(room.game.personalizedSync||0)+1;
+    gameHistoryPersist(room);
     for(const sid of room.players){
       const sock=roomSocket(room,sid);if(!sock)continue;
       const you=players.find(x=>x.sid===sid)||{};const other=players.find(x=>x.sid!==sid)||{};
@@ -2535,6 +2655,7 @@ io.on('connection', socket => {
     const ids=[...room.players];const allContinue=ids.length===2&&ids.every(id=>room.game.decisions[id]==='continue');
     if(!allContinue){done({ok:true,waiting:true});socket.emit('vr_game_decision_wait',{decision:'continue'});return;}
     room.game.completed=false;room.game.extended=true;room.game.decisions={};room.turnSocketId=room.game.resumeTurnSocketId||room.creatorId||ids[0]||null;
+    gameHistoryPersist(room);
     for(const sid of ids){const sock=roomSocket(room,sid);if(sock)sock.emit('vr_game_continued',{yourTurn:room.turnSocketId===sid});}
     emitGameProgress(room);done({ok:true,continued:true});
   });
@@ -2543,18 +2664,18 @@ io.on('connection', socket => {
   socket.on('enviar_reaccion',(d={})=>{
     const room=roomForSocket(socket,d.sala);if(!room)return;
     const allowed=new Set(['🔥','😱','😂','❤️']);const emoji=allowed.has(d.emoji)?d.emoji:'👍';
-    room.game.reactions=Number(room.game.reactions||0)+1;socket.to(d.sala).emit('recibir_reaccion',emoji);emitGameProgress(room);
+    room.game.reactions=Number(room.game.reactions||0)+1;gameHistoryPersist(room);socket.to(d.sala).emit('recibir_reaccion',emoji);emitGameProgress(room);
   });
   socket.on('tiempo_agotado',(d={})=>{
     const room=roomForSocket(socket,d.sala);if(!room||room.game?.completed||room.syncRound||room.turnSocketId!==socket.id)return;
     socket.to(d.sala).emit('tiempo_agotado_remoto');const result=completeRoomTurn(room,socket,{syncCompleted:false,timeout:true});if(!result.completed&&result.next)notifyOpponentTurn(socket,'tiempo_agotado');
   });
-  socket.on('abandonar_partida',salaID=>{if(socket.room&&socket.room===salaID)leaveRoom(socket,true);});
+  socket.on('abandonar_partida',salaID=>{if(socket.room&&socket.room===salaID)leaveRoom(socket,true,'user_left');});
 
   socket.on('disconnect',()=>{
-    removeFromLobby(socket.id);leaveRoom(socket,true);const set=onlineUsers.get(userId);if(set){set.delete(socket.id);if(!set.size){onlineUsers.delete(userId);clearGameInvitesFor(userId);}}db.prepare('UPDATE users SET last_seen_at=? WHERE id=?').run(now(),userId);setTimeout(()=>broadcastDiscovery(),20);
+    removeFromLobby(socket.id);leaveRoom(socket,true,'disconnect');const set=onlineUsers.get(userId);if(set){set.delete(socket.id);if(!set.size){onlineUsers.delete(userId);clearGameInvitesFor(userId);}}db.prepare('UPDATE users SET last_seen_at=? WHERE id=?').run(now(),userId);setTimeout(()=>broadcastDiscovery(),20);
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.4 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);
-  console.log('Resiliencia F14: mantenimiento + backup manual protegidos');console.log('V18: funciones V/R+ actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad F13: sesiones + bloqueados + exportación de datos');});
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.5 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);
+  console.log('Resiliencia: mantenimiento + backup manual protegidos');console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad: sesiones + bloqueados + exportación de datos');});

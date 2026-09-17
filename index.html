@@ -305,6 +305,11 @@
         <button onclick="invitarJuegoDesdeChat('parejas')">❤️ Conóceme</button>
         <button onclick="invitarJuegoDesdeChat('seccionXX')">🔥 After Dark</button>
       </div>
+      <div id="chatGameHistory" class="chat-game-history hidden" aria-live="polite">
+        <span class="chat-game-history-icon">🎮</span>
+        <div><strong id="chatGameHistoryTitle">Vuestra historia jugando</strong><small id="chatGameHistoryMeta">Las partidas completadas aparecerán aquí.</small></div>
+        <button type="button" onclick="toggleChatGameTray()">Jugar otra</button>
+      </div>
       <div id="chatMessages" class="chat-messages"></div>
       <div class="chat-starters" id="chatStarters">
         <button type="button" onclick="usarInicioChat(this)">¿Qué plan improvisado nunca rechazarías?</button>
@@ -849,6 +854,8 @@
     let locationUpdatedAt = null;
     let currentChatMatch = null;
     const datingChats = new Map();
+    const gameHistoryByPartner = new Map();
+    let currentGameMatchId = '';
     let pointerStartX = 0;
     let pointerDeltaX = 0;
     let pointerDragging = false;
@@ -2002,7 +2009,7 @@
       notificationItems=[];notificationUnread=0;notificationPreferences=normalizarPreferenciasNotificacion({});pushSubscriptionActive=false;
       localStorage.removeItem('vr_auth_token'); localStorage.removeItem('vr_profile');
       datingProfiles=[]; datingMatches=[]; datingPassed=new Set(); datingChats.clear();
-      currentChatMatch=null; currentMatch=null; nombreJugador=''; edadJugador=0; avatarJugador=''; fotosJugador=[]; pendingLocation=null; locationConfigured=false; locationUpdatedAt=null;
+      currentChatMatch=null; currentMatch=null; gameHistoryByPartner.clear(); currentGameMatchId=''; nombreJugador=''; edadJugador=0; avatarJugador=''; fotosJugador=[]; pendingLocation=null; locationConfigured=false; locationUpdatedAt=null;
       $('authPassword').value=''; actualizarConexion(false); actualizarBadgeNotificaciones(); cerrarNotificaciones(); showScreen('pantallaAuth');
     }
 
@@ -2335,12 +2342,12 @@
       const res=await api(`/api/admin/metrics?days=${encodeURIComponent(days)}`);
       if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudieron cargar.')}</strong></div>`;return;}
       const m=res.metric||{},f=res.funnel||{},sys=res.system||{},daily=res.daily||[],errors=res.recentErrors||[];
-      const cards=[['Altas',m.registered,'cuentas nuevas'],['Activos',m.activeUsers,`últimos ${days===1?'24 h':days+' días'}`],['Likes',m.likes,'acciones'],['Matches',m.matches,'creados'],['Mensajes',m.messages,'enviados'],['Denuncias',m.reports,'creadas'],['Feedback',m.feedback,'comentarios'],['Errores cliente',m.clientErrors,'registrados']];
-      const funnel=[['Registro',f.registered,100],['Perfil',f.profile,porcentaje(f.profile,f.registered)],['Match',f.matched,porcentaje(f.matched,f.registered)],['Mensaje',f.messaged,porcentaje(f.messaged,f.registered)]];
-      const maxDaily=Math.max(1,...daily.map(d=>Math.max(Number(d.registered)||0,Number(d.matches)||0,Number(d.messages)||0)));
+      const cards=[['Altas',m.registered,'cuentas nuevas'],['Activos',m.activeUsers,`últimos ${days===1?'24 h':days+' días'}`],['Likes',m.likes,'acciones'],['Matches',m.matches,'creados'],['Mensajes',m.messages,'enviados'],['Partidas',m.gamesStarted,'iniciadas'],['Finalizadas',m.gamesCompleted,'partidas completas'],['Denuncias',m.reports,'creadas'],['Feedback',m.feedback,'comentarios'],['Errores cliente',m.clientErrors,'registrados']];
+      const funnel=[['Registro',f.registered,100],['Perfil',f.profile,porcentaje(f.profile,f.registered)],['Match',f.matched,porcentaje(f.matched,f.registered)],['Mensaje',f.messaged,porcentaje(f.messaged,f.registered)],['Jugó',f.played,porcentaje(f.played,f.registered)]];
+      const maxDaily=Math.max(1,...daily.map(d=>Math.max(Number(d.registered)||0,Number(d.matches)||0,Number(d.messages)||0,Number(d.games)||0)));
       box.innerHTML=`<div class="metrics-summary">${cards.map(([label,val,sub])=>`<article><strong>${Number(val)||0}</strong><span>${escapeHtml(label)}</span><small>${escapeHtml(sub)}</small></article>`).join('')}</div>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Embudo de nuevas cuentas</strong><small>Conversión de las cuentas registradas durante el periodo.</small></div><span>${days===1?'24 h':days+' días'}</span></div><div class="funnel-grid">${funnel.map(([label,val,pct])=>`<div><div><b>${escapeHtml(label)}</b><span>${Number(val)||0} · ${Number(pct)||0}%</span></div><i><em style="width:${Math.max(2,Number(pct)||0)}%"></em></i></div>`).join('')}</div></section>
-        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Actividad diaria</strong><small>Altas, matches y mensajes. Datos agregados.</small></div></div><div class="daily-chart">${daily.map(d=>`<div class="daily-row"><small>${escapeHtml(d.day.slice(5))}</small><div title="Altas: ${d.registered}"><i class="reg" style="width:${Math.max(2,Number(d.registered)*100/maxDaily)}%"></i></div><div title="Matches: ${d.matches}"><i class="match" style="width:${Math.max(2,Number(d.matches)*100/maxDaily)}%"></i></div><div title="Mensajes: ${d.messages}"><i class="msg" style="width:${Math.max(2,Number(d.messages)*100/maxDaily)}%"></i></div></div>`).join('')}</div><div class="chart-legend"><span><i class="reg"></i>Altas</span><span><i class="match"></i>Matches</span><span><i class="msg"></i>Mensajes</span></div></section>
+        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Actividad diaria</strong><small>Altas, matches, mensajes y partidas. Datos agregados.</small></div></div><div class="daily-chart">${daily.map(d=>`<div class="daily-row"><small>${escapeHtml(d.day.slice(5))}</small><div title="Altas: ${d.registered}"><i class="reg" style="width:${Math.max(2,Number(d.registered)*100/maxDaily)}%"></i></div><div title="Matches: ${d.matches}"><i class="match" style="width:${Math.max(2,Number(d.matches)*100/maxDaily)}%"></i></div><div title="Mensajes: ${d.messages}"><i class="msg" style="width:${Math.max(2,Number(d.messages)*100/maxDaily)}%"></i></div><div title="Partidas: ${d.games}"><i class="game" style="width:${Math.max(2,Number(d.games)*100/maxDaily)}%"></i></div></div>`).join('')}</div><div class="chart-legend"><span><i class="reg"></i>Altas</span><span><i class="match"></i>Matches</span><span><i class="msg"></i>Mensajes</span><span><i class="game"></i>Partidas</span></div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Salud del sistema</strong><small>Diagnóstico técnico de esta instancia. No contiene secretos.</small></div></div><div class="system-grid"><div><b>${sys.onlineUsers||0}</b><span>usuarios online</span></div><div><b>${sys.sockets||0}</b><span>sockets</span></div><div><b>${sys.rssMb||0} MB</b><span>memoria RSS</span></div><div><b>${sys.heapUsedMb||0} MB</b><span>heap usado</span></div><div><b>${bytesLegibles(sys.dbBytes)}</b><span>SQLite</span></div><div><b>${sys.uploadFiles||0}</b><span>archivos · ${bytesLegibles(sys.uploadBytes)}</span></div></div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Errores recientes del cliente</strong><small>Solo mensaje técnico, pantalla y posición. No se guardan chats ni coordenadas.</small></div></div><div class="error-list">${errors.length?errors.map(e=>`<article><div><strong>${escapeHtml(e.message||'Error')}</strong><small>${escapeHtml(adminFecha(e.created_at))}</small></div><p>${escapeHtml(e.name||e.email||'Usuario')} · ${escapeHtml(e.page||'/')} ${e.source?`· ${escapeHtml(e.source)}:${Number(e.line)||0}`:''}</p></article>`).join(''):'<div class="empty-state compact"><span>✓</span><strong>Sin errores registrados</strong></div>'}</div></section>`;
     }
@@ -2754,6 +2761,35 @@
       invitarJuego(id, 'rompehielos');
     }
 
+    function fechaPartidaBreve(ts) {
+      const n=Number(ts)||0;if(!n)return '';
+      try{return new Date(n).toLocaleDateString('es-ES',{day:'numeric',month:'short'});}catch{return '';}
+    }
+
+    async function cargarHistorialJuegoMatch(partnerId, {silencioso=false}={}) {
+      if(!partnerId)return null;
+      const res=await api(`/api/game-history?partnerId=${encodeURIComponent(partnerId)}`);
+      if(res.ok){gameHistoryByPartner.set(partnerId,res.history||{});if(currentChatMatch?.id===partnerId)renderChatGameHistory();return res.history||{};}
+      if(!silencioso)console.warn('No se pudo cargar el historial de juego del Match.');
+      return null;
+    }
+
+    function renderChatGameHistory() {
+      const card=$('chatGameHistory');if(!card)return;
+      const partnerId=currentChatMatch?.id||'';const history=partnerId?gameHistoryByPartner.get(partnerId):null;
+      const completed=Number(history?.completed||0);
+      if(!completed){card.classList.add('hidden');return;}
+      const totals=history?.totals||{};const recent=Array.isArray(history?.recent)?history.recent:[];const last=recent[0]||null;
+      $('chatGameHistoryTitle').textContent=completed===1?'Ya habéis jugado 1 partida':`Ya habéis jugado ${completed} partidas`;
+      const bits=[];
+      if(last?.endedAt)bits.push(`Última ${fechaPartidaBreve(last.endedAt)}`);
+      if(Number(totals.coincidences||0)>0)bits.push(`${Number(totals.coincidences)} coincidencia${Number(totals.coincidences)===1?'':'s'}`);
+      if(Number(totals.guessHits||0)>0)bits.push(`${Number(totals.guessHits)} acierto${Number(totals.guessHits)===1?'':'s'}`);
+      if(Number(totals.reactions||0)>0)bits.push(`${Number(totals.reactions)} reacciones`);
+      $('chatGameHistoryMeta').textContent=bits.length?bits.join(' · '):'Una forma más de seguir conociéndoos.';
+      card.classList.remove('hidden');
+    }
+
     function abrirChat(matchId) {
       const match = datingMatches.find(m => m.id === matchId);
       if (!match) return mostrarToast('Ese match ya no está disponible.', 'warn');
@@ -2764,6 +2800,8 @@
       $('chatStatus').textContent = match.ciudad ? `${match.ciudad} · match activo` : 'Match activo · rompe el hielo';
       $('chatGameTray').classList.add('hidden');
       $('chatStarters').classList.toggle('hidden', chatMessagesFor(match.id).length > 0);
+      renderChatGameHistory();
+      cargarHistorialJuegoMatch(match.id,{silencioso:true});
       showScreen('pantallaChat');
       $('chatSafetyTray').classList.add('hidden');
       socket.emit('dating_chat_history', { oponenteID:match.id }, (res) => {
@@ -3458,7 +3496,12 @@
       miTurno=Boolean(data.yourTurn);actualizarProgresoPartida();mostrarToast('Los dos habéis elegido seguir. Rondas extra activadas.','success');
       if(miTurno){actualizarBarraTurno(true,'Tu turno · ronda extra');mostrarControlesTurno();}else actualizarBarraTurno(false,'Esperando rival');
     });
-    socket.on('vr_game_finished',()=>{mostrarToast(origenPartida==='dating'?'Partida terminada. Volvemos al chat.':'Partida terminada.','info');setTimeout(abandonarPartidaLocal,350);});
+    socket.on('vr_game_finished',()=>{
+      mostrarToast(origenPartida==='dating'?'Partida terminada. Volvemos al chat.':'Partida terminada.','info');
+      const partnerId=gamePartnerProfile?.id||currentChatMatch?.id||'';
+      if(origenPartida==='dating'&&partnerId)setTimeout(()=>cargarHistorialJuegoMatch(partnerId,{silencioso:true}),180);
+      setTimeout(abandonarPartidaLocal,350);
+    });
 
     function retarUsuario(oponenteID, boton) {
       boton.disabled = true; boton.textContent = 'Enviando…';
@@ -3473,8 +3516,10 @@
       rivalNombre = datos.oponenteNombre || 'Tu oponente';
       rivalAvatar = datos.oponenteAvatar || '';
       origenPartida = datos.origen || 'legacy';
+      currentGameMatchId = datos.matchId || '';
       const partnerId=datos.oponenteID || datos.opponentId || datos.oponenteId || '';
       gamePartnerProfile = datingMatches.find(m=>partnerId && String(m.id)===String(partnerId)) || gamePartnerProfile || (currentChatMatch && currentChatMatch.nombre===rivalNombre ? currentChatMatch : null);
+      if(origenPartida==='dating'&&gamePartnerProfile){currentChatMatch=gamePartnerProfile;currentMatch=gamePartnerProfile;}
       cerrarMatchModal(); rechazarInvitacionJuego();
       showScreen('pantallaJuego');
       prepararMesa('Partida online');
@@ -3912,11 +3957,11 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
     }
     function abandonarPartidaLocal() {
       detenerTemporizador(); clearTimeout(timeoutEscribiendo); cerrarCamara();
-      miSala=''; rivalNombre=''; rivalAvatar=''; rondaActual=1; enlaceSalaActual=''; gamePartnerProfile=null;
+      miSala=''; rivalNombre=''; rivalAvatar=''; rondaActual=1; enlaceSalaActual=''; gamePartnerProfile=null;currentGameMatchId='';
       resetExperienciaPartida();
       limpiarPruebaVisual();
       $('zonaInvitacion').classList.add('hidden'); $('controlesJuego').classList.add('hidden'); $('syncStartPanel').classList.add('hidden'); $('syncRoundPanel').classList.add('hidden');
-      if (origenPartida === 'dating' && currentChatMatch) { showScreen('pantallaChat'); renderChat(); }
+      if (origenPartida === 'dating' && currentChatMatch) { showScreen('pantallaChat'); renderChat(); renderChatGameHistory(); }
       else showScreen(origenPartida === 'dating' ? 'pantallaDescubrir' : 'pantallaMenu');
       actualizarBarraTurno(false,'Esperando');
       actualizarCartaAnimada('Esperando oponente…','ESPERANDO');
