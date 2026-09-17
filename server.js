@@ -24,7 +24,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.6.0';
+const APP_VERSION = '18.6.1';
 const LEGAL_VERSION = '2026-09-17';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -861,6 +861,10 @@ function makeLaunchReferralCode(alias, citySlug) {
   const c = String(citySlug || 'CITY').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3) || 'VR';
   return `VR-${a}-${c}${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
 }
+function launchDefaultGoal(slug) {
+  const row=launchSeedCities.find(item=>item[0]===slug);
+  return Number(row?.[2] || 500);
+}
 function launchCityStats(slug) {
   const row = db.prepare(`
     SELECT c.slug,c.name,c.target_users goal,c.status,c.activated_at activatedAt,
@@ -872,7 +876,7 @@ function launchCityStats(slug) {
   `).get(slug);
   if (!row) return null;
   const current = Number(row.current || 0), goal = Number(row.goal || 0);
-  return {...row,current,goal,percent:goal?Math.min(100,Math.round(current*100/goal)):0};
+  return {...row,current,goal,defaultGoal:launchDefaultGoal(row.slug),percent:goal?Math.min(100,Math.round(current*100/goal)):0};
 }
 function launchCitiesStats() {
   return db.prepare(`
@@ -884,7 +888,7 @@ function launchCitiesStats() {
     ORDER BY current DESC,c.name ASC
   `).all().map(row => {
     const current=Number(row.current||0),goal=Number(row.goal||0);
-    return {...row,current,goal,percent:goal?Math.min(100,Math.round(current*100/goal)):0};
+    return {...row,current,goal,defaultGoal:launchDefaultGoal(row.slug),percent:goal?Math.min(100,Math.round(current*100/goal)):0};
   });
 }
 function refreshLaunchCityStatus(slug) {
@@ -1945,6 +1949,9 @@ app.post('/api/launch/waitlist', rateLimit({limit:12,windowMs:60*60*1000,key:req
     if (!launchConsent) return res.status(400).json({ok:false,error:'Debes aceptar recibir los mensajes necesarios de la lista de espera y el lanzamiento.'});
     const city=db.prepare('SELECT * FROM launch_cities WHERE slug=?').get(citySlug);
     if (!city) return res.status(400).json({ok:false,error:'Ciudad no disponible.'});
+    if (city.status==='ACTIVE') {
+      return res.status(409).json({ok:false,cityActive:true,nextUrl:'/',error:`V/R Match ya está disponible en ${city.name}. Entra directamente en la app.`});
+    }
 
     const existingWait=db.prepare('SELECT * FROM launch_waitlist_users WHERE email=?').get(email);
     if (existingWait) {
@@ -1974,19 +1981,10 @@ app.post('/api/launch/waitlist', rateLimit({limit:12,windowMs:60*60*1000,key:req
     }
 
     const referralUrl=`${baseUrl(req)}/espera?ref=${encodeURIComponent(referralCode)}`;
-    let immediateActivation=false;
-    if (city.status==='ACTIVE') {
-      const activation=issueLaunchActivation(id,7);
-      const activationUrl=`${baseUrl(req)}/activar?token=${encodeURIComponent(activation.raw)}`;
-      db.prepare("UPDATE launch_waitlist_users SET status='CITY_READY',activation_sent_at=?,updated_at=? WHERE id=?").run(ts,ts,id);
-      queueLaunchEmail(id,email,`${city.name} está abierta 🔓 Entra en V/R Match`,'CITY_UNLOCKED',{alias,city:city.name,activationUrl});
-      immediateActivation=true;
-    } else {
-      queueLaunchEmail(id,email,`Ya estás esperando V/R Match en ${city.name} 🔥`,'WAITLIST_WELCOME',{alias,city:city.name,referralUrl});
-      refreshLaunchCityStatus(citySlug);
-    }
+    queueLaunchEmail(id,email,`Ya estás esperando V/R Match en ${city.name} 🔥`,'WAITLIST_WELCOME',{alias,city:city.name,referralUrl});
+    refreshLaunchCityStatus(citySlug);
     processLaunchMailQueue(5).catch(e=>console.warn('Launch mail:',e.message));
-    res.status(201).json({ok:true,referralCode,referralUrl,city:launchCityStats(citySlug),immediateActivation});
+    res.status(201).json({ok:true,referralCode,referralUrl,city:launchCityStats(citySlug),immediateActivation:false});
   } catch(e) {
     console.error('Waitlist:',e);
     res.status(500).json({ok:false,error:'No se pudo completar el registro en la lista.'});
@@ -2137,6 +2135,43 @@ app.post('/api/admin/launch/cities/:slug/unlock', requireAuth, requireAdmin, rat
   } catch(e) {
     console.error('Unlock city:',e);
     res.status(500).json({ok:false,error:'No se pudo desbloquear la ciudad.'});
+  }
+});
+
+app.post('/api/admin/launch/cities/:slug/reset-test', requireAuth, requireAdmin, rateLimit({limit:6,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  try {
+    const slug=normalizeLaunchCity(req.params.slug);
+    const city=db.prepare('SELECT * FROM launch_cities WHERE slug=?').get(slug);
+    if (!city) return res.status(404).json({ok:false,error:'Ciudad no encontrada.'});
+    const password=String(req.body?.password||'');
+    const confirmText=cleanShortText(req.body?.confirmText,100).toUpperCase();
+    const expected=`REINICIAR ${city.name}`.toUpperCase();
+    if (confirmText!==expected) return res.status(400).json({ok:false,error:`Escribe ${expected} para confirmar.`});
+    const account=db.prepare('SELECT password_hash FROM users WHERE id=?').get(req.user.id);
+    if (!account || !verifyPassword(password,account.password_hash)) return res.status(400).json({ok:false,error:'La contraseña de administrador no es correcta.'});
+
+    const rows=db.prepare('SELECT id,referral_code,app_user_id FROM launch_waitlist_users WHERE city_slug=?').all(slug);
+    const linkedAccountsLeft=[...new Set(rows.map(r=>r.app_user_id).filter(Boolean))].length;
+    const defaultGoal=launchDefaultGoal(slug);
+    const tx=db.transaction(()=>{
+      db.prepare(`DELETE FROM launch_mail_queue WHERE waitlist_user_id IN
+        (SELECT id FROM launch_waitlist_users WHERE city_slug=?)`).run(slug);
+      db.prepare(`DELETE FROM launch_activation_tokens WHERE waitlist_user_id IN
+        (SELECT id FROM launch_waitlist_users WHERE city_slug=?)`).run(slug);
+      db.prepare(`DELETE FROM launch_referral_events WHERE referral_code IN
+        (SELECT referral_code FROM launch_waitlist_users WHERE city_slug=?)`).run(slug);
+      db.prepare(`UPDATE launch_waitlist_users SET referred_by=NULL,updated_at=? WHERE referred_by IN
+        (SELECT referral_code FROM launch_waitlist_users WHERE city_slug=?)`).run(now(),slug);
+      db.prepare('DELETE FROM launch_waitlist_users WHERE city_slug=?').run(slug);
+      db.prepare("UPDATE launch_cities SET target_users=?,status='WAITING',activated_at=NULL,updated_at=? WHERE slug=?")
+        .run(defaultGoal,now(),slug);
+    });
+    tx();
+    logModerationAction(req.user.id,req.user.id,'launch_city_test_reset',`Ciudad ${city.name} reiniciada · ${rows.length} registros de lista eliminados · ${linkedAccountsLeft} cuentas reales conservadas`,null);
+    res.json({ok:true,removedWaitlist:rows.length,linkedAccountsLeft,city:launchCityStats(slug)});
+  } catch(e) {
+    console.error('Reset launch city:',e);
+    res.status(500).json({ok:false,error:'No se pudo reiniciar la ciudad.'});
   }
 });
 
@@ -3128,5 +3163,5 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.6 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.6.1 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
   console.log('Resiliencia: mantenimiento + backup manual protegidos');console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad: sesiones + bloqueados + exportación de datos');});

@@ -1,0 +1,139 @@
+V/R MATCH 18.6.1 — HOTFIX CIUDAD ACTIVA + RESET DE PRUEBA
+============================================================
+
+REEMPLAZA EN LA RAÍZ DE GITHUB:
+
+- server.js
+- index.html
+- package.json
+- sw.js
+
+REEMPLAZA DENTRO DE /public:
+
+- public/waitlist.html
+- public/admin-launch.html
+
+
+QUÉ CAMBIA
+----------
+
+1. CIUDAD ACTIVE
+
+Cuando una ciudad está ACTIVE, /espera ya NO muestra:
+
+- porcentaje 100%;
+- contador de desbloqueo;
+- formulario para apuntarse.
+
+Ahora muestra:
+
+- "V/R Match ya está disponible en [Ciudad]";
+- botón "Entrar a V/R Match";
+- aviso para las personas que ya estaban en la lista.
+
+El botón lleva a la página principal: /
+
+
+2. BACKEND
+
+El backend ya no permite nuevas altas de lista de espera en una ciudad ACTIVE.
+
+Si alguien intenta enviar el formulario con una pestaña antigua,
+el servidor responde que V/R Match ya está disponible y el frontend
+lo lleva a la app principal.
+
+
+3. ADMIN — REINICIAR CIUDAD DE PRUEBA
+
+/admin/launch incluye:
+
+♻ Reiniciar ciudad de prueba
+
+La acción:
+
+- devuelve la ciudad a WAITING;
+- restaura la meta original:
+  Valencia 500
+  Madrid 1000
+  Barcelona 750
+  Alicante 400
+  Castellón 250
+- elimina registros de lista de espera de esa ciudad;
+- elimina tokens de activación asociados;
+- elimina eventos de referidos asociados;
+- elimina emails pendientes/de prueba de esa lista.
+
+NO elimina cuentas reales de V/R Match aunque uno de los usuarios
+de prueba haya llegado a crear su cuenta.
+
+Por seguridad requiere:
+
+- contraseña de administrador;
+- escribir exactamente "REINICIAR NOMBRECIUDAD".
+
+
+QUÉ HACER AHORA CON VALENCIA
+----------------------------
+
+Después del deploy:
+
+1. Abre /healthz
+2. Comprueba:
+
+   version: 18.6.1
+
+3. Entra en /admin/launch
+4. Selecciona Valencia
+5. Pulsa "♻ Reiniciar ciudad de prueba"
+6. Introduce tu contraseña de administrador
+7. Escribe:
+
+   REINICIAR VALENCIA
+
+8. Confirma.
+
+Valencia debería quedar:
+
+- WAITING
+- 0 / 500
+
+
+DESPUÉS PRUEBA EL COMPORTAMIENTO ACTIVE
+---------------------------------------
+
+Si vuelves a hacer una prueba con meta 1 o 2 y desbloqueas Valencia:
+
+/espera
+
+mostrará que V/R Match ya está disponible y ofrecerá:
+
+"Entrar a V/R Match →"
+
+No volverá a mostrar el formulario de lista.
+
+
+IMPORTANTE
+----------
+
+Mantén por ahora en Render:
+
+VR_CITY_LAUNCH_ENABLED=false
+
+hasta terminar las pruebas.
+
+Las cuentas normales existentes pueden seguir entrando.
+
+No subas secretos ni .env a GitHub.
+
+
+VALIDACIONES
+------------
+
+- node --check server.js: OK
+- node --check sw.js: OK
+- JavaScript inline index.html: OK
+- JavaScript waitlist.html: OK
+- JavaScript admin-launch.html: OK
+
+El entorno de empaquetado no contiene los node_modules del proyecto,
+por lo que el arranque completo se verifica finalmente en Render.
