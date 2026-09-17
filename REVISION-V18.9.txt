@@ -1,0 +1,27 @@
+V/R MATCH 18.9.0 — REVISIÓN
+================================
+
+BLOQUE: endurecimiento previo a usuarios reales.
+
+NUEVO:
+- tokens de activación hash-only en almacenamiento;
+- token generado justo antes del envío;
+- saneado de colas antiguas;
+- payload de email borrado después del envío;
+- endpoint público seguro de reenvío;
+- respuesta anti-enumeración de emails;
+- cooldown de reenvío;
+- botón Admin “Reenviar acceso”;
+- limpieza periódica de tokens;
+- referidos inválidos ya no se persisten ni cuentan;
+- duración de activación configurable.
+
+NO CAMBIA:
+- perfiles;
+- likes;
+- matches;
+- chat;
+- juego;
+- reconexión V18.8;
+- ciudades y objetivos;
+- analítica V18.7.

@@ -1,0 +1,186 @@
+V/R MATCH 18.9.0 — SEGURIDAD Y RECUPERACIÓN DE ACTIVACIONES
+================================================================
+
+REEMPLAZA EN LA RAÍZ:
+
+- server.js
+- package.json
+- sw.js
+
+REEMPLAZA EN /public:
+
+- public/activate.html
+- public/admin-launch.html
+
+
+1. TOKENS DE ACTIVACIÓN MÁS SEGUROS
+-----------------------------------
+
+Antes, el email CITY_UNLOCKED se añadía a la cola con la URL completa de
+activación dentro de payload_json. Eso significaba que el token sin hash
+podía permanecer en SQLite.
+
+V18.9 cambia la arquitectura:
+
+- al desbloquear una ciudad NO se genera todavía el token;
+- la cola guarda únicamente la URL base del sitio;
+- justo antes de enviar el email, el worker crea un token aleatorio;
+- SQLite guarda únicamente SHA-256(token);
+- el token sin hash existe en memoria el tiempo necesario para construir
+  y enviar el correo;
+- tras enviar el correo, payload_json se sustituye por {};
+- las filas antiguas CITY_UNLOCKED se saneán automáticamente al arrancar.
+
+Los enlaces enviados anteriormente siguen funcionando mientras su hash
+siga vigente.
+
+
+2. REENVIAR ACCESO CADUCADO
+----------------------------
+
+Si /activar recibe un enlace inválido o caducado, ahora muestra:
+
+REENVIAR MI ACCESO
+
+La persona escribe su correo.
+
+La respuesta siempre es genérica:
+
+“Si ese correo tiene un acceso pendiente en una ciudad abierta,
+recibirás un nuevo enlace en unos minutos.”
+
+Esto evita revelar públicamente si un email está registrado.
+
+Protecciones:
+- límite por IP + email;
+- cooldown de 15 minutos;
+- solo se envía si la ciudad está ACTIVE;
+- no se reenvía a cuentas ya ACTIVATED;
+- cada nuevo envío invalida el token anterior sin usar.
+
+
+3. REENVÍO DESDE ADMIN
+----------------------
+
+En:
+
+/admin/launch
+
+la tabla de usuarios tiene una nueva columna:
+
+ACCESO → REENVIAR
+
+Aparece para usuarios pendientes de una ciudad ACTIVE.
+
+El endpoint está protegido por:
+- requireAuth;
+- requireAdmin;
+- rate limit.
+
+Las acciones quedan registradas en moderation_actions.
+
+
+4. REFERIDOS INVÁLIDOS
+----------------------
+
+Antes era posible que un valor arbitrario en ?ref= quedara escrito como
+referred_by aunque no existiera.
+
+Ahora:
+- solo se persiste referred_by si el código existe;
+- códigos bloqueados no cuentan;
+- códigos inventados no aparecen como “Por referidos”;
+- solo los códigos válidos generan evento SIGNUP y progreso Founder.
+
+
+5. LIMPIEZA AUTOMÁTICA
+----------------------
+
+Cada 6 horas:
+- se eliminan tokens expirados;
+- se eliminan tokens usados antiguos;
+- se borra payload_json de correos ya enviados.
+
+También se ejecuta una limpieza al arrancar el servidor.
+
+
+6. DURACIÓN DEL ENLACE
+----------------------
+
+Por defecto: 7 días.
+
+Opcional en Render:
+
+VR_LAUNCH_ACTIVATION_DAYS=7
+
+Rango permitido: 1–30.
+
+
+PRUEBA RECOMENDADA
+------------------
+
+A. Comprueba:
+
+/healthz
+
+Debe indicar:
+
+version: 18.9.0
+
+
+B. Prueba el flujo normal:
+
+1. Ciudad de prueba ACTIVE.
+2. Usuario pendiente.
+3. Admin → Reenviar.
+4. Debe llegar un email.
+5. Abrir el enlace.
+6. Activar cuenta.
+
+
+C. Prueba recuperación:
+
+1. Abre /activar con un token viejo/inventado.
+2. Debe aparecer “Reenviar mi acceso”.
+3. Escribe un correo de un usuario CITY_READY.
+4. Debe responder con mensaje genérico.
+5. Revisa el email.
+6. El enlace nuevo debe funcionar.
+
+
+D. Prueba privacidad / enumeración:
+
+Escribe en reenvío un correo que NO existe.
+
+Debe responder exactamente con el mismo mensaje genérico.
+
+
+E. Prueba referido inválido:
+
+1. Abre /espera?ref=CODIGO-INVENTADO
+2. Registra un usuario.
+3. El usuario debe registrarse normalmente.
+4. En Admin no debe contar como alta por referido.
+
+
+IMPORTANTE
+----------
+
+Mantén todavía:
+
+VR_CITY_LAUNCH_ENABLED=false
+
+hasta terminar las pruebas finales de producción.
+
+
+VALIDACIONES REALIZADAS
+-----------------------
+
+- node --check server.js: OK
+- node --check sw.js: OK
+- JavaScript inline activate.html: OK
+- JavaScript inline admin-launch.html: OK
+- Comprobación estática: el unlock ya no guarda activationUrl en la cola.
+
+El comportamiento SMTP/SQLite completo se verifica finalmente en Render,
+donde están las dependencias y las variables reales.

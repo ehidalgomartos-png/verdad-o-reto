@@ -24,7 +24,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.8.0';
+const APP_VERSION = '18.9.0';
 const LEGAL_VERSION = '2026-09-17';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -48,6 +48,8 @@ const APP_BASE_URL = String(process.env.VR_APP_BASE_URL || '').replace(/\/$/, ''
 const LAUNCH_MODE = String(process.env.VR_LAUNCH_MODE || 'development').toLowerCase() === 'production' ? 'production' : 'development';
 const CITY_LAUNCH_ENABLED = String(process.env.VR_CITY_LAUNCH_ENABLED || 'false').toLowerCase() === 'true';
 const FOUNDER_REFERRALS_TARGET = Math.max(1,Math.min(50,Number(process.env.VR_FOUNDER_REFERRALS || 3) || 3));
+const LAUNCH_ACTIVATION_DAYS = Math.max(1,Math.min(30,Number(process.env.VR_LAUNCH_ACTIVATION_DAYS)||7));
+const LAUNCH_RESEND_COOLDOWN_MS = 15 * 60 * 1000;
 const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || '').trim();
 const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || '').trim();
 const STRIPE_PRICE_PLUS_MONTHLY = String(process.env.STRIPE_PRICE_PLUS_MONTHLY || '').trim();
@@ -964,18 +966,64 @@ function refreshLaunchFounderQualification(referralCode, ts=now()) {
   }
   return stats;
 }
-function issueLaunchActivation(waitlistUserId, days = 7) {
+function issueLaunchActivation(waitlistUserId, days = LAUNCH_ACTIVATION_DAYS) {
   const raw = crypto.randomBytes(32).toString('base64url');
-  const ts = now(), expiresAt = ts + Math.max(1,Math.min(30,Number(days)||7))*86400000;
+  const ts = now(), expiresAt = ts + Math.max(1,Math.min(30,Number(days)||LAUNCH_ACTIVATION_DAYS))*86400000;
+  // Solo queda persistido el SHA-256 del token. El token sin hash vive únicamente
+  // en memoria mientras se construye/envía el correo.
   db.prepare('DELETE FROM launch_activation_tokens WHERE waitlist_user_id=? AND used_at IS NULL').run(waitlistUserId);
   db.prepare('INSERT INTO launch_activation_tokens(token_hash,waitlist_user_id,created_at,expires_at,used_at) VALUES(?,?,?,?,NULL)')
     .run(hashToken(raw),waitlistUserId,ts,expiresAt);
   return {raw,expiresAt};
 }
+function safeLaunchBaseUrl(value) {
+  try {
+    const u=new URL(String(value||''));
+    if (!['http:','https:'].includes(u.protocol)) return '';
+    return `${u.protocol}//${u.host}`;
+  } catch { return ''; }
+}
 function queueLaunchEmail(waitlistUserId,email,subject,template,payload={}) {
   db.prepare(`INSERT INTO launch_mail_queue(id,waitlist_user_id,email,subject,template,payload_json,status,attempts,last_error,created_at)
     VALUES(?,?,?,?,?,?,'PENDING',0,'',?)`)
     .run(safeId('lmail'),waitlistUserId||null,cleanEmail(email),cleanShortText(subject,180),String(template||''),JSON.stringify(payload||{}),now());
+}
+function queueLaunchActivationEmail(waitlistUserId,email,subject,activationBaseUrl) {
+  // La cola NO guarda activationUrl ni token sin hash.
+  return queueLaunchEmail(waitlistUserId,email,subject,'CITY_UNLOCKED',{
+    activationBaseUrl:safeLaunchBaseUrl(activationBaseUrl)
+  });
+}
+function sanitizeLegacyLaunchMailQueueSecrets() {
+  const rows=db.prepare("SELECT id,status,payload_json FROM launch_mail_queue WHERE template='CITY_UNLOCKED'").all();
+  let scrubbed=0;
+  for (const row of rows) {
+    const payload=safeJsonObject(row.payload_json);
+    if (row.status==='SENT') {
+      if (String(row.payload_json||'')!=='{}') {
+        db.prepare("UPDATE launch_mail_queue SET payload_json='{}' WHERE id=?").run(row.id);
+        scrubbed++;
+      }
+      continue;
+    }
+    let activationBaseUrl=safeLaunchBaseUrl(payload.activationBaseUrl);
+    if (!activationBaseUrl && payload.activationUrl) {
+      try { activationBaseUrl=safeLaunchBaseUrl(new URL(String(payload.activationUrl)).origin); } catch {}
+    }
+    const sanitized=JSON.stringify({activationBaseUrl});
+    if (String(row.payload_json||'')!==sanitized) {
+      db.prepare('UPDATE launch_mail_queue SET payload_json=? WHERE id=?').run(sanitized,row.id);
+      scrubbed++;
+    }
+  }
+  return scrubbed;
+}
+function cleanupLaunchSecurityData() {
+  const ts=now();
+  const expired=db.prepare('DELETE FROM launch_activation_tokens WHERE expires_at<=?').run(ts).changes;
+  const used=db.prepare('DELETE FROM launch_activation_tokens WHERE used_at IS NOT NULL AND used_at<=?').run(ts-7*86400000).changes;
+  const scrubbed=db.prepare("UPDATE launch_mail_queue SET payload_json='{}' WHERE status='SENT' AND payload_json!='{}'").run().changes;
+  return {expired,used,scrubbed};
 }
 function renderLaunchEmail(template,payload={}) {
   const wrap = body => `<!doctype html><html><body style="margin:0;background:#09090d;color:#f8f8fb;font-family:Arial,sans-serif">
@@ -994,7 +1042,7 @@ function renderLaunchEmail(template,payload={}) {
       <h1 style="font-size:38px;line-height:1.05;margin:10px 0 16px">${launchHtml(payload.city)} está abierta 🔓</h1>
       <p style="color:#b8b6c2;font-size:17px;line-height:1.65">${launchHtml(payload.alias)}, ya puedes activar tu acceso a V/R Match.</p>
       <p style="margin:30px 0"><a href="${launchHtml(payload.activationUrl)}" style="display:inline-block;background:#ff2f78;color:white;text-decoration:none;font-weight:900;padding:15px 22px;border-radius:12px">Entrar en V/R Match</a></p>
-      <p style="color:#74717e;font-size:12px">El enlace caduca en 7 días.</p>`);
+      <p style="color:#74717e;font-size:12px">El enlace caduca en ${Number(payload.activationDays||LAUNCH_ACTIVATION_DAYS)} días.</p>`);
   }
   return wrap(`<p>${launchHtml(payload.message || '')}</p>`);
 }
@@ -1003,20 +1051,48 @@ async function processLaunchMailQueue(limit = 20) {
   if (launchMailWorkerRunning) return {sent:0,errors:0,busy:true};
   if (!SMTP_CONFIGURED) return {sent:0,errors:0,skipped:true,reason:'SMTP no configurado'};
   launchMailWorkerRunning = true;
-  let sent=0,errors=0;
+  let sent=0,errors=0,cancelled=0;
   try {
     const rows = db.prepare(`SELECT * FROM launch_mail_queue
       WHERE status IN ('PENDING','ERROR') AND attempts<5
       ORDER BY created_at ASC LIMIT ?`).all(Math.max(1,Math.min(100,Number(limit)||20)));
     for (const row of rows) {
       try {
-        const payload=safeJsonObject(row.payload_json);
+        const storedPayload=safeJsonObject(row.payload_json);
+        let payload={...storedPayload};
+
+        if (row.template==='CITY_UNLOCKED') {
+          const wait=db.prepare(`SELECT w.id,w.alias,w.email,w.status,w.city_slug,c.name cityName,c.status cityStatus
+            FROM launch_waitlist_users w JOIN launch_cities c ON c.slug=w.city_slug WHERE w.id=?`).get(row.waitlist_user_id);
+          if (!wait || wait.status==='ACTIVATED' || wait.cityStatus!=='ACTIVE') {
+            db.prepare("UPDATE launch_mail_queue SET status='CANCELLED',last_error='',payload_json='{}' WHERE id=?").run(row.id);
+            cancelled++;
+            continue;
+          }
+          const activationBaseUrl=safeLaunchBaseUrl(storedPayload.activationBaseUrl);
+          if (!activationBaseUrl) throw new Error('Falta la URL base para generar el acceso.');
+          const activation=issueLaunchActivation(wait.id,LAUNCH_ACTIVATION_DAYS);
+          payload={
+            alias:wait.alias,
+            city:wait.cityName,
+            activationDays:LAUNCH_ACTIVATION_DAYS,
+            activationUrl:`${activationBaseUrl}/activar?token=${encodeURIComponent(activation.raw)}`
+          };
+        }
+
         const text = row.template==='CITY_UNLOCKED'
           ? `${payload.city} está abierta. Activa tu acceso: ${payload.activationUrl}`
           : `Ya estás en la lista de V/R Match. Comparte tu invitación: ${payload.referralUrl || ''}`;
         const result=await sendEmail({to:row.email,subject:row.subject,text,html:renderLaunchEmail(row.template,payload)});
         if (!result.sent) break;
-        db.prepare("UPDATE launch_mail_queue SET status='SENT',attempts=attempts+1,last_error='',sent_at=? WHERE id=?").run(now(),row.id);
+
+        const sentAt=now();
+        db.prepare("UPDATE launch_mail_queue SET status='SENT',attempts=attempts+1,last_error='',sent_at=?,payload_json='{}' WHERE id=?")
+          .run(sentAt,row.id);
+        if (row.template==='CITY_UNLOCKED' && row.waitlist_user_id) {
+          db.prepare("UPDATE launch_waitlist_users SET activation_sent_at=?,status=CASE WHEN status='WAITLIST' THEN 'CITY_READY' ELSE status END,updated_at=? WHERE id=?")
+            .run(sentAt,sentAt,row.waitlist_user_id);
+        }
         sent++;
       } catch (e) {
         db.prepare("UPDATE launch_mail_queue SET status='ERROR',attempts=attempts+1,last_error=? WHERE id=?")
@@ -1025,10 +1101,16 @@ async function processLaunchMailQueue(limit = 20) {
       }
     }
   } finally { launchMailWorkerRunning=false; }
-  return {sent,errors};
+  return {sent,errors,cancelled};
+}
+const legacyLaunchSecretsScrubbed=sanitizeLegacyLaunchMailQueueSecrets();
+const launchSecurityCleanupAtBoot=cleanupLaunchSecurityData();
+if (legacyLaunchSecretsScrubbed || launchSecurityCleanupAtBoot.expired || launchSecurityCleanupAtBoot.used || launchSecurityCleanupAtBoot.scrubbed) {
+  console.log('Launch security cleanup:',{legacyLaunchSecretsScrubbed,...launchSecurityCleanupAtBoot});
 }
 setTimeout(()=>processLaunchMailQueue(20).catch(e=>console.warn('Launch mail:',e.message)),5000).unref();
 setInterval(()=>processLaunchMailQueue(20).catch(e=>console.warn('Launch mail:',e.message)),30000).unref();
+setInterval(()=>cleanupLaunchSecurityData(),6*60*60*1000).unref();
 
 function mimeExt(mime) {
   if (mime === 'image/png') return 'png';
@@ -1991,7 +2073,7 @@ app.get('/api/launch/cities/:slug/people', (req,res) => {
 app.post('/api/launch/referrals/visit', rateLimit({limit:120,windowMs:60*60*1000,key:req=>req.ip}), (req,res) => {
   const code=cleanShortText(req.body?.code,80);
   if (!code) return res.status(400).json({ok:false,error:'Código requerido.'});
-  if (!db.prepare('SELECT 1 FROM launch_waitlist_users WHERE referral_code=?').get(code)) return res.status(404).json({ok:false,error:'Código no encontrado.'});
+  if (!db.prepare("SELECT 1 FROM launch_waitlist_users WHERE referral_code=? AND status!='BLOCKED'").get(code)) return res.status(404).json({ok:false,error:'Código no encontrado.'});
   db.prepare('INSERT INTO launch_referral_events(id,referral_code,event_type,created_at) VALUES(?,?,?,?)')
     .run(safeId('lref'),code,'VISIT',now());
   res.json({ok:true});
@@ -2012,7 +2094,8 @@ app.post('/api/launch/waitlist', rateLimit({limit:12,windowMs:60*60*1000,key:req
     const citySlug=normalizeLaunchCity(req.body?.city);
     const publicProfile=req.body?.publicProfile===true?1:0;
     const launchConsent=req.body?.launchConsent===true;
-    const referredBy=cleanShortText(req.body?.referredBy,80)||null;
+    const referredByInput=cleanShortText(req.body?.referredBy,80)||null;
+    let referredBy=null;
     if (alias.length<2) return res.status(400).json({ok:false,error:'Escribe un nombre o alias válido.'});
     if (!Number.isInteger(age)||age<18||age>99) return res.status(400).json({ok:false,error:'V/R Match es solo para mayores de 18 años.'});
     if (!validEmail(email)) return res.status(400).json({ok:false,error:'Introduce un correo válido.'});
@@ -2021,6 +2104,11 @@ app.post('/api/launch/waitlist', rateLimit({limit:12,windowMs:60*60*1000,key:req
     if (!city) return res.status(400).json({ok:false,error:'Ciudad no disponible.'});
     if (city.status==='ACTIVE') {
       return res.status(409).json({ok:false,cityActive:true,nextUrl:'/',error:`V/R Match ya está disponible en ${city.name}. Entra directamente en la app.`});
+    }
+
+    if (referredByInput) {
+      const refOwner=db.prepare("SELECT referral_code FROM launch_waitlist_users WHERE referral_code=? AND status!='BLOCKED'").get(referredByInput);
+      if (refOwner) referredBy=refOwner.referral_code;
     }
 
     const existingWait=db.prepare('SELECT * FROM launch_waitlist_users WHERE email=?').get(email);
@@ -2046,7 +2134,7 @@ app.post('/api/launch/waitlist', rateLimit({limit:12,windowMs:60*60*1000,key:req
       VALUES(?,?,?,?,?,?,?,?,?,'WAITLIST',?,?)`)
       .run(id,alias,age,email,citySlug,publicProfile,1,referralCode,referredBy,ts,ts);
 
-    if (referredBy && db.prepare('SELECT 1 FROM launch_waitlist_users WHERE referral_code=?').get(referredBy)) {
+    if (referredBy) {
       db.prepare('INSERT INTO launch_referral_events(id,referral_code,event_type,created_at) VALUES(?,?,?,?)')
         .run(safeId('lref'),referredBy,'SIGNUP',ts);
       refreshLaunchFounderQualification(referredBy,ts);
@@ -2063,6 +2151,34 @@ app.post('/api/launch/waitlist', rateLimit({limit:12,windowMs:60*60*1000,key:req
   }
 });
 
+app.post('/api/launch/resend-activation',
+  rateLimit({limit:6,windowMs:60*60*1000,key:req=>`${req.ip}:${hashToken(cleanEmail(req.body?.email)).slice(0,16)}`}),
+  async (req,res) => {
+    const generic={ok:true,message:'Si ese correo tiene un acceso pendiente en una ciudad abierta, recibirás un nuevo enlace en unos minutos.'};
+    try {
+      const email=cleanEmail(req.body?.email);
+      if (!validEmail(email)) return res.json(generic);
+
+      const row=db.prepare(`SELECT w.id,w.email,w.alias,w.status,w.city_slug,c.name cityName,c.status cityStatus
+        FROM launch_waitlist_users w JOIN launch_cities c ON c.slug=w.city_slug
+        WHERE w.email=?`).get(email);
+      // Respuesta genérica para no revelar si un correo está o no registrado.
+      if (!row || row.cityStatus!=='ACTIVE' || row.status==='ACTIVATED' || row.status==='BLOCKED') return res.json(generic);
+
+      const last=db.prepare(`SELECT created_at createdAt FROM launch_mail_queue
+        WHERE waitlist_user_id=? AND template='CITY_UNLOCKED' ORDER BY created_at DESC LIMIT 1`).get(row.id);
+      if (last && now()-Number(last.createdAt||0)<LAUNCH_RESEND_COOLDOWN_MS) return res.json(generic);
+
+      queueLaunchActivationEmail(row.id,row.email,`${row.cityName} está abierta 🔓 Nuevo acceso a V/R Match`,baseUrl(req));
+      db.prepare("UPDATE launch_waitlist_users SET status='CITY_READY',updated_at=? WHERE id=?").run(now(),row.id);
+      processLaunchMailQueue(2).catch(e=>console.warn('Launch resend:',e.message));
+      return res.json(generic);
+    } catch(e) {
+      console.warn('Launch resend:',e.message);
+      return res.json(generic);
+    }
+  });
+
 app.get('/api/launch/activation/:token', rateLimit({limit:60,windowMs:60*60*1000,key:req=>req.ip}), (req,res) => {
   const raw=String(req.params.token||'');
   const row=db.prepare(`
@@ -2075,7 +2191,7 @@ app.get('/api/launch/activation/:token', rateLimit({limit:60,windowMs:60*60*1000
   `).get(hashToken(raw));
   if (!row) return res.status(404).json({ok:false,error:'El enlace de acceso no es válido.'});
   if (row.usedAt) return res.status(410).json({ok:false,error:'Este enlace ya fue utilizado.'});
-  if (Number(row.expiresAt)<=now()) return res.status(410).json({ok:false,error:'Este enlace ha caducado. Solicita uno nuevo.'});
+  if (Number(row.expiresAt)<=now()) return res.status(410).json({ok:false,error:'Este enlace ha caducado. Puedes solicitar uno nuevo.'});
   if (row.cityStatus!=='ACTIVE') return res.status(403).json({ok:false,error:'Tu ciudad todavía no está activa.'});
   const existing=db.prepare('SELECT id,status FROM users WHERE email=?').get(row.email);
   res.json({ok:true,alias:row.alias,email:row.email,city:row.cityName,existingAccount:Boolean(existing&&existing.status==='active'),expiresAt:row.expiresAt});
@@ -2340,11 +2456,8 @@ app.post('/api/admin/launch/cities/:slug/unlock', requireAuth, requireAdmin, rat
     const tx=db.transaction(()=>{
       db.prepare("UPDATE launch_cities SET status='ACTIVE',activated_at=?,updated_at=? WHERE slug=?").run(ts,ts,slug);
       for (const w of users) {
-        const activation=issueLaunchActivation(w.id,7);
-        const activationUrl=`${baseUrl(req)}/activar?token=${encodeURIComponent(activation.raw)}`;
-        queueLaunchEmail(w.id,w.email,`${city.name} está abierta 🔓 Entra en V/R Match`,'CITY_UNLOCKED',
-          {alias:w.alias,city:city.name,activationUrl});
-        db.prepare("UPDATE launch_waitlist_users SET status='CITY_READY',activation_sent_at=?,updated_at=? WHERE id=?").run(ts,ts,w.id);
+        queueLaunchActivationEmail(w.id,w.email,`${city.name} está abierta 🔓 Entra en V/R Match`,baseUrl(req));
+        db.prepare("UPDATE launch_waitlist_users SET status='CITY_READY',updated_at=? WHERE id=?").run(ts,w.id);
       }
     });
     tx();
@@ -2391,6 +2504,34 @@ app.post('/api/admin/launch/cities/:slug/reset-test', requireAuth, requireAdmin,
   } catch(e) {
     console.error('Reset launch city:',e);
     res.status(500).json({ok:false,error:'No se pudo reiniciar la ciudad.'});
+  }
+});
+
+app.post('/api/admin/launch/waitlist/:id/resend', requireAuth, requireAdmin,
+  rateLimit({limit:40,windowMs:60*60*1000,key:req=>req.user.id}), async (req,res) => {
+  try {
+    const id=cleanShortText(req.params.id,100);
+    const row=db.prepare(`SELECT w.id,w.email,w.alias,w.status,c.name cityName,c.status cityStatus
+      FROM launch_waitlist_users w JOIN launch_cities c ON c.slug=w.city_slug WHERE w.id=?`).get(id);
+    if (!row) return res.status(404).json({ok:false,error:'Registro de lista no encontrado.'});
+    if (row.cityStatus!=='ACTIVE') return res.status(409).json({ok:false,error:'La ciudad todavía no está activa.'});
+    if (row.status==='ACTIVATED') return res.status(409).json({ok:false,error:'La cuenta ya fue activada.'});
+    if (row.status==='BLOCKED') return res.status(409).json({ok:false,error:'Este registro está bloqueado.'});
+
+    const recent=db.prepare(`SELECT created_at createdAt,status FROM launch_mail_queue
+      WHERE waitlist_user_id=? AND template='CITY_UNLOCKED' ORDER BY created_at DESC LIMIT 1`).get(row.id);
+    if (recent && now()-Number(recent.createdAt||0)<60*1000 && ['PENDING','ERROR'].includes(recent.status)) {
+      return res.status(409).json({ok:false,error:'Ya existe un envío pendiente o recién generado.'});
+    }
+
+    queueLaunchActivationEmail(row.id,row.email,`${row.cityName} está abierta 🔓 Nuevo acceso a V/R Match`,baseUrl(req));
+    db.prepare("UPDATE launch_waitlist_users SET status='CITY_READY',updated_at=? WHERE id=?").run(now(),row.id);
+    logModerationAction(req.user.id,req.user.id,'launch_activation_resent',`Reenvío de acceso · ${row.cityName} · ${row.id}`,null);
+    const mail=await processLaunchMailQueue(2);
+    res.json({ok:true,mail});
+  } catch(e) {
+    console.error('Admin launch resend:',e);
+    res.status(500).json({ok:false,error:'No se pudo reenviar el acceso.'});
   }
 });
 
@@ -3539,5 +3680,6 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.8 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
-  console.log(`Resiliencia: reconexión de partidas ${Math.round(GAME_RECONNECT_GRACE_MS/1000)}s + mantenimiento + backup manual`);console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad: sesiones + bloqueados + exportación de datos');});
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.9 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
+  console.log(`Resiliencia: reconexión de partidas ${Math.round(GAME_RECONNECT_GRACE_MS/1000)}s + mantenimiento + backup manual`);
+  console.log(`Activación de ciudades: tokens hash-only · ${LAUNCH_ACTIVATION_DAYS} días · reenvío protegido`);console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad: sesiones + bloqueados + exportación de datos');});
