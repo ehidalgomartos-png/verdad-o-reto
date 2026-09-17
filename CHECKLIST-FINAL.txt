@@ -1,0 +1,28 @@
+V/R MATCH — CHECKLIST FINAL DE APERTURA
+=====================================
+
+[ ] /healthz = 18.9.1
+[ ] /espera carga
+[ ] /activar carga
+[ ] /admin/launch carga como admin
+[ ] Preflight técnico: todo verde
+[ ] Persistent Disk confirmado
+[ ] Backup descargado en los últimos 7 días
+[ ] SMTP probado con al menos Gmail y otro proveedor
+[ ] Valencia limpia de datos de prueba
+[ ] Objetivo real de Valencia restaurado
+[ ] Referido real probado
+[ ] Email de desbloqueo probado
+[ ] Reenvío de activación probado
+[ ] Like → Match → Chat probado
+[ ] Juego probado con dos cuentas
+[ ] Reconexión <45 s probada
+[ ] Bloquear usuario probado
+[ ] Denunciar usuario probado
+[ ] Exportación/borrado de cuenta probado
+[ ] Privacidad y Condiciones revisadas
+[ ] VR_CITY_LAUNCH_ENABLED=true
+[ ] VR_LAUNCH_MODE=production
+
+Cuando todos estos puntos estén cerrados, deja de hacer cambios grandes:
+empieza con usuarios reales, mide y corrige sobre datos.

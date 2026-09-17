@@ -12,19 +12,25 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const allowedOrigins = String(process.env.VR_ALLOWED_ORIGINS || '').split(',').map(x => x.trim()).filter(Boolean);
+const ENV_APP_BASE_URL = String(process.env.VR_APP_BASE_URL || '').replace(/\/$/, '');
+const allowedOrigins = String(process.env.VR_ALLOWED_ORIGINS || '').split(',').map(x => x.trim().replace(/\/$/,'')).filter(Boolean);
+const appBaseOrigin = (() => { try { return ENV_APP_BASE_URL ? new URL(ENV_APP_BASE_URL).origin : ''; } catch { return ''; } })();
 const io = new Server(server, {
   maxHttpBufferSize: 12e6,
   cors: {
     origin(origin, cb) {
-      if (!origin || !allowedOrigins.length || allowedOrigins.includes(origin)) return cb(null, true);
-      cb(new Error('ORIGIN_NOT_ALLOWED'));
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.length) return allowedOrigins.includes(origin) ? cb(null,true) : cb(new Error('ORIGIN_NOT_ALLOWED'));
+      if (appBaseOrigin) return origin === appBaseOrigin ? cb(null,true) : cb(new Error('ORIGIN_NOT_ALLOWED'));
+      // Compatibilidad de desarrollo: si aún no hay origen configurado se permite,
+      // pero productionReadiness lo marca como bloqueo antes del lanzamiento real.
+      cb(null, true);
     },
     credentials: true
   }
 });
 
-const APP_VERSION = '18.9.0';
+const APP_VERSION = '18.9.1';
 const LEGAL_VERSION = '2026-09-17';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -44,7 +50,7 @@ const EMAIL_VERIFY_HOURS = 24;
 const PASSWORD_RESET_MINUTES = 45;
 const REQUIRE_EMAIL_VERIFICATION = String(process.env.VR_REQUIRE_EMAIL_VERIFICATION || 'false').toLowerCase() === 'true';
 const ADMIN_EMAILS = new Set(String(process.env.VR_ADMIN_EMAILS || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean));
-const APP_BASE_URL = String(process.env.VR_APP_BASE_URL || '').replace(/\/$/, '');
+const APP_BASE_URL = ENV_APP_BASE_URL;
 const LAUNCH_MODE = String(process.env.VR_LAUNCH_MODE || 'development').toLowerCase() === 'production' ? 'production' : 'development';
 const CITY_LAUNCH_ENABLED = String(process.env.VR_CITY_LAUNCH_ENABLED || 'false').toLowerCase() === 'true';
 const FOUNDER_REFERRALS_TARGET = Math.max(1,Math.min(50,Number(process.env.VR_FOUNDER_REFERRALS || 3) || 3));
@@ -789,6 +795,9 @@ function bool01(value, fallback = true) { return value === undefined || value ==
 function isAdmin(user) { return Boolean(user && ADMIN_EMAILS.has(String(user.email || '').toLowerCase())); }
 function baseUrl(req) {
   if (APP_BASE_URL) return APP_BASE_URL;
+  // Los enlaces sensibles (verificación, reset, activación) no deben depender
+  // del Host suministrado por una petición cuando la app ya está en producción.
+  if (LAUNCH_MODE === 'production') throw new Error('VR_APP_BASE_URL_REQUIRED');
   const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
   return `${proto}://${req.get('host')}`;
 }
@@ -2262,6 +2271,43 @@ app.post('/api/launch/activate', rateLimit({limit:12,windowMs:60*60*1000,key:req
 
 
 // ---- ADMIN · LANZAMIENTO POR CIUDADES ----
+function launchPreflight() {
+  const readiness=productionReadiness();
+  const mail=db.prepare(`SELECT
+      SUM(CASE WHEN status='PENDING' THEN 1 ELSE 0 END) pending,
+      SUM(CASE WHEN status='ERROR' THEN 1 ELSE 0 END) errors
+    FROM launch_mail_queue`).get();
+  const latestBackup=db.prepare(`SELECT created_at FROM moderation_actions
+    WHERE action='system_backup_download' ORDER BY created_at DESC LIMIT 1`).get();
+  const lastBackupAt=Number(latestBackup?.created_at||0)||null;
+  const recentBackup=Boolean(lastBackupAt && now()-lastBackupAt <= 7*86400000);
+  const checks=[
+    {key:'productionMode',label:'Modo de producción',ok:Boolean(readiness.productionMode),required:true,detail:'VR_LAUNCH_MODE=production'},
+    {key:'customDomain',label:'Dominio y URL base definitivos',ok:Boolean(readiness.customDomain),required:true,detail:'VR_APP_BASE_URL debe apuntar al dominio público final'},
+    {key:'persistentStorage',label:'SQLite y uploads persistentes',ok:Boolean(readiness.persistentStorage),required:true,detail:'VR_STORAGE_DIR fuera del filesystem efímero'},
+    {key:'smtp',label:'Correo SMTP',ok:Boolean(readiness.smtpConfigured),required:true,detail:'Necesario para activaciones y recuperación'},
+    {key:'emailVerification',label:'Verificación de correo',ok:Boolean(readiness.emailVerificationRequired),required:true,detail:'VR_REQUIRE_EMAIL_VERIFICATION=true'},
+    {key:'admin',label:'Administrador configurado',ok:Boolean(readiness.adminConfigured),required:true,detail:'VR_ADMIN_EMAILS'},
+    {key:'socketOrigin',label:'Socket.IO restringido al origen',ok:Boolean(readiness.socketOriginRestricted),required:true,detail:'VR_APP_BASE_URL o VR_ALLOWED_ORIGINS'},
+    {key:'cityLaunch',label:'Lanzamiento por ciudades',ok:Boolean(CITY_LAUNCH_ENABLED),required:true,detail:'VR_CITY_LAUNCH_ENABLED=true'},
+    {key:'mailErrors',label:'Cola de correo sin errores',ok:Number(mail.errors||0)===0,required:true,detail:`Errores actuales: ${Number(mail.errors||0)}`},
+    {key:'backup',label:'Backup reciente',ok:recentBackup,required:true,detail:lastBackupAt?`Último: ${new Date(lastBackupAt).toISOString()}`:'Todavía no consta un backup manual'}
+  ];
+  return {
+    version:APP_VERSION,
+    ready:checks.filter(x=>x.required).every(x=>x.ok),
+    checks,
+    pendingMail:Number(mail.pending||0),
+    mailErrors:Number(mail.errors||0),
+    lastBackupAt,
+    cities:launchCitiesStats().map(c=>({slug:c.slug,name:c.name,status:c.status,current:c.current,goal:c.goal}))
+  };
+}
+
+app.get('/api/admin/launch/preflight', requireAuth, requireAdmin, (req,res) => {
+  res.json({ok:true,preflight:launchPreflight()});
+});
+
 app.get('/api/admin/launch/summary', requireAuth, requireAdmin, (req,res) => {
   const s=db.prepare(`SELECT COUNT(*) total,
     SUM(CASE WHEN date(created_at/1000,'unixepoch')=date('now') THEN 1 ELSE 0 END) today,
@@ -2288,56 +2334,64 @@ app.get('/api/admin/launch/analytics', requireAuth, requireAdmin, (req,res) => {
   const requested=String(req.query.days||'30');
   const days=['7','30','90','all'].includes(requested)?requested:'30';
   const since=days==='all'?0:now()-Number(days)*86400000;
-  const where=since?' AND w.created_at>=?':'';
-  const params=since?[since]:[];
+  const dateClause=(column)=>since?` AND ${column}>=?`:'';
+  const dateArgs=()=>since?[since]:[];
 
-  const wait=db.prepare(`SELECT
-      COUNT(*) total,
-      SUM(CASE WHEN w.referred_by IS NOT NULL AND w.referred_by!='' THEN 1 ELSE 0 END) referred,
-      SUM(CASE WHEN w.activation_sent_at IS NOT NULL THEN 1 ELSE 0 END) invited,
-      SUM(CASE WHEN w.status='ACTIVATED' THEN 1 ELSE 0 END) activated,
-      SUM(CASE WHEN w.founder_qualified_at IS NOT NULL THEN 1 ELSE 0 END) founders,
-      AVG(CASE WHEN w.activated_at IS NOT NULL AND w.activation_sent_at IS NOT NULL
-          THEN (w.activated_at-w.activation_sent_at)/3600000.0 END) avgActivationHours
-    FROM launch_waitlist_users w
-    WHERE w.status!='BLOCKED'${where}`).get(...params);
+  const signups=db.prepare(`SELECT COUNT(*) total,
+      SUM(CASE WHEN referred_by IS NOT NULL AND referred_by!='' THEN 1 ELSE 0 END) referred
+    FROM launch_waitlist_users
+    WHERE status!='BLOCKED'${dateClause('created_at')}`).get(...dateArgs());
 
-  const eventWhere=since?' AND created_at>=?':'';
-  const visits=Number(db.prepare(`SELECT COUNT(*) n FROM launch_referral_events WHERE event_type='VISIT'${eventWhere}`).get(...params)?.n||0);
-  const referralSignups=Number(db.prepare(`SELECT COUNT(*) n FROM launch_referral_events WHERE event_type='SIGNUP'${eventWhere}`).get(...params)?.n||0);
+  const invited=db.prepare(`SELECT COUNT(*) total,
+      SUM(CASE WHEN status='ACTIVATED' THEN 1 ELSE 0 END) activatedFromCohort
+    FROM launch_waitlist_users
+    WHERE status!='BLOCKED' AND activation_sent_at IS NOT NULL${dateClause('activation_sent_at')}`).get(...dateArgs());
 
-  const cityParams=since?[since]:[];
-  const cities=db.prepare(`SELECT
-      c.slug,c.name,c.status,c.target_users goal,
-      COUNT(w.id) signups,
-      SUM(CASE WHEN w.referred_by IS NOT NULL AND w.referred_by!='' THEN 1 ELSE 0 END) referred,
-      SUM(CASE WHEN w.activation_sent_at IS NOT NULL THEN 1 ELSE 0 END) invited,
-      SUM(CASE WHEN w.status='ACTIVATED' THEN 1 ELSE 0 END) activated,
-      SUM(CASE WHEN w.founder_qualified_at IS NOT NULL THEN 1 ELSE 0 END) founders
-    FROM launch_cities c
-    LEFT JOIN launch_waitlist_users w ON w.city_slug=c.slug AND w.status!='BLOCKED'${since?' AND w.created_at>=?':''}
-    GROUP BY c.slug
-    ORDER BY signups DESC,c.name ASC`).all(...cityParams).map(row=>{
-      const signups=Number(row.signups||0),invited=Number(row.invited||0),activated=Number(row.activated||0);
-      return {...row,signups,referred:Number(row.referred||0),invited,activated,founders:Number(row.founders||0),
-        activationRate:invited?Math.round(activated*100/invited):0};
-    });
+  const activated=db.prepare(`SELECT COUNT(*) total,
+      AVG(CASE WHEN activation_sent_at IS NOT NULL THEN (activated_at-activation_sent_at)/3600000.0 END) avgActivationHours
+    FROM launch_waitlist_users
+    WHERE status!='BLOCKED' AND activated_at IS NOT NULL${dateClause('activated_at')}`).get(...dateArgs());
 
-  // Visitas/altas por ciudad se atribuyen a la ciudad del propietario del código.
-  const eventByCity=db.prepare(`SELECT w.city_slug slug,
-      SUM(CASE WHEN e.event_type='VISIT' THEN 1 ELSE 0 END) visits,
-      SUM(CASE WHEN e.event_type='SIGNUP' THEN 1 ELSE 0 END) referralSignups
-    FROM launch_referral_events e
-    JOIN launch_waitlist_users w ON w.referral_code=e.referral_code
-    WHERE 1=1${since?' AND e.created_at>=?':''}
-    GROUP BY w.city_slug`).all(...params);
-  const cityEventMap=new Map(eventByCity.map(x=>[x.slug,x]));
-  for(const c of cities){
-    const ev=cityEventMap.get(c.slug)||{};
-    c.referralVisits=Number(ev.visits||0);
-    c.referralSignups=Number(ev.referralSignups||0);
-    c.referralEventRate=c.referralVisits?Math.round(c.referralSignups*100/c.referralVisits):0;
-  }
+  const founders=db.prepare(`SELECT COUNT(*) total FROM launch_waitlist_users
+    WHERE status!='BLOCKED' AND founder_qualified_at IS NOT NULL${dateClause('founder_qualified_at')}`).get(...dateArgs());
+
+  const visits=Number(db.prepare(`SELECT COUNT(*) n FROM launch_referral_events
+    WHERE event_type='VISIT'${dateClause('created_at')}`).get(...dateArgs())?.n||0);
+  const referralSignups=Number(db.prepare(`SELECT COUNT(*) n FROM launch_referral_events
+    WHERE event_type='SIGNUP'${dateClause('created_at')}`).get(...dateArgs())?.n||0);
+
+  const cities=launchCitiesStats().map(c=>{
+    const base=[c.slug];
+    const signup=db.prepare(`SELECT COUNT(*) total,
+        SUM(CASE WHEN referred_by IS NOT NULL AND referred_by!='' THEN 1 ELSE 0 END) referred
+      FROM launch_waitlist_users
+      WHERE city_slug=? AND status!='BLOCKED'${since?' AND created_at>=?':''}`).get(...(since?[...base,since]:base));
+    const invite=db.prepare(`SELECT COUNT(*) total,
+        SUM(CASE WHEN status='ACTIVATED' THEN 1 ELSE 0 END) activatedFromCohort
+      FROM launch_waitlist_users
+      WHERE city_slug=? AND status!='BLOCKED' AND activation_sent_at IS NOT NULL${since?' AND activation_sent_at>=?':''}`).get(...(since?[...base,since]:base));
+    const actualActivated=db.prepare(`SELECT COUNT(*) total FROM launch_waitlist_users
+      WHERE city_slug=? AND status!='BLOCKED' AND activated_at IS NOT NULL${since?' AND activated_at>=?':''}`).get(...(since?[...base,since]:base));
+    const cityVisits=Number(db.prepare(`SELECT COUNT(*) n
+      FROM launch_referral_events e
+      JOIN launch_waitlist_users owner ON owner.referral_code=e.referral_code
+      WHERE owner.city_slug=? AND e.event_type='VISIT'${since?' AND e.created_at>=?':''}`).get(...(since?[...base,since]:base))?.n||0);
+    const cityRefSignups=Number(db.prepare(`SELECT COUNT(*) n
+      FROM launch_referral_events e
+      JOIN launch_waitlist_users owner ON owner.referral_code=e.referral_code
+      WHERE owner.city_slug=? AND e.event_type='SIGNUP'${since?' AND e.created_at>=?':''}`).get(...(since?[...base,since]:base))?.n||0);
+    const invites=Number(invite.total||0), activatedFromCohort=Number(invite.activatedFromCohort||0);
+    return {...c,
+      signups:Number(signup.total||0),
+      referred:Number(signup.referred||0),
+      invited:invites,
+      activated:Number(actualActivated.total||0),
+      referralVisits:cityVisits,
+      referralSignups:cityRefSignups,
+      activationRate:invites?Math.round(activatedFromCohort*100/invites):0,
+      referralEventRate:cityVisits?Math.round(cityRefSignups*100/cityVisits):0
+    };
+  }).sort((a,b)=>b.signups-a.signups || a.name.localeCompare(b.name,'es'));
 
   const topReferrers=db.prepare(`SELECT
       w.alias,w.city_slug city,w.referral_code referralCode,w.founder_qualified_at founderQualifiedAt,
@@ -2363,9 +2417,14 @@ app.get('/api/admin/launch/analytics', requireAuth, requireAdmin, (req,res) => {
     FROM (
       SELECT date(created_at/1000,'unixepoch') day,COUNT(*) waitlist,
         SUM(CASE WHEN referred_by IS NOT NULL AND referred_by!='' THEN 1 ELSE 0 END) referred,
-        SUM(CASE WHEN status='ACTIVATED' THEN 1 ELSE 0 END) activated,0 visits
+        0 activated,0 visits
       FROM launch_waitlist_users
       WHERE status!='BLOCKED'${since?' AND created_at>=?':''}
+      GROUP BY day
+      UNION ALL
+      SELECT date(activated_at/1000,'unixepoch') day,0 waitlist,0 referred,COUNT(*) activated,0 visits
+      FROM launch_waitlist_users
+      WHERE status!='BLOCKED' AND activated_at IS NOT NULL${since?' AND activated_at>=?':''}
       GROUP BY day
       UNION ALL
       SELECT date(created_at/1000,'unixepoch') day,0 waitlist,0 referred,0 activated,
@@ -2374,18 +2433,19 @@ app.get('/api/admin/launch/analytics', requireAuth, requireAdmin, (req,res) => {
       WHERE 1=1${since?' AND created_at>=?':''}
       GROUP BY day
     )
-    GROUP BY day ORDER BY day ASC`).all(...(since?[since,since]:[])).map(d=>({
+    GROUP BY day ORDER BY day ASC`).all(...(since?[since,since,since]:[])).map(d=>({
       day:d.day,waitlist:Number(d.waitlist||0),referred:Number(d.referred||0),
       activated:Number(d.activated||0),visits:Number(d.visits||0)
     }));
 
-  const total=Number(wait.total||0),invited=Number(wait.invited||0),activated=Number(wait.activated||0);
+  const total=Number(signups.total||0),inviteCount=Number(invited.total||0);
+  const actualActivated=Number(activated.total||0),activatedFromCohort=Number(invited.activatedFromCohort||0);
   res.json({ok:true,days,founderTarget:FOUNDER_REFERRALS_TARGET,
     summary:{
-      total,referred:Number(wait.referred||0),invited,activated,
-      activationRate:invited?Math.round(activated*100/invited):0,
-      founders:Number(wait.founders||0),
-      avgActivationHours:wait.avgActivationHours==null?null:Math.round(Number(wait.avgActivationHours)*10)/10,
+      total,referred:Number(signups.referred||0),invited:inviteCount,activated:actualActivated,
+      activationRate:inviteCount?Math.round(activatedFromCohort*100/inviteCount):0,
+      founders:Number(founders.total||0),
+      avgActivationHours:activated.avgActivationHours==null?null:Math.round(Number(activated.avgActivationHours)*10)/10,
       referralVisits:visits,referralSignups,
       referralEventRate:visits?Math.round(referralSignups*100/visits):0
     },
@@ -2836,11 +2896,12 @@ function productionReadiness() {
   const customDomain = Boolean(hostname && !hostname.endsWith('.onrender.com') && hostname !== 'localhost');
   const persistentStorage = path.resolve(STORAGE_DIR) !== path.resolve(ROOT);
   const productionMode = LAUNCH_MODE === 'production';
+  const socketOriginRestricted = Boolean(allowedOrigins.length || appBaseOrigin);
   const launchFree = freePremiumDuringLaunch();
   const billingEnabled = billingSwitchEnabled();
   const billingConfiguredNow = billingConfigured();
   const billingLive = Boolean(billingConfiguredNow && STRIPE_MODE === 'live');
-  const coreReady = Boolean(customDomain && persistentStorage && SMTP_CONFIGURED && REQUIRE_EMAIL_VERIFICATION && ADMIN_EMAILS.size > 0);
+  const coreReady = Boolean(customDomain && persistentStorage && SMTP_CONFIGURED && REQUIRE_EMAIL_VERIFICATION && ADMIN_EMAILS.size > 0 && socketOriginRestricted);
   return {
     version: APP_VERSION,
     legalVersion: LEGAL_VERSION,
@@ -2852,6 +2913,8 @@ function productionReadiness() {
     smtpConfigured: SMTP_CONFIGURED,
     emailVerificationRequired: REQUIRE_EMAIL_VERIFICATION,
     adminConfigured: ADMIN_EMAILS.size > 0,
+    socketOriginRestricted,
+    allowedSocketOrigins: allowedOrigins.length || (appBaseOrigin ? 1 : 0),
     webPushConfigured: PUSH_CONFIGURED,
     billingPrepared:STRIPE_PREPARED,
     billingEnabled,
@@ -2866,6 +2929,7 @@ function productionReadiness() {
       !persistentStorage ? 'Render de pago + Persistent Disk en /var/data (o almacenamiento administrado)' : null,
       !REQUIRE_EMAIL_VERIFICATION ? 'VR_REQUIRE_EMAIL_VERIFICATION=true' : null,
       !SMTP_CONFIGURED ? 'SMTP profesional con dominio verificado' : null,
+      !socketOriginRestricted ? 'Restringir Socket.IO con VR_APP_BASE_URL o VR_ALLOWED_ORIGINS' : null,
       !launchFree && !STRIPE_PREPARED ? 'Configurar el proveedor de pago antes de ofrecer Premium de pago' : null,
       !launchFree && STRIPE_PREPARED && STRIPE_MODE !== 'live' ? 'Pasar el proveedor de sandbox a producción solo al final' : null,
       !launchFree && STRIPE_MODE === 'live' && !productionMode ? 'El cobro live está protegido: no se habilitará hasta VR_LAUNCH_MODE=production' : null,
@@ -3680,6 +3744,6 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.9 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.9.1 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
   console.log(`Resiliencia: reconexión de partidas ${Math.round(GAME_RECONNECT_GRACE_MS/1000)}s + mantenimiento + backup manual`);
-  console.log(`Activación de ciudades: tokens hash-only · ${LAUNCH_ACTIVATION_DAYS} días · reenvío protegido`);console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad: sesiones + bloqueados + exportación de datos');});
+  console.log(`Activación de ciudades: tokens hash-only · ${LAUNCH_ACTIVATION_DAYS} días · reenvío protegido`);console.log(`Socket origin: ${(allowedOrigins.length||appBaseOrigin)?'restringido':'ABIERTO (solo desarrollo)'}`);console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad: sesiones + bloqueados + exportación de datos');});
