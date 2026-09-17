@@ -24,7 +24,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '17.0.0';
+const APP_VERSION = '18.0.0';
 const LEGAL_VERSION = 'beta-2026-09-17';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -52,7 +52,7 @@ const STRIPE_API_BASE = 'https://api.stripe.com/v1';
 const STRIPE_PREPARED = Boolean(STRIPE_SECRET_KEY && STRIPE_WEBHOOK_SECRET && STRIPE_PRICE_PLUS_MONTHLY);
 const STRIPE_MODE = STRIPE_SECRET_KEY.startsWith('sk_live_') ? 'live' : (STRIPE_SECRET_KEY.startsWith('sk_test_') ? 'test' : (STRIPE_SECRET_KEY ? 'configured' : 'off'));
 // Los secretos de pago viven en Environment. El panel admin solo cambia el modo comercial persistido en SQLite.
-// La primera ejecución de Fase 17 siempre arranca en Premium incluido gratis por seguridad.
+// V18: las funciones V/R+ actuales forman parte de la experiencia disponible para todos.
 const SMTP_CONFIGURED = Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_FROM);
 const VAPID_PUBLIC_KEY = String(process.env.VAPID_PUBLIC_KEY || '').trim();
 const VAPID_PRIVATE_KEY = String(process.env.VAPID_PRIVATE_KEY || '').trim();
@@ -340,12 +340,11 @@ function setAppSetting(key, value, adminUserId = null) {
     .run(String(key), String(value), now(), adminUserId || null);
 }
 function monetizationMode() {
-  const stored = String(appSetting('premium_mode') || '').trim();
-  if (stored === 'launch_free' || stored === 'paid') return stored;
+  // V18: la monetización pública está desactivada. Las funciones actuales no se paywallean.
   return 'launch_free';
 }
-function freePremiumDuringLaunch() { return monetizationMode() === 'launch_free'; }
-function billingSwitchEnabled() { return monetizationMode() === 'paid'; }
+function freePremiumDuringLaunch() { return true; }
+function billingSwitchEnabled() { return false; }
 function billingInfrastructureReady({ requireLive = false } = {}) {
   if (!STRIPE_PREPARED || !APP_BASE_URL) return false;
   if (requireLive && STRIPE_MODE !== 'live') return false;
@@ -733,14 +732,7 @@ function getPlusSettings(userId) {
   };
 }
 function plusIsActive(userId) {
-  // Lanzamiento: todos los usuarios disfrutan los extras V/R+ sin pago.
-  if (freePremiumDuringLaunch()) return true;
-  const row = db.prepare("SELECT status,expires_at FROM plus_memberships WHERE user_id=?").get(userId);
-  if (!row || row.status !== 'active') return false;
-  if (row.expires_at && Number(row.expires_at) <= now()) {
-    db.prepare("UPDATE plus_memberships SET status='expired',updated_at=? WHERE user_id=?").run(now(),userId);
-    return false;
-  }
+  // V18: todas las funciones V/R+ actuales están disponibles para todos los usuarios.
   return true;
 }
 function plusBoostState(userId) {
@@ -1901,7 +1893,7 @@ function productionReadiness() {
       !launchFree && STRIPE_MODE === 'live' && !productionMode ? 'El cobro live está protegido: no se habilitará hasta VR_LAUNCH_MODE=production' : null,
       !productionMode ? 'VR_LAUNCH_MODE=production cuando termine la validación final' : null,
       !PUSH_CONFIGURED ? 'Web Push VAPID (recomendado, no bloquea el lanzamiento)' : null,
-      launchFree ? 'Premium incluido gratis. Cuando quieras monetizar, usa Admin → Monetización.' : 'Revisión legal/fiscal final antes de cobrar a usuarios reales'
+      'Funciones V/R+ actuales habilitadas para todos los usuarios.'
     ].filter(Boolean)
   };
 }
@@ -2005,7 +1997,7 @@ app.get('/api/product/monetization', (req,res) => res.json({ok:true,commercial:{
   premiumOptional:true,
   mode:monetizationMode(),
   freePremiumDuringLaunch:freePremiumDuringLaunch(),
-  paidPremiumAvailable:billingConfigured()
+  paidPremiumAvailable:false
 }}));
 
 app.get('/healthz', (req,res) => { try { db.prepare('SELECT 1').get(); res.status(200).json({ok:true,db:true,version:APP_VERSION}); } catch { res.status(503).json({ok:false,db:false}); } });
@@ -2023,7 +2015,8 @@ app.get('/terms.html', (req,res) => res.sendFile(path.join(ROOT,'terms.html')));
 app.get('/privacy.html', (req,res) => res.sendFile(path.join(ROOT,'privacy.html')));
 app.get('/community.html', (req,res) => res.sendFile(path.join(ROOT,'community.html')));
 app.get(['/como-funciona','/como-funciona.html'], (req,res) => res.sendFile(path.join(ROOT,'como-funciona.html')));
-app.get(['/premium','/premium.html'], (req,res) => res.sendFile(path.join(ROOT,'premium.html')));
+app.get(['/funciones','/funciones.html'], (req,res) => res.sendFile(path.join(ROOT,'funciones.html')));
+app.get(['/premium','/premium.html'], (req,res) => res.redirect(302,'/funciones.html'));
 app.get('/preview.html', (req,res) => res.sendFile(path.join(ROOT,'preview.html')));
 
 function socketSet(userId) {
@@ -2231,5 +2224,5 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v17.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);
-  console.log('Resiliencia F14: mantenimiento + backup manual protegidos');console.log(`Monetización F17: ${LAUNCH_MODE} | Premium ${freePremiumDuringLaunch()?'incluido gratis':'de pago'} | Stripe ${billingConfigured()?`${STRIPE_MODE} activo`:(STRIPE_PREPARED?'preparado / bloqueado':'no configurado')}`);console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad beta: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad F13: sesiones + bloqueados + exportación de datos');});
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);
+  console.log('Resiliencia F14: mantenimiento + backup manual protegidos');console.log('V18: funciones V/R+ actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad beta: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad F13: sesiones + bloqueados + exportación de datos');});
