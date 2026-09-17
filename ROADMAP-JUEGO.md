@@ -1,19 +1,23 @@
-# V/R Match · siguiente evolución del juego
+# V/R Match — evolución del juego
 
-## Ya implementado en V18.2
-La partida deja de ser una secuencia plana de Verdad/Reto. Ahora tiene cuatro fases visuales, cartas especiales, cartas contextuales por intereses compartidos, tiempos variables, una ronda final y continuidad mediante rondas extra.
+## V18.3 implementado
 
-## Fase servidor recomendada
-Para implementar correctamente las mecánicas simultáneas hay que modificar el backend Socket.IO. La propuesta es crear un estado de partida por sala con `round`, `phase`, `specialType`, `answers`, `revealed`, `stats` y `finished`.
+- Motor de turnos autoritativo en `server.js`.
+- Ronda 3: **Los dos responden** — elección A/B oculta y revelación simultánea.
+- Ronda 6: **Adivina a tu Match** — respuesta propia + predicción de la respuesta del otro.
+- Ronda 8: **Final a dos voces** — respuesta de texto secreta de ambos y revelación simultánea.
+- El servidor espera las dos respuestas antes de revelar datos.
+- Tiempo máximo de ronda sincronizada controlado por servidor.
+- Progreso compartido de partida y conteo de turnos por jugador.
+- Final compartido solo cuando ambos han completado 8 turnos.
+- Decisión final sincronizada: si ambos eligen seguir, se abren rondas extra; si cualquiera termina, se cierra la sala para ambos.
+- Reacciones incluidas en las estadísticas compartidas.
+- Se conserva Verdad/Reto, cámara, vídeo, salas privadas, lobby e invitaciones desde Match.
 
-### Respuesta secreta de ambos
-El servidor envía la misma pregunta a ambos. Cada jugador responde sin ver la respuesta contraria. Cuando existen dos respuestas, el servidor emite `game_reveal` y ambos clientes las muestran a la vez.
+## Siguiente bloque recomendado
 
-### Adivina su respuesta
-Primero cada usuario marca qué cree que responderá el rival; después responde personalmente. El servidor espera las cuatro entradas y revela coincidencias sin convertirlo en una puntuación de compatibilidad científica.
-
-### Final sincronizado
-Al completar la ronda objetivo, el servidor congela la mesa, envía un resumen compartido y ofrece `seguir`, `volver al chat` o `revancha`. Si ambos eligen seguir, se crea una fase extra sincronizada.
-
-### Historial de partida
-Guardar únicamente metadatos necesarios: mazo, rondas completadas, tipos de carta y reacciones agregadas. No es necesario conservar fotos o vídeos de pruebas para construir un historial atractivo.
+1. Historial opcional de partidas terminadas (sin guardar fotos/vídeos de retos).
+2. Más bancos de cartas sincronizadas por mazo.
+3. Cartas sincronizadas personalizadas con intereses compartidos desde servidor.
+4. Animaciones/sonido/háptica para revelaciones y Match mental.
+5. Métricas agregadas sobre abandono de partida y tipos de carta más usados, sin almacenar respuestas privadas.

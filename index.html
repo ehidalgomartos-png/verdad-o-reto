@@ -499,13 +499,43 @@
         <small class="proof-live-note">Solo se puede responder al reto usando la cámara en ese momento.</small>
       </div>
 
+      <div id="syncStartPanel" class="sync-start-panel hidden" role="status" aria-live="polite">
+        <span class="sync-kicker">⚡ MOMENTO V/R</span>
+        <div><strong id="syncStartTitle">Esta ronda la jugáis los dos</strong><small id="syncStartCopy">Las respuestas se revelan al mismo tiempo.</small></div>
+        <button class="btn btn-primary" type="button" onclick="iniciarCartaSincronizada()">Abrir carta de los dos</button>
+      </div>
+
+      <div id="syncRoundPanel" class="sync-round-panel hidden" role="region" aria-live="polite" aria-label="Carta sincronizada">
+        <div class="sync-round-head"><span id="syncModeBadge" class="sync-kicker">⚡ LOS DOS RESPONDEN</span><small id="syncRoundStatus">Respuestas ocultas hasta que contestéis ambos.</small></div>
+        <h3 id="syncPrompt">Preparando carta…</h3>
+        <p id="syncInstruction" class="sync-instruction">Elige tu respuesta y bloquéala.</p>
+        <div id="syncChoiceBlock" class="sync-answer-block hidden">
+          <small>TU RESPUESTA</small>
+          <div class="sync-choice-grid"><button id="syncChoiceA" type="button" onclick="seleccionarSyncChoice('choice','a')">A</button><button id="syncChoiceB" type="button" onclick="seleccionarSyncChoice('choice','b')">B</button></div>
+        </div>
+        <div id="syncPredictionBlock" class="sync-answer-block hidden">
+          <small>¿QUÉ CREES QUE RESPONDERÁ TU MATCH?</small>
+          <div class="sync-choice-grid"><button id="syncPredictionA" type="button" onclick="seleccionarSyncChoice('prediction','a')">A</button><button id="syncPredictionB" type="button" onclick="seleccionarSyncChoice('prediction','b')">B</button></div>
+        </div>
+        <div id="syncSecretBlock" class="sync-answer-block hidden">
+          <small>TU RESPUESTA SECRETA</small>
+          <textarea id="syncSecretAnswer" class="profile-textarea" maxlength="280" placeholder="Escribe lo que piensas…" oninput="actualizarBotonSync()"></textarea>
+        </div>
+        <button id="syncSubmitButton" class="btn btn-primary sync-submit" type="button" onclick="enviarRespuestaSincronizada()" disabled>Bloquear respuesta</button>
+        <div id="syncWaiting" class="sync-waiting hidden"><span class="spinner"></span><div><strong>Respuesta bloqueada</strong><small id="syncWaitingText">Esperando a tu Match…</small></div></div>
+        <div id="syncReveal" class="sync-reveal hidden">
+          <span>✨ REVELACIÓN</span><strong id="syncRevealHeadline">Ya habéis respondido</strong><p id="syncRevealResult"></p>
+          <button class="btn btn-secondary" type="button" onclick="cerrarRevelacionSync()">Continuar</button>
+        </div>
+      </div>
+
       <div id="gameFinalPanel" class="game-final-panel hidden" role="status" aria-live="polite">
         <span class="game-final-kicker">🏁 FINAL DESBLOQUEADO</span>
         <h3>Habéis llegado hasta el final.</h3>
         <p>La partida ya ha cumplido su objetivo: romper el hielo. Podéis seguir jugando o volver a la conversación.</p>
         <div class="game-final-stats">
           <div><strong id="gameStatTurns">0</strong><small>rondas tuyas</small></div>
-          <div><strong id="gameStatSpecial">0</strong><small>cartas especiales</small></div>
+          <div><strong id="gameStatSpecial">0</strong><small>momentos sincronizados</small></div>
           <div><strong id="gameStatReactions">0</strong><small>reacciones</small></div>
         </div>
         <div class="game-final-actions"><button class="btn btn-secondary" type="button" onclick="continuarPartida()">Seguir jugando</button><button class="btn btn-primary" type="button" onclick="terminarPartidaFinal()">Terminar partida</button></div>
@@ -768,6 +798,12 @@
     let gamePartnerProfile = null;
     let currentCardMeta = { special:false, personalized:false, final:false, quick:false, seconds:60 };
     let gameStats = { turns:0, truths:0, dares:0, special:0, personalized:0, reactions:0 };
+    let serverGameProgress = { yourTurns:0, opponentTurns:0, targetTurns:GAME_FINAL_ROUND, reactions:0, syncRounds:0, extended:false, completed:false };
+    let currentSyncRound = null;
+    let syncChoice = '';
+    let syncPrediction = '';
+    let syncIsInitiator = false;
+    let syncSubmitted = false;
     const specialRoundsUsed = new Set();
     let enlaceSalaActual = '';
     let adultoPendiente = false;
@@ -1284,7 +1320,8 @@
     }
 
     function fasePartida(round=rondaActual) {
-      if(gameExtended || round>GAME_FINAL_ROUND) return {index:4,label:'RONDA EXTRA',hint:'Ya rompisteis el hielo. Ahora mandáis vosotros.'};
+      if(gameExtended) return {index:4,label:'RONDA EXTRA',hint:'Ya rompisteis el hielo. Ahora mandáis vosotros.'};
+      if(round>GAME_FINAL_ROUND) return {index:4,label:'ESPERANDO FINAL',hint:'Tu Match está completando su última ronda.'};
       if(round<=2) return {index:1,label:'ROMPER EL HIELO',hint:'Empezad fácil y coged confianza.'};
       if(round<=4) return {index:2,label:'CONECTAR',hint:'Más personalidad, menos respuestas automáticas.'};
       if(round<=6) return {index:3,label:'SUBIR EL NIVEL',hint:'Cartas con más intención y sorpresa.'};
@@ -1316,8 +1353,12 @@
       gameFinalPending=false;
       currentCardMeta={special:false,personalized:false,final:false,quick:false,seconds:60};
       gameStats={turns:0,truths:0,dares:0,special:0,personalized:0,reactions:0};
+      serverGameProgress={yourTurns:0,opponentTurns:0,targetTurns:GAME_FINAL_ROUND,reactions:0,syncRounds:0,extended:false,completed:false};
+      currentSyncRound=null;syncChoice='';syncPrediction='';syncIsInitiator=false;syncSubmitted=false;
       specialRoundsUsed.clear();
       if($('gameFinalPanel')) $('gameFinalPanel').classList.add('hidden');
+      if($('syncStartPanel')) $('syncStartPanel').classList.add('hidden');
+      if($('syncRoundPanel')) $('syncRoundPanel').classList.add('hidden');
       aplicarEstiloCarta({});
       actualizarProgresoPartida();
     }
@@ -1348,39 +1389,46 @@
 
     function completarTurnoLocal({timeout=false}={}) {
       gameStats.turns += 1;
-      if(!gameExtended && rondaActual>=GAME_FINAL_ROUND) {
-        mostrarFinalPartida(timeout);
-        return;
-      }
       rondaActual += 1;
       actualizarProgresoPartida();
+      if(!gameExtended && rondaActual>GAME_FINAL_ROUND) {
+        $('gamePhaseLabel').textContent='ESPERANDO FINAL';
+        $('gamePhaseHint').textContent=timeout?'Tu último turno terminó por tiempo. Espera a que tu Match complete el suyo.':'Tu parte está completa. Espera a que tu Match llegue al final.';
+      }
     }
 
-    function mostrarFinalPartida(timeout=false) {
+    function mostrarFinalPartida(data={}) {
       gameFinalPending=true;
+      miTurno=false;
+      detenerTemporizador();
       $('controlesJuego').classList.add('hidden');
+      $('syncStartPanel').classList.add('hidden');
+      $('syncRoundPanel').classList.add('hidden');
       $('gameFinalPanel').classList.remove('hidden');
-      $('gameStatTurns').textContent=String(gameStats.turns);
-      $('gameStatSpecial').textContent=String(gameStats.special);
-      $('gameStatReactions').textContent=String(gameStats.reactions);
-      $('gamePhaseLabel').textContent='FINAL COMPLETADO';
-      $('gamePhaseHint').textContent=timeout?'El último turno terminó por tiempo. Podéis seguir si queréis.':'Ya tenéis conversación de sobra para continuar fuera del juego.';
+      $('gameStatTurns').textContent=String(data.yourTurns ?? gameStats.turns);
+      $('gameStatSpecial').textContent=String(data.syncRounds ?? serverGameProgress.syncRounds ?? 0);
+      $('gameStatReactions').textContent=String(data.reactions ?? serverGameProgress.reactions ?? gameStats.reactions);
+      $('gamePhaseLabel').textContent='FINAL COMPARTIDO';
+      $('gamePhaseHint').textContent='Los dos habéis completado la partida. Ahora decidís juntos qué hacer.';
+      const cont=$('gameFinalPanel').querySelector('.game-final-actions .btn-secondary');
+      if(cont){cont.disabled=false;cont.textContent='Seguir jugando';}
     }
 
     function continuarPartida() {
-      gameExtended=true;
-      gameFinalPending=false;
-      rondaActual=GAME_FINAL_ROUND+1;
-      $('gameFinalPanel').classList.add('hidden');
-      actualizarProgresoPartida();
-      if(miTurno) $('controlesJuego').classList.remove('hidden');
-      actualizarBarraTurno(miTurno,miTurno?'Tu turno · ronda extra':'Esperando rival');
-      mostrarToast('Ronda extra activada. Sin límite de rondas.','info');
+      if(!miSala||!gameFinalPending)return;
+      const btn=$('gameFinalPanel').querySelector('.game-final-actions .btn-secondary');
+      if(btn){btn.disabled=true;btn.textContent='Esperando al otro…';}
+      socket.emit('vr_game_decision',{sala:miSala,decision:'continue'},(res)=>{
+        if(res&&!res.ok){if(btn){btn.disabled=false;btn.textContent='Seguir jugando';}mostrarToast(res.error||'No se pudo guardar la decisión.','error');}
+        else if(res?.waiting)mostrarToast('Has elegido seguir. Falta la decisión de tu Match.','info');
+      });
     }
 
     function terminarPartidaFinal() {
-      mostrarToast(origenPartida==='dating'?'Partida terminada. Volvemos a la conversación.':'Partida terminada.','info');
-      abandonarPartida();
+      if(!miSala)return abandonarPartidaLocal();
+      socket.emit('vr_game_decision',{sala:miSala,decision:'finish'},(res)=>{
+        if(res&&!res.ok)mostrarToast(res.error||'No se pudo terminar la partida.','error');
+      });
     }
 
     const cartasUsadas = {
@@ -3178,6 +3226,165 @@
       });
     });
 
+    function modoSincronizadoParaRonda() {
+      if(gameExtended || gameFinalPending) return null;
+      if(rondaActual===3) return 'choice';
+      if(rondaActual===6) return 'guess';
+      if(rondaActual===8) return 'secret';
+      return null;
+    }
+
+    function copyModoSync(mode) {
+      if(mode==='guess') return {title:'Adivina a tu Match',copy:'Primero responde por ti y después predice la respuesta de la otra persona.'};
+      if(mode==='secret') return {title:'Final a dos voces',copy:'Los dos escribís sin ver al otro. Las respuestas se revelan juntas.'};
+      return {title:'Los dos responden',copy:'Elegid en secreto. Solo se revela cuando ambos hayáis contestado.'};
+    }
+
+    function mostrarControlesTurno() {
+      $('controlesJuego').classList.add('hidden');
+      $('syncStartPanel').classList.add('hidden');
+      if(!miTurno || gameFinalPending || currentSyncRound) return;
+      const mode=modoSincronizadoParaRonda();
+      if(mode){
+        const copy=copyModoSync(mode);
+        $('syncStartTitle').textContent=copy.title;
+        $('syncStartCopy').textContent=copy.copy;
+        $('syncStartPanel').classList.remove('hidden');
+        aplicarEstiloCarta({special:true,final:mode==='secret'});
+      } else {
+        $('controlesJuego').classList.remove('hidden');
+        aplicarEstiloCarta({});
+      }
+    }
+
+    function iniciarCartaSincronizada() {
+      if(!miTurno||!miSala)return mostrarToast('Ahora mismo no es tu turno.','warn');
+      const mode=modoSincronizadoParaRonda();
+      if(!mode)return mostrarControlesTurno();
+      $('syncStartPanel').classList.add('hidden');
+      actualizarBarraTurno(false,'Preparando carta compartida');
+      socket.emit('vr_sync_start',{sala:miSala,mode},(res)=>{
+        if(res&&!res.ok){mostrarToast(res.error||'No se pudo abrir la carta sincronizada.','error');actualizarBarraTurno(true,'Tu turno');mostrarControlesTurno();}
+      });
+    }
+
+    function resetSyncForm() {
+      syncChoice='';syncPrediction='';syncSubmitted=false;
+      ['syncChoiceA','syncChoiceB','syncPredictionA','syncPredictionB'].forEach(id=>$(id)?.classList.remove('selected'));
+      $('syncSecretAnswer').value='';
+      $('syncWaiting').classList.add('hidden');
+      $('syncReveal').classList.add('hidden');
+      $('syncSubmitButton').classList.remove('hidden');
+      $('syncSubmitButton').disabled=true;
+      $('syncSubmitButton').textContent='Bloquear respuesta';
+    }
+
+    function configurarRondaSync(data={}) {
+      currentSyncRound=data;syncIsInitiator=data.initiatorSocketId===socket.id;resetSyncForm();
+      $('syncRoundPanel').classList.remove('hidden');$('syncStartPanel').classList.add('hidden');$('controlesJuego').classList.add('hidden');
+      $('syncPrompt').textContent=data.prompt||'Carta V/R';
+      $('syncChoiceBlock').classList.toggle('hidden',data.mode==='secret');
+      $('syncPredictionBlock').classList.toggle('hidden',data.mode!=='guess');
+      $('syncSecretBlock').classList.toggle('hidden',data.mode!=='secret');
+      if(data.mode!=='secret'){
+        $('syncChoiceA').textContent=`A · ${data.options?.a||'Opción A'}`;$('syncChoiceB').textContent=`B · ${data.options?.b||'Opción B'}`;
+        $('syncPredictionA').textContent=`A · ${data.options?.a||'Opción A'}`;$('syncPredictionB').textContent=`B · ${data.options?.b||'Opción B'}`;
+      }
+      if(data.mode==='guess'){
+        $('syncModeBadge').textContent='🧠 ADIVINA A TU MATCH';$('syncInstruction').textContent='Marca tu respuesta y luego predice la de tu Match. Nadie verá nada hasta el final.';
+      }else if(data.mode==='secret'){
+        $('syncModeBadge').textContent='🏁 FINAL · RESPUESTA SECRETA';$('syncInstruction').textContent='Escribid los dos. Las respuestas se abrirán al mismo tiempo.';
+      }else{
+        $('syncModeBadge').textContent='⚡ LOS DOS RESPONDEN';$('syncInstruction').textContent='Elegid A o B en secreto. La coincidencia se revela cuando ambos bloqueéis la respuesta.';
+      }
+      $('syncRoundStatus').textContent=`Tenéis unos ${Number(data.timeoutSeconds)||90} segundos para responder.`;
+      aplicarEstiloCarta({special:true,final:data.mode==='secret'});
+      miTurno=false;actualizarBarraTurno(false,'Los dos estáis jugando');
+    }
+
+    function seleccionarSyncChoice(kind,value) {
+      if(syncSubmitted||!currentSyncRound||!['a','b'].includes(value))return;
+      if(kind==='prediction')syncPrediction=value;else syncChoice=value;
+      const ids=kind==='prediction'?['syncPredictionA','syncPredictionB']:['syncChoiceA','syncChoiceB'];
+      ids.forEach((id,i)=>$(id).classList.toggle('selected',(i===0?'a':'b')===value));
+      actualizarBotonSync();
+    }
+
+    function actualizarBotonSync() {
+      if(!currentSyncRound)return;
+      let ready=false;
+      if(currentSyncRound.mode==='secret')ready=Boolean($('syncSecretAnswer').value.trim());
+      else if(currentSyncRound.mode==='guess')ready=Boolean(syncChoice&&syncPrediction);
+      else ready=Boolean(syncChoice);
+      $('syncSubmitButton').disabled=!ready||syncSubmitted;
+    }
+
+    function enviarRespuestaSincronizada() {
+      if(!currentSyncRound||syncSubmitted)return;
+      const payload={sala:miSala,id:currentSyncRound.id};
+      if(currentSyncRound.mode==='secret')payload.answer=$('syncSecretAnswer').value.trim();
+      else {payload.choice=syncChoice;if(currentSyncRound.mode==='guess')payload.prediction=syncPrediction;}
+      syncSubmitted=true;$('syncSubmitButton').disabled=true;$('syncSubmitButton').textContent='Bloqueando…';
+      socket.emit('vr_sync_submit',payload,(res)=>{
+        if(res&&!res.ok){syncSubmitted=false;$('syncSubmitButton').textContent='Bloquear respuesta';actualizarBotonSync();return mostrarToast(res.error||'No se pudo enviar la respuesta.','error');}
+        $('syncSubmitButton').classList.add('hidden');$('syncWaiting').classList.remove('hidden');$('syncWaitingText').textContent=res?.waiting?'Esperando a tu Match…':'Revelando respuestas…';
+      });
+    }
+
+    function cerrarRevelacionSync() {
+      $('syncRoundPanel').classList.add('hidden');
+      currentSyncRound=null;syncSubmitted=false;syncChoice='';syncPrediction='';
+      aplicarEstiloCarta({});
+      if(gameFinalPending)return;
+      if(miTurno){actualizarBarraTurno(true,gameExtended?'Tu turno · ronda extra':'Tu turno');mostrarControlesTurno();}
+      else actualizarBarraTurno(false,'Esperando');
+    }
+
+    socket.on('vr_sync_round_started',configurarRondaSync);
+    socket.on('vr_sync_status',(data={})=>{
+      if(!currentSyncRound||data.id!==currentSyncRound.id)return;
+      $('syncRoundStatus').textContent=`${Number(data.submitted)||0}/${Number(data.total)||2} respuestas bloqueadas`;
+      if(data.youSubmitted){$('syncWaiting').classList.remove('hidden');$('syncWaitingText').textContent=(Number(data.submitted)||0)>=2?'Revelando respuestas…':'Esperando a tu Match…';}
+    });
+    socket.on('vr_sync_reveal',(data={})=>{
+      if(!currentSyncRound||data.id!==currentSyncRound.id)currentSyncRound=data;
+      $('syncWaiting').classList.add('hidden');$('syncSubmitButton').classList.add('hidden');$('syncReveal').classList.remove('hidden');
+      let headline='Respuestas reveladas',result='';
+      if(data.mode==='secret'){
+        headline='Dos respuestas. Cero pistas.';
+        result=`Tú:\n“${data.you?.answer||'—'}”\n\n${data.opponent?.name||rivalNombre}:\n“${data.opponent?.answer||'—'}”`;
+      }else if(data.mode==='guess'){
+        const a=data.you?.guessCorrect?'✓ Acertaste':'✕ No acertaste';const b=data.opponent?.guessCorrect?'✓ Te adivinó':'✕ No te adivinó';
+        headline=data.you?.guessCorrect&&data.opponent?.guessCorrect?'🧠 Os habéis leído la mente':data.you?.guessCorrect?'✨ Le conoces bastante bien':data.opponent?.guessCorrect?'😏 Tu Match te tenía calado/a':'😂 Todavía queda mucho por descubrir';
+        result=`Tu respuesta: ${data.you?.choiceText||'—'}\nTu predicción: ${data.you?.predictionText||'—'} · ${a}\n\n${data.opponent?.name||rivalNombre}: ${data.opponent?.choiceText||'—'}\nSu predicción sobre ti: ${data.opponent?.predictionText||'—'} · ${b}`;
+      }else{
+        headline=data.matched?'✨ ¡Coincidencia!':'👀 Diferentes, y eso da conversación';
+        result=`Tú: ${data.you?.choiceText||'—'}\n${data.opponent?.name||rivalNombre}: ${data.opponent?.choiceText||'—'}`;
+      }
+      $('syncRevealHeadline').textContent=headline;$('syncRevealResult').textContent=result;
+      $('barraReacciones').classList.remove('hidden');
+      if(syncIsInitiator){gameStats.special+=1;completarTurnoLocal();}
+      miTurno=Boolean(data.nextTurn);
+      actualizarBarraTurno(false,'Revelación');
+    });
+    socket.on('vr_sync_cancelled',(data={})=>{
+      if(syncIsInitiator)completarTurnoLocal({timeout:true});
+      currentSyncRound=null;syncSubmitted=false;$('syncRoundPanel').classList.add('hidden');miTurno=Boolean(data.yourTurn);
+      actualizarCartaAnimada('La carta sincronizada terminó por tiempo. La partida continúa.','TIEMPO AGOTADO');
+      mostrarToast('La ronda compartida terminó por tiempo.','warn');
+      if(miTurno){actualizarBarraTurno(true,'Tu turno');mostrarControlesTurno();}else actualizarBarraTurno(false,'Esperando');
+    });
+    socket.on('vr_game_progress',(data={})=>{serverGameProgress={...serverGameProgress,...data};});
+    socket.on('vr_game_complete',(data={})=>{serverGameProgress={...serverGameProgress,...data,completed:true};mostrarFinalPartida(data);});
+    socket.on('vr_game_decision_wait',()=>{$('gamePhaseHint').textContent='Has elegido seguir. Esperando la decisión de tu Match.';});
+    socket.on('vr_game_continued',(data={})=>{
+      gameExtended=true;gameFinalPending=false;rondaActual=Math.max(rondaActual,GAME_FINAL_ROUND+1);$('gameFinalPanel').classList.add('hidden');
+      const btn=$('gameFinalPanel').querySelector('.game-final-actions .btn-secondary');if(btn){btn.disabled=false;btn.textContent='Seguir jugando';}
+      miTurno=Boolean(data.yourTurn);actualizarProgresoPartida();mostrarToast('Los dos habéis elegido seguir. Rondas extra activadas.','success');
+      if(miTurno){actualizarBarraTurno(true,'Tu turno · ronda extra');mostrarControlesTurno();}else actualizarBarraTurno(false,'Esperando rival');
+    });
+    socket.on('vr_game_finished',()=>{mostrarToast(origenPartida==='dating'?'Partida terminada. Volvemos al chat.':'Partida terminada.','info');setTimeout(abandonarPartidaLocal,350);});
+
     function retarUsuario(oponenteID, boton) {
       boton.disabled = true; boton.textContent = 'Enviando…';
       socket.emit('retar_jugador', { oponenteID, mazo: mazoElegido }, (res) => {
@@ -3203,8 +3410,8 @@
       if (datos.creadorID === socket.id) {
         actualizarCartaAnimada('¡Match encontrado! Elige VERDAD o RETO para empezar.', 'TU TURNO');
         miTurno = true;
-        $('controlesJuego').classList.remove('hidden');
         actualizarBarraTurno(true, 'Tu turno');
+        mostrarControlesTurno();
       } else {
         actualizarCartaAnimada('Te han retado. Espera a que tu oponente elija.', 'ESPERANDO');
         miTurno = false;
@@ -3252,9 +3459,9 @@
 
       if (soyYoQuienEmpieza) {
         actualizarCartaAnimada('¡Tu amigo se ha conectado! Te toca empezar.', 'TU TURNO');
-        $('controlesJuego').classList.remove('hidden');
         miTurno = true;
         actualizarBarraTurno(true, 'Tu turno');
+        mostrarControlesTurno();
       } else {
         actualizarCartaAnimada('¡Te has unido a la partida! Espera a que tu oponente empiece.', 'ESPERANDO');
         $('controlesJuego').classList.add('hidden');
@@ -3278,6 +3485,7 @@
       if (!miTurno) return mostrarToast('Ahora mismo no es tu turno.','warn');
       if (!miSala) return mostrarToast('Primero necesitas una sala activa.','warn');
       if(gameFinalPending) return mostrarToast('Elige si quieres terminar o seguir jugando.','info');
+      if(modoSincronizadoParaRonda()) return iniciarCartaSincronizada();
       const cartaInfo = obtenerCartaParaRonda(tipo);
       const carta = cartaInfo.raw;
       ultimaCartaJugada = carta;
@@ -3299,7 +3507,14 @@
       miTurno = false;
       actualizarBarraTurno(false, cartaInfo.meta.quick ? 'Respuesta rápida' : 'Esperando respuesta');
       iniciarTemporizador(cartaInfo.meta.seconds);
-      socket.emit('accion_juego', { sala: miSala, tipo, textoCarta: carta });
+      socket.timeout(8000).emit('accion_juego', { sala: miSala, tipo, textoCarta: carta }, (error,res) => {
+        if(error || !res?.ok){
+          detenerTemporizador();
+          $('seccionRespuesta').classList.add('hidden');$('seccionPrueba').classList.add('hidden');
+          miTurno=true;actualizarBarraTurno(true,'Tu turno');mostrarControlesTurno();
+          mostrarToast(res?.error||'No se pudo iniciar la carta. Inténtalo de nuevo.','error');
+        }
+      });
     }
 
     socket.on('actualizar_mesa', (datos) => {
@@ -3326,23 +3541,32 @@
       if (!respuesta) return mostrarToast('Escribe una respuesta antes de enviarla.','warn');
       detenerTemporizador();
       socket.emit('parar_escribir', miSala);
-      actualizarCartaAnimada(`Tu respuesta:\n\n“${respuesta}”\n\n¡Enviado!`, 'RESPUESTA ENVIADA');
+      actualizarCartaAnimada(`Enviando tu respuesta…`, 'ENVIANDO');
       $('seccionRespuesta').classList.add('hidden');
-      $('inputRespuesta').value = '';
       miTurno = false;
-      actualizarBarraTurno(false,'Esperando reacción');
-      socket.emit('enviar_respuesta', { sala: miSala, respuesta, pregunta: ultimaCartaJugada });
-      completarTurnoLocal();
+      actualizarBarraTurno(false,'Enviando respuesta');
+      socket.timeout(8000).emit('enviar_respuesta', { sala: miSala, respuesta, pregunta: ultimaCartaJugada }, (error,res) => {
+        if(error || !res?.ok){
+          $('inputRespuesta').value=respuesta;$('seccionRespuesta').classList.remove('hidden');
+          actualizarCartaAnimada(`No se pudo enviar todavía. Tu respuesta sigue aquí para reintentarlo.`, 'REINTENTAR');
+          actualizarBarraTurno(false,'Reintenta la respuesta');
+          return mostrarToast(res?.error||'No se pudo entregar la respuesta. Inténtalo otra vez.','error');
+        }
+        $('inputRespuesta').value='';
+        actualizarCartaAnimada(`Tu respuesta:\n\n“${respuesta}”\n\n¡Enviado!`, 'RESPUESTA ENVIADA');
+        actualizarBarraTurno(false,'Esperando reacción');
+        completarTurnoLocal();
+      });
     }
 
     socket.on('recibir_respuesta', (data) => {
       const info=analizarCarta(data.pregunta||'','verdad');
       aplicarEstiloCarta(info.meta);
-      actualizarCartaAnimada(`Pregunta:\n“${info.text}”\n\nRespuesta del oponente:\n“${data.respuesta}”\n\n${gameFinalPending?'Decide si quieres seguir jugando.':'¡Te toca!'}`, info.meta.special?'RESPUESTA · V/R':'RESPUESTA');
+      actualizarCartaAnimada(`Pregunta:\n“${info.text}”\n\nRespuesta del oponente:\n“${data.respuesta}”\n\n¡Te toca!`, info.meta.special?'RESPUESTA · V/R':'RESPUESTA');
       $('barraReacciones').classList.remove('hidden');
       miTurno = true;
-      if(!gameFinalPending) $('controlesJuego').classList.remove('hidden');
-      actualizarBarraTurno(!gameFinalPending,gameFinalPending?'Final completado': 'Tu turno');
+      actualizarBarraTurno(true,'Tu turno');
+      mostrarControlesTurno();
     });
 
     function comprimirImagen(file, maxSide=1280, quality=.78) {
@@ -3588,16 +3812,16 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
       mostrarPruebaMedia(tipo, media.dataUrl || '');
       $('barraReacciones').classList.remove('hidden');
       miTurno = true;
-      if(!gameFinalPending) $('controlesJuego').classList.remove('hidden');
-      actualizarBarraTurno(!gameFinalPending,gameFinalPending?'Final completado':'Tu turno');
+      actualizarBarraTurno(true,'Tu turno');
+      mostrarControlesTurno();
     });
 
     socket.on('tiempo_agotado_remoto', () => {
       detenerTemporizador();
       actualizarCartaAnimada('El tiempo de tu oponente se ha agotado. Ahora te toca a ti.','NUEVO TURNO');
       miTurno = true;
-      if(!gameFinalPending) $('controlesJuego').classList.remove('hidden');
-      actualizarBarraTurno(!gameFinalPending,gameFinalPending?'Final completado':'Tu turno');
+      actualizarBarraTurno(true,'Tu turno');
+      mostrarControlesTurno();
     });
 
     socket.on('oponente_abandono', () => {
@@ -3616,7 +3840,7 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
       miSala=''; rivalNombre=''; rivalAvatar=''; rondaActual=1; enlaceSalaActual=''; gamePartnerProfile=null;
       resetExperienciaPartida();
       limpiarPruebaVisual();
-      $('zonaInvitacion').classList.add('hidden'); $('controlesJuego').classList.add('hidden');
+      $('zonaInvitacion').classList.add('hidden'); $('controlesJuego').classList.add('hidden'); $('syncStartPanel').classList.add('hidden'); $('syncRoundPanel').classList.add('hidden');
       if (origenPartida === 'dating' && currentChatMatch) { showScreen('pantallaChat'); renderChat(); }
       else showScreen(origenPartida === 'dating' ? 'pantallaDescubrir' : 'pantallaMenu');
       actualizarBarraTurno(false,'Esperando');

@@ -1,8 +1,8 @@
 {
   "name": "vr-match",
-  "version": "15.0.0",
+  "version": "18.3.0",
   "private": true,
-  "description": "V/R Match dating app - launch readiness, optional Stripe billing, persistent infrastructure checklist, backups, privacy and PWA",
+  "description": "V/R Match dating app - juego sincronizado, PWA, seguridad, privacidad y herramientas de producción",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

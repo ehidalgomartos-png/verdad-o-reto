@@ -1,23 +1,32 @@
-V/R MATCH · V18.2 · JUEGO PROGRESIVO
+V/R MATCH 18.3.0 — JUEGO SINCRONIZADO
+17/09/2026
 
-Cambios principales:
-- Progresión visual de partida en 4 fases: Romper el hielo, Conectar, Subir el nivel y Final.
-- Ronda final en la ronda 8 y posibilidad de continuar con rondas extra.
-- Cartas V/R especiales en momentos concretos de la partida.
-- Cartas personalizadas por intereses compartidos cuando la partida nace de un Match y esos datos están disponibles.
-- Temporizador dinámico por tipo de carta: aproximadamente 30 a 90 segundos.
-- Pantalla de cierre con resumen local de rondas, cartas especiales y reacciones.
-- Estilos visuales propios para cartas especiales, personalizadas y finales.
-- Contador de ronda cambiado a progreso local del jugador para evitar el desfase visual del sistema anterior.
-- El texto al salir de una partida se ha hecho neutral: terminar o salir, en lugar de asumir abandono.
-- Página Cómo funciona actualizada con la nueva progresión.
-- Service Worker actualizado a vr-match-shell-v18-2-0.
+ARCHIVOS PRINCIPALES MODIFICADOS
+- index.html
+- styles.css
+- server.js
+- package.json
+- sw.js
+- como-funciona.html
 
-Compatibilidad:
-Estas mejoras reutilizan los eventos Socket.IO existentes. No requieren nuevos eventos del servidor.
+NOVEDADES
+- Estado de turno autoritativo en servidor.
+- Los dos responden (A/B secreto + revelación simultánea).
+- Adivina a tu Match (respuesta + predicción).
+- Final a dos voces (texto secreto de ambos).
+- Final compartido de partida tras 8 turnos de cada jugador.
+- Decisión sincronizada para terminar o continuar con rondas extra.
+- Progreso y estadísticas compartidas.
+- El servidor controla expiración de cartas sincronizadas.
 
-Siguiente fase que SÍ requiere backend/socket:
-- Respuesta secreta simultánea de ambos jugadores.
-- Adivina la respuesta del rival y revelado simultáneo.
-- Estado final sincronizado entre los dos dispositivos.
-- Estadísticas compartidas de la partida persistidas en servidor.
+COMPATIBILIDAD
+- Node.js 22.x.
+- Express 4.21.x.
+- Socket.IO 4.8.x.
+- SQLite / better-sqlite3 actual.
+- No requiere nuevas dependencias npm ni nuevas variables de entorno.
+- No requiere migración de base de datos para el nuevo juego.
+
+IMPORTANTE
+Para desplegar esta versión deben actualizarse frontend Y server.js juntos.
+Probar siempre con dos usuarios distintos antes de darla por validada.

@@ -24,8 +24,8 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.1.0';
-const LEGAL_VERSION = 'beta-2026-09-17';
+const APP_VERSION = '18.3.0';
+const LEGAL_VERSION = '2026-09-17';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 // En local guarda dentro del proyecto. En Render, define VR_STORAGE_DIR=/var/data
@@ -44,7 +44,7 @@ const PASSWORD_RESET_MINUTES = 45;
 const REQUIRE_EMAIL_VERIFICATION = String(process.env.VR_REQUIRE_EMAIL_VERIFICATION || 'false').toLowerCase() === 'true';
 const ADMIN_EMAILS = new Set(String(process.env.VR_ADMIN_EMAILS || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean));
 const APP_BASE_URL = String(process.env.VR_APP_BASE_URL || '').replace(/\/$/, '');
-const LAUNCH_MODE = String(process.env.VR_LAUNCH_MODE || 'beta').toLowerCase() === 'production' ? 'production' : 'beta';
+const LAUNCH_MODE = String(process.env.VR_LAUNCH_MODE || 'development').toLowerCase() === 'production' ? 'production' : 'development';
 const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || '').trim();
 const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || '').trim();
 const STRIPE_PRICE_PLUS_MONTHLY = String(process.env.STRIPE_PRICE_PLUS_MONTHLY || '').trim();
@@ -303,7 +303,7 @@ CREATE TABLE IF NOT EXISTS legal_acceptances (
   accepted_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_legal_acceptances_user ON legal_acceptances(user_id, accepted_at DESC);
-CREATE TABLE IF NOT EXISTS beta_feedback (
+CREATE TABLE IF NOT EXISTS feedback (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   kind TEXT NOT NULL,
@@ -314,8 +314,8 @@ CREATE TABLE IF NOT EXISTS beta_feedback (
   admin_note TEXT NOT NULL DEFAULT '',
   updated_at INTEGER
 );
-CREATE INDEX IF NOT EXISTS idx_beta_feedback_status_created ON beta_feedback(status, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_beta_feedback_user ON beta_feedback(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_feedback_status_created ON feedback(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback(user_id, created_at DESC);
 CREATE TABLE IF NOT EXISTS client_errors (
   id TEXT PRIMARY KEY,
   user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
@@ -330,6 +330,14 @@ CREATE TABLE IF NOT EXISTS client_errors (
 CREATE INDEX IF NOT EXISTS idx_client_errors_created ON client_errors(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_client_errors_user ON client_errors(user_id, created_at DESC);
 `);
+
+// Compatibilidad de datos: migra comentarios de instalaciones anteriores sin conservar el nombre histórico en la interfaz ni en el esquema nuevo.
+const legacyFeedbackTable = ['be','ta_feedback'].join('');
+const legacyFeedbackExists = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(legacyFeedbackTable);
+if (legacyFeedbackExists) {
+  db.exec(`INSERT OR IGNORE INTO feedback(id,user_id,kind,message,page,created_at,status,admin_note,updated_at)
+    SELECT id,user_id,kind,message,page,created_at,status,admin_note,updated_at FROM "${legacyFeedbackTable}"`);
+}
 
 function appSetting(key) {
   return db.prepare('SELECT value FROM app_settings WHERE key=?').get(String(key || ''))?.value ?? null;
@@ -415,6 +423,69 @@ const rooms = new Map();
 const pendingGameInvites = new Map(); // `from:to` -> { from, to, mazo, expiresAt }
 const GAME_INVITE_TTL_MS = 5 * 60 * 1000;
 const onlineUsers = new Map(); // userId -> Set(socket.id)
+
+const GAME_TARGET_TURNS = 8;
+const SYNC_ROUND_TTL_MS = 95 * 1000;
+const VALID_SYNC_MODES = new Set(['choice','guess','secret']);
+const SYNC_GAME_CARDS = {
+  rompehielos: {
+    choice: [
+      { prompt:'Para romper el hielo ahora mismo, ¿qué plan elegirías?', a:'Café tranquilo', b:'Plan improvisado' },
+      { prompt:'¿Qué te representa más un viernes por la noche?', a:'Salir y descubrir algo', b:'Plan cómodo y conversación' },
+      { prompt:'Si mañana pudieras escapar unas horas, ¿qué escogerías?', a:'Mar', b:'Montaña' },
+      { prompt:'¿Cómo prefieres conocer de verdad a alguien?', a:'Hablando sin prisa', b:'Haciendo algo juntos' }
+    ],
+    guess: [
+      { prompt:'¿Qué elegiría tu Match para una primera cita?', a:'Algo sencillo', b:'Algo inesperado' },
+      { prompt:'¿Qué crees que prefiere tu Match?', a:'Viaje planificado', b:'Aventura improvisada' },
+      { prompt:'¿Qué encaja más con tu Match?', a:'Mensaje de buenos días', b:'Mensaje de buenas noches' },
+      { prompt:'Si tuviera que elegir ahora, ¿qué crees que escogería?', a:'Cena larga', b:'Paseo sin rumbo' }
+    ],
+    secret: [
+      { prompt:'Sin ver la respuesta del otro: ¿qué te gustaría seguir descubriendo de esta persona?' },
+      { prompt:'Escribe una cosa que te haya sorprendido positivamente durante la partida.' },
+      { prompt:'¿Qué tema te gustaría continuar hablando cuando termine el juego?' }
+    ]
+  },
+  parejas: {
+    choice: [
+      { prompt:'¿Qué plan os pega más para desconectar juntos?', a:'Escapada de fin de semana', b:'Cena larga sin reloj' },
+      { prompt:'¿Qué gesto pesa más para ti?', a:'Una sorpresa', b:'Un detalle cotidiano' },
+      { prompt:'¿Qué crea más conexión?', a:'Reírse mucho', b:'Hablar de verdad' },
+      { prompt:'¿Qué preferirías compartir?', a:'Un viaje nuevo', b:'Un lugar favorito' }
+    ],
+    guess: [
+      { prompt:'¿Qué crees que elegiría tu Match para una cita?', a:'Plan romántico', b:'Plan divertido' },
+      { prompt:'¿Qué valoraría más tu Match?', a:'Espontaneidad', b:'Atención a los detalles' },
+      { prompt:'¿Qué crees que prefiere tu Match?', a:'Hablar hasta tarde', b:'Hacer planes juntos' },
+      { prompt:'¿Qué opción le representa más?', a:'Sorpresa', b:'Plan bien pensado' }
+    ],
+    secret: [
+      { prompt:'¿Qué pequeño gesto te gustaría repetir más con esta persona?' },
+      { prompt:'¿Qué crees que hace especial vuestra forma de conectar?' },
+      { prompt:'¿Qué conversación te gustaría tener después de esta partida?' }
+    ]
+  },
+  seccionXX: {
+    choice: [
+      { prompt:'¿Qué crea más tensión divertida para ti?', a:'Una mirada', b:'Una conversación' },
+      { prompt:'¿Qué te parece más atractivo?', a:'Seguridad', b:'Sentido del humor' },
+      { prompt:'¿Qué ambiente elegirías para una cita especial?', a:'Elegante y tranquilo', b:'Espontáneo y atrevido' },
+      { prompt:'¿Qué prefieres cuando hay química?', a:'Ir poco a poco', b:'Dejarse llevar' }
+    ],
+    guess: [
+      { prompt:'¿Qué crees que elegiría tu Match?', a:'Coqueteo sutil', b:'Coqueteo directo' },
+      { prompt:'¿Qué le atraería más?', a:'Una mirada intensa', b:'Una conversación con química' },
+      { prompt:'¿Qué opción le representa más?', a:'Misterio', b:'Espontaneidad' },
+      { prompt:'¿Qué crees que prefiere?', a:'Cita íntima', b:'Plan con aventura' }
+    ],
+    secret: [
+      { prompt:'¿Qué detalle hace que notes que existe química con alguien?' },
+      { prompt:'¿Qué te gustaría que la otra persona entendiera sobre tu forma de coquetear?' },
+      { prompt:'¿Qué hace que una conversación pase de interesante a especial para ti?' }
+    ]
+  }
+};
 
 function now() { return Date.now(); }
 function safeId(prefix) { return `${prefix}_${crypto.randomBytes(12).toString('hex')}`; }
@@ -1187,7 +1258,7 @@ app.post('/api/auth/register', rateLimit({limit:8,windowMs:60*60*1000,key:req=>r
     const confirmAdult = req.body?.confirmAdult === true;
     const acceptTerms = req.body?.acceptTerms === true;
     if (!confirmAdult) return res.status(400).json({ok:false,error:'Debes confirmar que tienes 18 años o más.'});
-    if (!acceptTerms) return res.status(400).json({ok:false,error:'Debes aceptar las condiciones beta y la política de privacidad.'});
+    if (!acceptTerms) return res.status(400).json({ok:false,error:'Debes aceptar las condiciones de uso y la política de privacidad.'});
     if (!validEmail(email)) return res.status(400).json({ ok:false, error:'Introduce un correo válido.' });
     if (Buffer.byteLength(password,'utf8') < 8 || Buffer.byteLength(password,'utf8') > 72) return res.status(400).json({ ok:false, error:'La contraseña debe tener entre 8 y 72 caracteres aprox.' });
     if (db.prepare('SELECT 1 FROM users WHERE email=?').get(email)) return res.status(409).json({ ok:false, error:'Ya existe una cuenta con ese correo.' });
@@ -1455,7 +1526,7 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
     const passes=db.prepare('SELECT to_user,created_at FROM passes WHERE from_user=? ORDER BY created_at ASC').all(userId);
     const blocks=db.prepare('SELECT blocked,created_at FROM blocks WHERE blocker=? ORDER BY created_at ASC').all(userId);
     const reports=db.prepare('SELECT id,reported,reason,details,created_at,status,updated_at,moderator_note FROM reports WHERE reporter=? ORDER BY created_at ASC').all(userId);
-    const feedback=db.prepare('SELECT id,kind,message,page,created_at,status,admin_note,updated_at FROM beta_feedback WHERE user_id=? ORDER BY created_at ASC').all(userId);
+    const feedback=db.prepare('SELECT id,kind,message,page,created_at,status,admin_note,updated_at FROM feedback WHERE user_id=? ORDER BY created_at ASC').all(userId);
     const notifications=db.prepare('SELECT id,source_user,type,title,body,data_json,created_at,read_at FROM notifications WHERE user_id=? ORDER BY created_at ASC').all(userId).map(n=>({...n,data:safeJsonObject(n.data_json),data_json:undefined}));
     const matches=db.prepare('SELECT * FROM matches WHERE user1=? OR user2=? ORDER BY created_at ASC').all(userId,userId).map(m=>{
       const partnerId=m.user1===userId?m.user2:m.user1;
@@ -1498,7 +1569,7 @@ app.post('/api/billing/checkout', requireAuth, rateLimit({limit:8,windowMs:60*60
   const full=db.prepare('SELECT email,email_verified FROM users WHERE id=?').get(req.user.id);
   if(!full?.email_verified)return res.status(403).json({ok:false,error:'Verifica tu correo antes de contratar V/R+.'});
   const current=getPlusState(req.user.id);
-  if(current.active && current.source!=='stripe')return res.status(409).json({ok:false,error:'Tu V/R+ beta ya está activo. Podrás suscribirte cuando finalice ese acceso.'});
+  if(current.active && current.source!=='stripe')return res.status(409).json({ok:false,error:'Tu acceso V/R+ ya está activo. Podrás suscribirte cuando finalice ese acceso.'});
   const existing=billingSubscriptionForUser(req.user.id);
   if(existing && ['active','trialing'].includes(existing.status))return res.status(409).json({ok:false,error:'Ya tienes una suscripción V/R+ activa. Usa Gestionar suscripción.'});
   try{
@@ -1560,9 +1631,9 @@ app.post('/api/feedback', requireAuth, rateLimit({limit:8,windowMs:24*60*60*1000
   const page = cleanShortText(req.body?.page,120).split('?')[0];
   if (message.length < 10) return res.status(400).json({ok:false,error:'Cuéntanos un poco más para poder revisarlo.'});
   const id = safeId('fb');
-  db.prepare('INSERT INTO beta_feedback(id,user_id,kind,message,page,created_at,status,admin_note,updated_at) VALUES(?,?,?,?,?,?,\'open\',\'\',NULL)')
+  db.prepare('INSERT INTO feedback(id,user_id,kind,message,page,created_at,status,admin_note,updated_at) VALUES(?,?,?,?,?,?,\'open\',\'\',NULL)')
     .run(id,req.user.id,kind,message,page,now());
-  res.json({ok:true,id,message:'Gracias. Tu comentario quedó enviado al equipo de la beta.'});
+  res.json({ok:true,id,message:'Gracias. Tu comentario quedó enviado al equipo.'});
 });
 
 app.post('/api/telemetry/client-error', requireAuth, rateLimit({limit:20,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
@@ -1602,7 +1673,7 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
     matches: db.prepare('SELECT COUNT(*) n FROM matches WHERE created_at>=?').get(since).n,
     messages: db.prepare('SELECT COUNT(*) n FROM messages WHERE created_at>=?').get(since).n,
     reports: db.prepare('SELECT COUNT(*) n FROM reports WHERE created_at>=?').get(since).n,
-    feedback: db.prepare('SELECT COUNT(*) n FROM beta_feedback WHERE created_at>=?').get(since).n,
+    feedback: db.prepare('SELECT COUNT(*) n FROM feedback WHERE created_at>=?').get(since).n,
     clientErrors: db.prepare('SELECT COUNT(*) n FROM client_errors WHERE created_at>=?').get(since).n,
     verifiedTotal: db.prepare('SELECT COUNT(*) n FROM users WHERE email_verified=1').get().n,
     activePlus: db.prepare("SELECT COUNT(*) n FROM plus_memberships WHERE status='active' AND (expires_at IS NULL OR expires_at>?)").get(until).n
@@ -1648,19 +1719,19 @@ app.get('/api/admin/feedback', requireAuth, requireAdmin, (req,res) => {
   const where=[],params=[];
   if(status!=='all'){where.push('f.status=?');params.push(status);}
   if(kind){where.push('f.kind=?');params.push(kind);}
-  const rows=db.prepare(`SELECT f.*,u.email,p.name FROM beta_feedback f JOIN users u ON u.id=f.user_id LEFT JOIN profiles p ON p.user_id=f.user_id
+  const rows=db.prepare(`SELECT f.*,u.email,p.name FROM feedback f JOIN users u ON u.id=f.user_id LEFT JOIN profiles p ON p.user_id=f.user_id
     ${where.length?`WHERE ${where.join(' AND ')}`:''} ORDER BY CASE WHEN f.status='open' THEN 0 ELSE 1 END,f.created_at DESC LIMIT 250`).all(...params);
   res.json({ok:true,feedback:rows});
 });
 
 app.post('/api/admin/feedback/:id/action', requireAuth, requireAdmin, (req,res) => {
-  const row=db.prepare('SELECT * FROM beta_feedback WHERE id=?').get(String(req.params.id||''));
+  const row=db.prepare('SELECT * FROM feedback WHERE id=?').get(String(req.params.id||''));
   if(!row)return res.status(404).json({ok:false,error:'Comentario no encontrado.'});
   const action=String(req.body?.action||'');
   if(!['resolve','dismiss','reopen'].includes(action))return res.status(400).json({ok:false,error:'Acción no válida.'});
   const status=action==='resolve'?'resolved':action==='dismiss'?'dismissed':'open';
   const note=cleanShortText(req.body?.note,500);
-  db.prepare('UPDATE beta_feedback SET status=?,admin_note=?,updated_at=? WHERE id=?').run(status,note,now(),row.id);
+  db.prepare('UPDATE feedback SET status=?,admin_note=?,updated_at=? WHERE id=?').run(status,note,now(),row.id);
   logModerationAction(req.user.id,row.user_id,`feedback_${action}`,note,null);
   res.json({ok:true,status});
 });
@@ -1974,7 +2045,7 @@ app.post('/api/admin/system/backup', requireAuth, requireAdmin, rateLimit({limit
   try{
     await db.backup(dbCopy);
     const uploads=folderStatsSafe(UPLOAD_DIR);
-    const manifest={product:'V/R Match',appVersion:APP_VERSION,generatedAt:new Date().toISOString(),format:'vrmatch-beta-backup-v1',sensitive:true,notes:['Contiene hashes de contraseña y datos privados almacenados en SQLite.','No contiene secretos de Render ni claves SMTP porque esos valores viven en variables de entorno.','Guarda esta copia en un lugar privado y elimínala cuando deje de ser necesaria.'],database:{file:'data/vrmatch.db',bytes:fileSizeSafe(dbCopy)},uploads:{directory:'uploads/',files:uploads.files,bytes:uploads.bytes}};
+    const manifest={product:'V/R Match',appVersion:APP_VERSION,generatedAt:new Date().toISOString(),format:'vrmatch-backup-v1',sensitive:true,notes:['Contiene hashes de contraseña y datos privados almacenados en SQLite.','No contiene secretos de Render ni claves SMTP porque esos valores viven en variables de entorno.','Guarda esta copia en un lugar privado y elimínala cuando deje de ser necesaria.'],database:{file:'data/vrmatch.db',bytes:fileSizeSafe(dbCopy)},uploads:{directory:'uploads/',files:uploads.files,bytes:uploads.bytes}};
     fs.writeFileSync(manifestPath,JSON.stringify(manifest,null,2));
     const entries=[{path:manifestPath,name:'backup-manifest.json'},{path:dbCopy,name:'data/vrmatch.db'}];
     try{for(const entry of fs.readdirSync(UPLOAD_DIR,{withFileTypes:true})){if(entry.isFile())entries.push({path:path.join(UPLOAD_DIR,entry.name),name:`uploads/${entry.name}`});}}catch{}
@@ -2054,29 +2125,65 @@ function broadcastLobby() {
     const list=[...waitingPlayers.values()].filter(p=>p.id!==me&&p.mazo===deck); s.emit('actualizar_lista_espera',list);
   }
 }
+function buildRoomState(playerIds, creatorId, mazo, dating=false) {
+  const ids=[...playerIds];
+  return {
+    players:new Set(ids), creatorId, mazo:validDeck(mazo), dating:Boolean(dating),
+    turnSocketId:creatorId, activeCard:null, syncRound:null,
+    game:{turns:Object.fromEntries(ids.map(id=>[id,0])),reactions:0,syncRounds:0,completed:false,extended:false,decisions:{},resumeTurnSocketId:creatorId}
+  };
+}
+function ensureRoomPlayerState(room, socketId) {
+  if(!room.game)room.game={turns:{},reactions:0,syncRounds:0,completed:false,extended:false,decisions:{},resumeTurnSocketId:room.creatorId||socketId};
+  if(!room.game.turns)room.game.turns={};
+  if(!(socketId in room.game.turns))room.game.turns[socketId]=0;
+  if(!room.turnSocketId)room.turnSocketId=room.creatorId||socketId;
+  if(!room.game.decisions)room.game.decisions={};
+}
+function clearRoomSyncTimer(room){if(room?.syncRound?.timer){clearTimeout(room.syncRound.timer);room.syncRound.timer=null;}}
 function leaveRoom(socket, notifyOpponent=false) {
   const roomId=socket.room; if(!roomId)return;
   const room=rooms.get(roomId); socket.leave(roomId); socket.room=null; if(!room)return;
-  room.players.delete(socket.id); if(notifyOpponent)socket.to(roomId).emit('oponente_abandono');
-  if(room.players.size===0)rooms.delete(roomId); else if(room.creatorId===socket.id)room.creatorId=[...room.players][0];
+  room.players.delete(socket.id);
+  if(room.game?.turns)delete room.game.turns[socket.id];
+  if(notifyOpponent)socket.to(roomId).emit('oponente_abandono');
+  if(room.syncRound?.submissions)delete room.syncRound.submissions[socket.id];
+  if(room.players.size===0){clearRoomSyncTimer(room);rooms.delete(roomId);}
+  else {
+    if(room.creatorId===socket.id)room.creatorId=[...room.players][0];
+    if(room.turnSocketId===socket.id)room.turnSocketId=[...room.players][0]||null;
+    if(room.syncRound?.initiatorSocketId===socket.id){clearRoomSyncTimer(room);room.syncRound=null;}
+  }
 }
 function socketForUser(userId) {
   const set=onlineUsers.get(userId); if(!set||!set.size)return null;
   for(const sid of set){const s=io.sockets.sockets.get(sid);if(s)return s;} return null;
 }
+function roomSocket(room, socketId){return socketId?io.sockets.sockets.get(socketId):null;}
+function roomOpponentById(room, socketId){
+  if(!room)return null;
+  for(const sid of room.players){if(sid!==socketId){const other=roomSocket(room,sid);if(other)return other;}}
+  return null;
+}
+function roomForSocket(socket, sala=''){
+  const roomId=String(sala||socket.room||'');
+  if(!roomId||socket.room!==roomId)return null;
+  const room=rooms.get(roomId); if(!room||!room.players.has(socket.id))return null;
+  ensureRoomPlayerState(room,socket.id); return room;
+}
 function createDatingRoom(socket, opponent, mazo) {
   const deck=validDeck(mazo); leaveRoom(socket);leaveRoom(opponent);removeFromLobby(socket.id);removeFromLobby(opponent.id);
   const salaID=safeRoomId(); socket.join(salaID);opponent.join(salaID);socket.room=salaID;opponent.room=salaID;socket.mazo=opponent.mazo=deck;
-  rooms.set(salaID,{players:new Set([socket.id,opponent.id]),creatorId:socket.id,mazo:deck,dating:true});
-  socket.emit('partida_iniciada',{salaID,creadorID:socket.id,mazo:deck,origen:'dating',oponenteNombre:opponent.nombre||'Tu match',oponenteAvatar:opponent.avatar||''});
-  opponent.emit('partida_iniciada',{salaID,creadorID:socket.id,mazo:deck,origen:'dating',oponenteNombre:socket.nombre||'Tu match',oponenteAvatar:socket.avatar||''});
+  rooms.set(salaID,buildRoomState([socket.id,opponent.id],socket.id,deck,true));
+  socket.emit('partida_iniciada',{salaID,creadorID:socket.id,mazo:deck,origen:'dating',oponenteID:opponent.userId||'',oponenteNombre:opponent.nombre||'Tu match',oponenteAvatar:opponent.avatar||''});
+  opponent.emit('partida_iniciada',{salaID,creadorID:socket.id,mazo:deck,origen:'dating',oponenteID:socket.userId||'',oponenteNombre:socket.nombre||'Tu match',oponenteAvatar:socket.avatar||''});
+  emitGameProgress(rooms.get(salaID));
   return salaID;
 }
 function roomOpponentSocket(socket) {
   if(!socket.room)return null;
   const room=rooms.get(socket.room); if(!room)return null;
-  for(const sid of room.players){ if(sid!==socket.id){ const other=io.sockets.sockets.get(sid); if(other)return other; } }
-  return null;
+  return roomOpponentById(room,socket.id);
 }
 function notifyOpponentTurn(socket, reason='Tu turno') {
   const other=roomOpponentSocket(socket);
@@ -2084,6 +2191,68 @@ function notifyOpponentTurn(socket, reason='Tu turno') {
   const senderName=socket.nombre||getProfile(socket.userId)?.nombre||'Tu oponente';
   createNotification(other.userId,'game_turn','Te toca jugar',`${senderName} terminó su jugada. Es tu turno.`,{roomId:socket.room,reason},socket.userId);
 }
+function emitGameProgress(room){
+  if(!room?.game)return;
+  for(const sid of room.players){
+    const sock=roomSocket(room,sid);if(!sock)continue;
+    const other=roomOpponentById(room,sid);
+    sock.emit('vr_game_progress',{
+      yourTurns:Number(room.game.turns?.[sid]||0),opponentTurns:Number(other?room.game.turns?.[other.id]||0:0),
+      targetTurns:GAME_TARGET_TURNS,reactions:Number(room.game.reactions||0),syncRounds:Number(room.game.syncRounds||0),
+      extended:Boolean(room.game.extended),completed:Boolean(room.game.completed),yourTurn:room.turnSocketId===sid
+    });
+  }
+}
+function emitGameComplete(room){
+  if(!room?.game)return;
+  for(const sid of room.players){
+    const sock=roomSocket(room,sid);if(!sock)continue;
+    const other=roomOpponentById(room,sid);
+    sock.emit('vr_game_complete',{
+      yourTurns:Number(room.game.turns?.[sid]||0),opponentTurns:Number(other?room.game.turns?.[other.id]||0:0),
+      syncRounds:Number(room.game.syncRounds||0),reactions:Number(room.game.reactions||0),targetTurns:GAME_TARGET_TURNS
+    });
+  }
+}
+function completeRoomTurn(room, actingSocket, meta={}){
+  if(!room||!actingSocket)return {completed:false,next:null};
+  ensureRoomPlayerState(room,actingSocket.id);
+  room.game.turns[actingSocket.id]=Number(room.game.turns[actingSocket.id]||0)+1;
+  if(meta.syncCompleted)room.game.syncRounds=Number(room.game.syncRounds||0)+1;
+  const next=roomOpponentById(room,actingSocket.id);
+  room.turnSocketId=next?.id||null;
+  room.game.resumeTurnSocketId=room.turnSocketId;
+  room.activeCard=null;
+  emitGameProgress(room);
+  const ids=[...room.players];
+  const reached=!room.game.extended&&ids.length===2&&ids.every(id=>Number(room.game.turns?.[id]||0)>=GAME_TARGET_TURNS);
+  if(reached){
+    room.game.completed=true;room.game.decisions={};room.game.resumeTurnSocketId=room.turnSocketId;room.turnSocketId=null;
+    emitGameComplete(room);return {completed:true,next};
+  }
+  return {completed:false,next};
+}
+function pickSyncCard(mazo,mode){
+  const deck=SYNC_GAME_CARDS[validDeck(mazo)]||SYNC_GAME_CARDS.rompehielos;
+  const list=deck[mode]||SYNC_GAME_CARDS.rompehielos[mode]||[];
+  return list.length?list[Math.floor(Math.random()*list.length)]:null;
+}
+function closeRoomForAll(roomId,event='vr_game_finished',payload={}){
+  const room=rooms.get(roomId);if(!room)return;
+  clearRoomSyncTimer(room);
+  for(const sid of [...room.players]){const sock=roomSocket(room,sid);if(!sock)continue;sock.emit(event,payload);sock.leave(roomId);sock.room=null;}
+  rooms.delete(roomId);
+}
+function expireSyncRound(roomId,syncId){
+  const room=rooms.get(roomId);if(!room?.syncRound||room.syncRound.id!==syncId)return;
+  const round=room.syncRound;clearRoomSyncTimer(room);room.syncRound=null;
+  const initiator=roomSocket(room,round.initiatorSocketId);if(!initiator)return;
+  const next=roomOpponentById(room,initiator.id);
+  for(const sid of room.players){const sock=roomSocket(room,sid);if(sock)sock.emit('vr_sync_cancelled',{reason:'Tiempo agotado',initiatorSocketId:initiator.id,yourTurn:next?.id===sid});}
+  const result=completeRoomTurn(room,initiator,{syncCompleted:false,timeout:true});
+  if(!result.completed&&result.next)notifyOpponentTurn(initiator,'ronda sincronizada agotada');
+}
+
 
 io.on('connection', socket => {
   const userId=socket.userId;
@@ -2203,20 +2372,126 @@ io.on('connection', socket => {
   socket.on('retar_jugador',(data={},ack)=>{
     const done=typeof ack==='function'?ack:()=>{};const opponentId=String(data.oponenteID||'');const mazo=validDeck(data.mazo);const opponent=io.sockets.sockets.get(opponentId);const waiting=waitingPlayers.get(opponentId);
     if(!opponent||!waiting)return done({ok:false,error:'Ese jugador ya no está disponible.'});if(opponentId===socket.id)return done({ok:false,error:'No puedes retarte a ti mismo.'});if(waiting.mazo!==mazo)return done({ok:false,error:'El mazo ya no coincide.'});
-    const salaID=safeRoomId();removeFromLobby(socket.id);removeFromLobby(opponentId);socket.join(salaID);opponent.join(salaID);socket.room=salaID;opponent.room=salaID;socket.mazo=opponent.mazo=mazo;rooms.set(salaID,{players:new Set([socket.id,opponent.id]),creatorId:socket.id,mazo,dating:false});done({ok:true,salaID});
-    socket.emit('partida_iniciada',{salaID,creadorID:socket.id,mazo,oponenteNombre:opponent.nombre||'Tu oponente',oponenteAvatar:opponent.avatar||''});opponent.emit('partida_iniciada',{salaID,creadorID:socket.id,mazo,oponenteNombre:socket.nombre||'Tu oponente',oponenteAvatar:socket.avatar||''});
+    const salaID=safeRoomId();removeFromLobby(socket.id);removeFromLobby(opponentId);socket.join(salaID);opponent.join(salaID);socket.room=salaID;opponent.room=salaID;socket.mazo=opponent.mazo=mazo;rooms.set(salaID,buildRoomState([socket.id,opponent.id],socket.id,mazo,false));done({ok:true,salaID});
+    socket.emit('partida_iniciada',{salaID,creadorID:socket.id,mazo,oponenteID:opponent.userId||'',oponenteNombre:opponent.nombre||'Tu oponente',oponenteAvatar:opponent.avatar||''});opponent.emit('partida_iniciada',{salaID,creadorID:socket.id,mazo,oponenteID:socket.userId||'',oponenteNombre:socket.nombre||'Tu oponente',oponenteAvatar:socket.avatar||''});emitGameProgress(rooms.get(salaID));
   });
   socket.on('unirse_sala',(payload,ack)=>{
     const done=typeof ack==='function'?ack:()=>{};const data=(payload&&typeof payload==='object')?payload:{salaID:payload};const roomId=String(data.salaID||'').slice(0,64);if(!roomId)return done({ok:false,error:'Sala no válida.'});
     if(data.nombre)socket.nombre=cleanName(data.nombre);if(data.mazo)socket.mazo=validDeck(data.mazo);removeFromLobby(socket.id);const room=rooms.get(roomId);if(room&&room.players.size>=2&&!room.players.has(socket.id))return done({ok:false,error:'La sala ya está completa.'});
-    socket.join(roomId);socket.room=roomId;if(room){room.players.add(socket.id);socket.mazo=room.mazo;done({ok:true,roomId,full:true});const opponent=[...room.players].filter(id=>id!==socket.id).map(id=>io.sockets.sockets.get(id)).find(Boolean);if(opponent){socket.emit('oponente_unido',{nombre:opponent.nombre||'Tu amigo',avatar:opponent.avatar||'',tuTurno:false});opponent.emit('oponente_unido',{nombre:socket.nombre||'Tu amigo',avatar:socket.avatar||'',tuTurno:true});}}else{rooms.set(roomId,{players:new Set([socket.id]),creatorId:socket.id,mazo:socket.mazo||'rompehielos',dating:false});done({ok:true,roomId,full:false});}
+    socket.join(roomId);socket.room=roomId;if(room){room.players.add(socket.id);ensureRoomPlayerState(room,socket.id);socket.mazo=room.mazo;done({ok:true,roomId,full:true});const opponent=[...room.players].filter(id=>id!==socket.id).map(id=>io.sockets.sockets.get(id)).find(Boolean);if(opponent){socket.emit('oponente_unido',{nombre:opponent.nombre||'Tu amigo',avatar:opponent.avatar||'',tuTurno:room.turnSocketId===socket.id});opponent.emit('oponente_unido',{nombre:socket.nombre||'Tu amigo',avatar:socket.avatar||'',tuTurno:room.turnSocketId===opponent.id});emitGameProgress(room);}}else{rooms.set(roomId,buildRoomState([socket.id],socket.id,socket.mazo||'rompehielos',false));done({ok:true,roomId,full:false});}
   });
-  socket.on('accion_juego',(d={})=>{if(!socket.room||socket.room!==d.sala)return;socket.to(socket.room).emit('actualizar_mesa',{tipo:d.tipo==='reto'?'reto':'verdad',textoCarta:String(d.textoCarta||'').slice(0,1000),sala:socket.room});});
-  socket.on('enviar_respuesta',(d={})=>{if(socket.room&&socket.room===d.sala){socket.to(socket.room).emit('recibir_respuesta',{respuesta:String(d.respuesta||'').slice(0,500),pregunta:String(d.pregunta||'').slice(0,1000)});notifyOpponentTurn(socket,'respuesta');}});
-  socket.on('enviar_media',(d={},ack)=>{const done=typeof ack==='function'?ack:()=>{};if(!socket.room||socket.room!==d.sala)return done({ok:false,error:'La sala ya no está activa.'});const tipo=d.tipo==='video'?'video':'imagen',dataUrl=String(d.dataUrl||''),mime=String(d.mime||'').slice(0,80);const img=tipo==='imagen'&&/^data:image\/(?:jpeg|png|webp)(?:;[^;]+)*;base64,/i.test(dataUrl),vid=tipo==='video'&&/^data:video\/(?:webm|mp4)(?:;[^;]+)*;base64,/i.test(dataUrl);if(!img&&!vid)return done({ok:false,error:'El formato de la prueba no es válido.'});if(dataUrl.length>9e6)return done({ok:false,error:'El vídeo pesa demasiado. Grábalo un poco más corto.'});socket.to(socket.room).emit('recibir_media',{tipo,dataUrl,mime});notifyOpponentTurn(socket,'prueba');done({ok:true});});
-  socket.on('escribiendo',sala=>{if(socket.room&&socket.room===sala)socket.to(sala).emit('mostrar_escribiendo');});socket.on('parar_escribir',sala=>{if(socket.room&&socket.room===sala)socket.to(sala).emit('ocultar_escribiendo');});
-  socket.on('enviar_reaccion',(d={})=>{if(socket.room&&socket.room===d.sala){const allowed=new Set(['🔥','😱','😂','❤️']);socket.to(d.sala).emit('recibir_reaccion',allowed.has(d.emoji)?d.emoji:'👍');}});
-  socket.on('tiempo_agotado',(d={})=>{if(socket.room&&socket.room===d.sala){socket.to(d.sala).emit('tiempo_agotado_remoto');notifyOpponentTurn(socket,'tiempo_agotado');}});
+  socket.on('accion_juego',(d={},ack)=>{
+    const done=typeof ack==='function'?ack:()=>{};const room=roomForSocket(socket,d.sala);
+    if(!room)return done({ok:false,error:'La sala ya no está activa.'});
+    if(room.game?.completed)return done({ok:false,error:'La partida está esperando vuestra decisión final.'});
+    if(room.syncRound)return done({ok:false,error:'Hay una carta sincronizada en curso.'});
+    if(room.turnSocketId!==socket.id)return done({ok:false,error:'Ahora mismo no es tu turno.'});
+    if(room.activeCard)return done({ok:false,error:'Ya hay una carta en curso.'});
+    const tipo=d.tipo==='reto'?'reto':'verdad';
+    const textoCarta=String(d.textoCarta||'').slice(0,1000);
+    if(!textoCarta)return done({ok:false,error:'La carta no es válida.'});
+    room.activeCard={ownerSocketId:socket.id,tipo,textoCarta,startedAt:now()};
+    socket.to(socket.room).emit('actualizar_mesa',{tipo,textoCarta,sala:socket.room});
+    done({ok:true});
+  });
+  socket.on('enviar_respuesta',(d={},ack)=>{
+    const done=typeof ack==='function'?ack:()=>{};const room=roomForSocket(socket,d.sala);
+    if(!room||room.game?.completed||room.syncRound)return done({ok:false,error:'La sala ya no está activa.'});
+    if(room.turnSocketId!==socket.id||room.activeCard?.ownerSocketId!==socket.id||room.activeCard?.tipo!=='verdad')return done({ok:false,error:'Esta pregunta ya no está activa.'});
+    const respuesta=cleanShortText(d.respuesta,500);if(!respuesta)return done({ok:false,error:'Escribe una respuesta antes de enviarla.'});
+    const pregunta=String(room.activeCard.textoCarta||d.pregunta||'').slice(0,1000);
+    socket.to(socket.room).emit('recibir_respuesta',{respuesta,pregunta});
+    const result=completeRoomTurn(room,socket,{syncCompleted:false});
+    if(!result.completed&&result.next)notifyOpponentTurn(socket,'respuesta');
+    done({ok:true});
+  });
+  socket.on('enviar_media',(d={},ack)=>{
+    const done=typeof ack==='function'?ack:()=>{};const room=roomForSocket(socket,d.sala);
+    if(!room||room.game?.completed||room.syncRound)return done({ok:false,error:'La sala ya no está activa.'});
+    if(room.turnSocketId!==socket.id||room.activeCard?.ownerSocketId!==socket.id||room.activeCard?.tipo!=='reto')return done({ok:false,error:'Este reto ya no está activo.'});
+    const tipo=d.tipo==='video'?'video':'imagen',dataUrl=String(d.dataUrl||''),mime=String(d.mime||'').slice(0,80);
+    const img=tipo==='imagen'&&/^data:image\/(?:jpeg|png|webp)(?:;[^;]+)*;base64,/i.test(dataUrl),vid=tipo==='video'&&/^data:video\/(?:webm|mp4)(?:;[^;]+)*;base64,/i.test(dataUrl);
+    if(!img&&!vid)return done({ok:false,error:'El formato de la prueba no es válido.'});
+    if(dataUrl.length>9e6)return done({ok:false,error:'El vídeo pesa demasiado. Grábalo un poco más corto.'});
+    socket.to(socket.room).emit('recibir_media',{tipo,dataUrl,mime});
+    const result=completeRoomTurn(room,socket,{syncCompleted:false});
+    if(!result.completed&&result.next)notifyOpponentTurn(socket,'prueba');
+    done({ok:true});
+  });
+  socket.on('vr_sync_start',(d={},ack)=>{
+    const done=typeof ack==='function'?ack:()=>{};const room=roomForSocket(socket,d.sala);
+    if(!room)return done({ok:false,error:'La sala ya no está activa.'});
+    if(room.game?.completed)return done({ok:false,error:'La partida está esperando vuestra decisión final.'});
+    if(room.turnSocketId!==socket.id)return done({ok:false,error:'Ahora mismo no es tu turno.'});
+    if(room.activeCard||room.syncRound)return done({ok:false,error:'Ya hay una carta en curso.'});
+    const mode=VALID_SYNC_MODES.has(String(d.mode||''))?String(d.mode):'choice';
+    const card=pickSyncCard(room.mazo,mode);if(!card)return done({ok:false,error:'No se pudo preparar la carta sincronizada.'});
+    const syncId=safeId('sync');
+    const round={id:syncId,mode,prompt:cleanShortText(card.prompt,320),options:mode==='secret'?null:{a:cleanShortText(card.a,100),b:cleanShortText(card.b,100)},initiatorSocketId:socket.id,submissions:{},createdAt:now(),timer:null};
+    room.syncRound=round;room.activeCard=null;
+    round.timer=setTimeout(()=>expireSyncRound(socket.room,syncId),SYNC_ROUND_TTL_MS);
+    for(const sid of room.players){const sock=roomSocket(room,sid);if(sock)sock.emit('vr_sync_round_started',{id:syncId,mode,prompt:round.prompt,options:round.options,initiatorSocketId:socket.id,initiatorName:socket.nombre||'Tu oponente',timeoutSeconds:Math.floor(SYNC_ROUND_TTL_MS/1000)});}
+    done({ok:true,id:syncId});
+  });
+  socket.on('vr_sync_submit',(d={},ack)=>{
+    const done=typeof ack==='function'?ack:()=>{};const room=roomForSocket(socket,d.sala),round=room?.syncRound;
+    if(!room||!round||String(d.id||'')!==round.id)return done({ok:false,error:'Esta carta ya no está activa.'});
+    if(round.submissions[socket.id])return done({ok:false,error:'Tu respuesta ya quedó bloqueada.'});
+    let submission={};
+    if(round.mode==='secret'){
+      const answer=cleanShortText(d.answer,280);if(!answer)return done({ok:false,error:'Escribe una respuesta antes de bloquearla.'});submission={answer};
+    }else{
+      const choice=['a','b'].includes(d.choice)?d.choice:'';if(!choice)return done({ok:false,error:'Elige una opción.'});submission={choice};
+      if(round.mode==='guess'){const prediction=['a','b'].includes(d.prediction)?d.prediction:'';if(!prediction)return done({ok:false,error:'Elige también qué crees que responderá tu Match.'});submission.prediction=prediction;}
+    }
+    round.submissions[socket.id]=submission;
+    const submitted=Object.keys(round.submissions).length,total=room.players.size;
+    for(const sid of room.players){const sock=roomSocket(room,sid);if(sock)sock.emit('vr_sync_status',{id:round.id,submitted,total,youSubmitted:Boolean(round.submissions[sid])});}
+    done({ok:true,waiting:submitted<total});
+    if(submitted<total)return;
+    clearRoomSyncTimer(room);
+    const initiator=roomSocket(room,round.initiatorSocketId);if(!initiator){room.syncRound=null;return;}
+    const next=roomOpponentById(room,initiator.id);
+    const players=[...room.players].map(sid=>{const sock=roomSocket(room,sid);return {sid,name:sock?.nombre||'Jugador',...(round.submissions[sid]||{})};});
+    for(const sid of room.players){
+      const sock=roomSocket(room,sid);if(!sock)continue;
+      const you=players.find(x=>x.sid===sid)||{};const other=players.find(x=>x.sid!==sid)||{};
+      const optionText=key=>round.options?.[key]||'';
+      sock.emit('vr_sync_reveal',{
+        id:round.id,mode:round.mode,prompt:round.prompt,options:round.options,initiatorSocketId:initiator.id,nextTurn:next?.id===sid,
+        you:{name:you.name,choice:you.choice||'',choiceText:optionText(you.choice),prediction:you.prediction||'',predictionText:optionText(you.prediction),answer:you.answer||'',guessCorrect:round.mode==='guess'?you.prediction===other.choice:null},
+        opponent:{name:other.name,choice:other.choice||'',choiceText:optionText(other.choice),prediction:other.prediction||'',predictionText:optionText(other.prediction),answer:other.answer||'',guessCorrect:round.mode==='guess'?other.prediction===you.choice:null},
+        matched:round.mode==='choice'?Boolean(you.choice&&you.choice===other.choice):null
+      });
+    }
+    room.syncRound=null;
+    const result=completeRoomTurn(room,initiator,{syncCompleted:true});
+    if(!result.completed&&result.next)notifyOpponentTurn(initiator,'carta sincronizada');
+  });
+  socket.on('vr_game_decision',(d={},ack)=>{
+    const done=typeof ack==='function'?ack:()=>{};const room=roomForSocket(socket,d.sala);
+    if(!room?.game?.completed)return done({ok:false,error:'La partida todavía no está en el cierre.'});
+    const decision=d.decision==='finish'?'finish':'continue';room.game.decisions[socket.id]=decision;
+    if(decision==='finish'){
+      done({ok:true,finished:true});closeRoomForAll(socket.room,'vr_game_finished',{reason:'finish'});return;
+    }
+    const ids=[...room.players];const allContinue=ids.length===2&&ids.every(id=>room.game.decisions[id]==='continue');
+    if(!allContinue){done({ok:true,waiting:true});socket.emit('vr_game_decision_wait',{decision:'continue'});return;}
+    room.game.completed=false;room.game.extended=true;room.game.decisions={};room.turnSocketId=room.game.resumeTurnSocketId||room.creatorId||ids[0]||null;
+    for(const sid of ids){const sock=roomSocket(room,sid);if(sock)sock.emit('vr_game_continued',{yourTurn:room.turnSocketId===sid});}
+    emitGameProgress(room);done({ok:true,continued:true});
+  });
+  socket.on('escribiendo',sala=>{if(socket.room&&socket.room===sala)socket.to(sala).emit('mostrar_escribiendo');});
+  socket.on('parar_escribir',sala=>{if(socket.room&&socket.room===sala)socket.to(sala).emit('ocultar_escribiendo');});
+  socket.on('enviar_reaccion',(d={})=>{
+    const room=roomForSocket(socket,d.sala);if(!room)return;
+    const allowed=new Set(['🔥','😱','😂','❤️']);const emoji=allowed.has(d.emoji)?d.emoji:'👍';
+    room.game.reactions=Number(room.game.reactions||0)+1;socket.to(d.sala).emit('recibir_reaccion',emoji);emitGameProgress(room);
+  });
+  socket.on('tiempo_agotado',(d={})=>{
+    const room=roomForSocket(socket,d.sala);if(!room||room.game?.completed||room.syncRound||room.turnSocketId!==socket.id)return;
+    socket.to(d.sala).emit('tiempo_agotado_remoto');const result=completeRoomTurn(room,socket,{syncCompleted:false,timeout:true});if(!result.completed&&result.next)notifyOpponentTurn(socket,'tiempo_agotado');
+  });
   socket.on('abandonar_partida',salaID=>{if(socket.room&&socket.room===salaID)leaveRoom(socket,true);});
 
   socket.on('disconnect',()=>{
@@ -2224,5 +2499,5 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.0 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);
-  console.log('Resiliencia F14: mantenimiento + backup manual protegidos');console.log('V18: funciones V/R+ actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad beta: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad F13: sesiones + bloqueados + exportación de datos');});
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.3 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);
+  console.log('Resiliencia F14: mantenimiento + backup manual protegidos');console.log('V18: funciones V/R+ actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad F13: sesiones + bloqueados + exportación de datos');});

@@ -1,0 +1,40 @@
+V/R MATCH 18.3.0 — ACTUALIZACIÓN DEL JUEGO
+
+IMPORTANTE
+Esta carpeta contiene SOLO los archivos que deben sustituirse en tu repositorio actual.
+NO borres los demás archivos del repositorio.
+
+SUSTITUIR EN GITHUB
+- index.html
+- styles.css
+- sw.js
+- server.js
+- package.json
+- como-funciona.html
+
+DOCUMENTACIÓN (opcional en el repo)
+- REVISION.txt
+- ROADMAP-JUEGO.md
+
+NO HACE FALTA
+- cambiar variables de entorno;
+- crear tablas nuevas;
+- instalar dependencias nuevas;
+- modificar Render manualmente si ya despliega desde GitHub.
+
+DESPUÉS DEL PUSH
+1. Esperar el deploy de Render.
+2. Revisar Logs.
+3. Abrir /healthz y confirmar version 18.3.0.
+4. Recargar la PWA. El Service Worker usa una caché nueva v18-3-0.
+5. Probar con DOS usuarios distintos.
+
+PRUEBA DEL JUEGO
+- Rondas 1–2: Verdad/Reto normal.
+- Ronda 3 del jugador: Los dos responden (A/B secreto).
+- Ronda 6: Adivina a tu Match.
+- Ronda 8: Final a dos voces.
+- El final debe aparecer cuando ambos completen 8 turnos.
+- Si ambos pulsan Seguir jugando: rondas extra.
+- Si uno pulsa Terminar: la partida termina para ambos.
+- Confirmar que foto, vídeo, reacciones y retorno al chat siguen funcionando.
