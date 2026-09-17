@@ -122,9 +122,12 @@ async function renderCity(){
   try{
     const d=await api(`${API}/cities/${encodeURIComponent(c.slug)}/people?limit=8`), people=d.people||[];
     $('#people').innerHTML=people.length?people.map(p=>{
-      const bg=p.avatar?`style="background-image:linear-gradient(180deg,transparent,rgba(0,0,0,.18)),url('${esc(p.avatar)}')"`:'';
+      const avatar=String(p.avatar||'');
+      const imageAvatar=/^\/uploads\/[a-zA-Z0-9_.-]+$/.test(avatar);
+      const emojiAvatar=!imageAvatar&&avatar?esc(avatar):'';
+      const bg=imageAvatar?`style="background-image:linear-gradient(180deg,transparent,rgba(0,0,0,.18)),url('${esc(avatar)}')"`:'';
       const initials=esc(String(p.alias||'VR').slice(0,2).toUpperCase());
-      return `<article class="card"><div class="avatar" ${bg}>${p.avatar?'':initials}</div><div class="info"><strong>${esc(p.alias)}, ${Number(p.age)||''}</strong><div class="muted small">📍 ${esc(c.name)}</div></div></article>`;
+      return `<article class="card"><div class="avatar" ${bg}>${imageAvatar?'':(emojiAvatar||initials)}</div><div class="info"><strong>${esc(p.alias)}, ${Number(p.age)||''}</strong><div class="muted small">📍 ${esc(c.name)}</div></div></article>`;
     }).join(''):'<div class="empty">Todavía no hay perfiles públicos en esta ciudad. Puedes ser de los primeros.</div>';
   }catch{$('#people').innerHTML='<div class="empty">No se pudieron cargar los perfiles.</div>'}
 }
