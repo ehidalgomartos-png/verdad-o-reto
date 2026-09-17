@@ -507,6 +507,7 @@
 
       <div id="syncRoundPanel" class="sync-round-panel hidden" role="region" aria-live="polite" aria-label="Carta sincronizada">
         <div class="sync-round-head"><span id="syncModeBadge" class="sync-kicker">⚡ LOS DOS RESPONDEN</span><small id="syncRoundStatus">Respuestas ocultas hasta que contestéis ambos.</small></div>
+        <div id="syncInterestTag" class="sync-interest-tag hidden">✨ INTERÉS EN COMÚN · <strong id="syncInterestName"></strong></div>
         <h3 id="syncPrompt">Preparando carta…</h3>
         <p id="syncInstruction" class="sync-instruction">Elige tu respuesta y bloquéala.</p>
         <div id="syncChoiceBlock" class="sync-answer-block hidden">
@@ -523,8 +524,15 @@
         </div>
         <button id="syncSubmitButton" class="btn btn-primary sync-submit" type="button" onclick="enviarRespuestaSincronizada()" disabled>Bloquear respuesta</button>
         <div id="syncWaiting" class="sync-waiting hidden"><span class="spinner"></span><div><strong>Respuesta bloqueada</strong><small id="syncWaitingText">Esperando a tu Match…</small></div></div>
+        <div id="syncRevealStage" class="sync-reveal-stage hidden" aria-live="polite"><span>REVELANDO</span><strong id="syncRevealCountdown">3</strong><small>Las dos respuestas se abren a la vez</small></div>
         <div id="syncReveal" class="sync-reveal hidden">
-          <span>✨ REVELACIÓN</span><strong id="syncRevealHeadline">Ya habéis respondido</strong><p id="syncRevealResult"></p>
+          <span>✨ REVELACIÓN</span><strong id="syncRevealHeadline">Ya habéis respondido</strong>
+          <div id="syncRevealBadge" class="sync-result-badge hidden"></div>
+          <div class="sync-reveal-compare">
+            <article><small>TÚ</small><strong id="syncRevealYou">—</strong><span id="syncRevealYouMeta"></span></article>
+            <article><small id="syncRevealOpponentLabel">TU MATCH</small><strong id="syncRevealOpponent">—</strong><span id="syncRevealOpponentMeta"></span></article>
+          </div>
+          <p id="syncRevealResult"></p>
           <button class="btn btn-secondary" type="button" onclick="cerrarRevelacionSync()">Continuar</button>
         </div>
       </div>
@@ -533,9 +541,11 @@
         <span class="game-final-kicker">🏁 FINAL DESBLOQUEADO</span>
         <h3>Habéis llegado hasta el final.</h3>
         <p>La partida ya ha cumplido su objetivo: romper el hielo. Podéis seguir jugando o volver a la conversación.</p>
+        <p id="gameFinalSummary" class="game-final-summary">Habéis completado la partida juntos.</p>
         <div class="game-final-stats">
           <div><strong id="gameStatTurns">0</strong><small>rondas tuyas</small></div>
           <div><strong id="gameStatSpecial">0</strong><small>momentos sincronizados</small></div>
+          <div><strong id="gameStatCoincidences">0</strong><small>coincidencias</small></div>
           <div><strong id="gameStatReactions">0</strong><small>reacciones</small></div>
         </div>
         <div class="game-final-actions"><button class="btn btn-secondary" type="button" onclick="continuarPartida()">Seguir jugando</button><button class="btn btn-primary" type="button" onclick="terminarPartidaFinal()">Terminar partida</button></div>
@@ -798,7 +808,7 @@
     let gamePartnerProfile = null;
     let currentCardMeta = { special:false, personalized:false, final:false, quick:false, seconds:60 };
     let gameStats = { turns:0, truths:0, dares:0, special:0, personalized:0, reactions:0 };
-    let serverGameProgress = { yourTurns:0, opponentTurns:0, targetTurns:GAME_FINAL_ROUND, reactions:0, syncRounds:0, extended:false, completed:false };
+    let serverGameProgress = { yourTurns:0, opponentTurns:0, targetTurns:GAME_FINAL_ROUND, reactions:0, syncRounds:0, coincidences:0, guessHits:0, personalizedSync:0, extended:false, completed:false };
     let currentSyncRound = null;
     let syncChoice = '';
     let syncPrediction = '';
@@ -1353,7 +1363,7 @@
       gameFinalPending=false;
       currentCardMeta={special:false,personalized:false,final:false,quick:false,seconds:60};
       gameStats={turns:0,truths:0,dares:0,special:0,personalized:0,reactions:0};
-      serverGameProgress={yourTurns:0,opponentTurns:0,targetTurns:GAME_FINAL_ROUND,reactions:0,syncRounds:0,extended:false,completed:false};
+      serverGameProgress={yourTurns:0,opponentTurns:0,targetTurns:GAME_FINAL_ROUND,reactions:0,syncRounds:0,coincidences:0,guessHits:0,personalizedSync:0,extended:false,completed:false};
       currentSyncRound=null;syncChoice='';syncPrediction='';syncIsInitiator=false;syncSubmitted=false;
       specialRoundsUsed.clear();
       if($('gameFinalPanel')) $('gameFinalPanel').classList.add('hidden');
@@ -1407,7 +1417,10 @@
       $('gameFinalPanel').classList.remove('hidden');
       $('gameStatTurns').textContent=String(data.yourTurns ?? gameStats.turns);
       $('gameStatSpecial').textContent=String(data.syncRounds ?? serverGameProgress.syncRounds ?? 0);
+      $('gameStatCoincidences').textContent=String(data.coincidences ?? serverGameProgress.coincidences ?? 0);
       $('gameStatReactions').textContent=String(data.reactions ?? serverGameProgress.reactions ?? gameStats.reactions);
+      const hits=Number(data.guessHits ?? serverGameProgress.guessHits ?? 0), personalized=Number(data.personalizedSync ?? serverGameProgress.personalizedSync ?? 0), coinc=Number(data.coincidences ?? serverGameProgress.coincidences ?? 0);
+      $('gameFinalSummary').textContent=[coinc?`${coinc} coincidencia${coinc===1?'':'s'} en elecciones`:'',hits?`${hits} predicción${hits===1?' acertada':'es acertadas'}`:'',personalized?`${personalized} carta${personalized===1?'':'s'} basada${personalized===1?'':'s'} en intereses comunes`:'' ].filter(Boolean).join(' · ') || 'Habéis completado la partida juntos.';
       $('gamePhaseLabel').textContent='FINAL COMPARTIDO';
       $('gamePhaseHint').textContent='Los dos habéis completado la partida. Ahora decidís juntos qué hacer.';
       const cont=$('gameFinalPanel').querySelector('.game-final-actions .btn-secondary');
@@ -3273,7 +3286,9 @@
       ['syncChoiceA','syncChoiceB','syncPredictionA','syncPredictionB'].forEach(id=>$(id)?.classList.remove('selected'));
       $('syncSecretAnswer').value='';
       $('syncWaiting').classList.add('hidden');
+      $('syncRevealStage').classList.add('hidden');
       $('syncReveal').classList.add('hidden');
+      $('syncRevealBadge')?.classList?.add('hidden');
       $('syncSubmitButton').classList.remove('hidden');
       $('syncSubmitButton').disabled=true;
       $('syncSubmitButton').textContent='Bloquear respuesta';
@@ -3283,6 +3298,8 @@
       currentSyncRound=data;syncIsInitiator=data.initiatorSocketId===socket.id;resetSyncForm();
       $('syncRoundPanel').classList.remove('hidden');$('syncStartPanel').classList.add('hidden');$('controlesJuego').classList.add('hidden');
       $('syncPrompt').textContent=data.prompt||'Carta V/R';
+      $('syncInterestTag').classList.toggle('hidden',!data.personalized);
+      $('syncInterestName').textContent=data.personalized?(data.sharedInterest||'interés compartido'):'';
       $('syncChoiceBlock').classList.toggle('hidden',data.mode==='secret');
       $('syncPredictionBlock').classList.toggle('hidden',data.mode!=='guess');
       $('syncSecretBlock').classList.toggle('hidden',data.mode!=='secret');
@@ -3291,11 +3308,11 @@
         $('syncPredictionA').textContent=`A · ${data.options?.a||'Opción A'}`;$('syncPredictionB').textContent=`B · ${data.options?.b||'Opción B'}`;
       }
       if(data.mode==='guess'){
-        $('syncModeBadge').textContent='🧠 ADIVINA A TU MATCH';$('syncInstruction').textContent='Marca tu respuesta y luego predice la de tu Match. Nadie verá nada hasta el final.';
+        $('syncModeBadge').textContent=data.personalized?'✨ EN COMÚN · ADIVINA':'🧠 ADIVINA A TU MATCH';$('syncInstruction').textContent='Marca tu respuesta y luego predice la de tu Match. Nadie verá nada hasta el final.';
       }else if(data.mode==='secret'){
-        $('syncModeBadge').textContent='🏁 FINAL · RESPUESTA SECRETA';$('syncInstruction').textContent='Escribid los dos. Las respuestas se abrirán al mismo tiempo.';
+        $('syncModeBadge').textContent=data.personalized?'✨ EN COMÚN · A DOS VOCES':'🏁 FINAL · RESPUESTA SECRETA';$('syncInstruction').textContent='Escribid los dos. Las respuestas se abrirán al mismo tiempo.';
       }else{
-        $('syncModeBadge').textContent='⚡ LOS DOS RESPONDEN';$('syncInstruction').textContent='Elegid A o B en secreto. La coincidencia se revela cuando ambos bloqueéis la respuesta.';
+        $('syncModeBadge').textContent=data.personalized?'✨ EN COMÚN · LOS DOS RESPONDEN':'⚡ LOS DOS RESPONDEN';$('syncInstruction').textContent='Elegid A o B en secreto. La coincidencia se revela cuando ambos bloqueéis la respuesta.';
       }
       $('syncRoundStatus').textContent=`Tenéis unos ${Number(data.timeoutSeconds)||90} segundos para responder.`;
       aplicarEstiloCarta({special:true,final:data.mode==='secret'});
@@ -3319,8 +3336,29 @@
       $('syncSubmitButton').disabled=!ready||syncSubmitted;
     }
 
+    let gameAudioContext=null;
+    function prepararAudioJuego(){
+      try{
+        if(!gameAudioContext)gameAudioContext=new (window.AudioContext||window.webkitAudioContext)();
+        if(gameAudioContext.state==='suspended')gameAudioContext.resume();
+      }catch{}
+    }
+    function tonoRevelacion(accent=false){
+      try{
+        if(!gameAudioContext||gameAudioContext.state!=='running')return;
+        const now=gameAudioContext.currentTime;
+        [accent?523.25:392,accent?659.25:523.25].forEach((freq,i)=>{
+          const osc=gameAudioContext.createOscillator(),gain=gameAudioContext.createGain();
+          osc.type='sine';osc.frequency.value=freq;gain.gain.setValueAtTime(.0001,now+i*.08);gain.gain.exponentialRampToValueAtTime(.025,now+i*.08+.02);gain.gain.exponentialRampToValueAtTime(.0001,now+i*.08+.22);
+          osc.connect(gain);gain.connect(gameAudioContext.destination);osc.start(now+i*.08);osc.stop(now+i*.08+.24);
+        });
+      }catch{}
+    }
+    function pulsoHaptico(accent=false){try{if(navigator.vibrate)navigator.vibrate(accent?[35,35,70]:[25,30,35]);}catch{}}
+
     function enviarRespuestaSincronizada() {
       if(!currentSyncRound||syncSubmitted)return;
+      prepararAudioJuego();
       const payload={sala:miSala,id:currentSyncRound.id};
       if(currentSyncRound.mode==='secret')payload.answer=$('syncSecretAnswer').value.trim();
       else {payload.choice=syncChoice;if(currentSyncRound.mode==='guess')payload.prediction=syncPrediction;}
@@ -3346,26 +3384,63 @@
       $('syncRoundStatus').textContent=`${Number(data.submitted)||0}/${Number(data.total)||2} respuestas bloqueadas`;
       if(data.youSubmitted){$('syncWaiting').classList.remove('hidden');$('syncWaitingText').textContent=(Number(data.submitted)||0)>=2?'Revelando respuestas…':'Esperando a tu Match…';}
     });
-    socket.on('vr_sync_reveal',(data={})=>{
-      if(!currentSyncRound||data.id!==currentSyncRound.id)currentSyncRound=data;
-      $('syncWaiting').classList.add('hidden');$('syncSubmitButton').classList.add('hidden');$('syncReveal').classList.remove('hidden');
-      let headline='Respuestas reveladas',result='';
+    function pintarRevelacionSync(data={}){
+      let headline='Respuestas reveladas',result='',youMain='—',otherMain='—',youMeta='',otherMeta='',badge='';
+      const opponentName=data.opponent?.name||rivalNombre||'Tu Match';
+      $('syncRevealOpponentLabel').textContent=String(opponentName).toUpperCase();
       if(data.mode==='secret'){
-        headline='Dos respuestas. Cero pistas.';
-        result=`Tú:\n“${data.you?.answer||'—'}”\n\n${data.opponent?.name||rivalNombre}:\n“${data.opponent?.answer||'—'}”`;
+        headline=data.personalized?'✨ Un interés, dos ideas':'Dos respuestas. Cero pistas.';
+        youMain=data.you?.answer||'—';otherMain=data.opponent?.answer||'—';
+        result=data.personalized&&data.sharedInterest?`Carta creada a partir de vuestro interés común: ${data.sharedInterest}.`:'Ahora tenéis dos respuestas nuevas para seguir hablando.';
+        badge=data.personalized?'INTERÉS EN COMÚN':'A DOS VOCES';
       }else if(data.mode==='guess'){
-        const a=data.you?.guessCorrect?'✓ Acertaste':'✕ No acertaste';const b=data.opponent?.guessCorrect?'✓ Te adivinó':'✕ No te adivinó';
+        const a=data.you?.guessCorrect?'✓ Acertaste':'✕ No acertaste',b=data.opponent?.guessCorrect?'✓ Te adivinó':'✕ No te adivinó';
         headline=data.you?.guessCorrect&&data.opponent?.guessCorrect?'🧠 Os habéis leído la mente':data.you?.guessCorrect?'✨ Le conoces bastante bien':data.opponent?.guessCorrect?'😏 Tu Match te tenía calado/a':'😂 Todavía queda mucho por descubrir';
-        result=`Tu respuesta: ${data.you?.choiceText||'—'}\nTu predicción: ${data.you?.predictionText||'—'} · ${a}\n\n${data.opponent?.name||rivalNombre}: ${data.opponent?.choiceText||'—'}\nSu predicción sobre ti: ${data.opponent?.predictionText||'—'} · ${b}`;
+        youMain=data.you?.choiceText||'—';otherMain=data.opponent?.choiceText||'—';
+        youMeta=`Tu predicción: ${data.you?.predictionText||'—'} · ${a}`;otherMeta=`Predicción sobre ti: ${data.opponent?.predictionText||'—'} · ${b}`;
+        result=data.personalized&&data.sharedInterest?`Esta ronda nació de vuestro interés común: ${data.sharedInterest}.`:'';
+        badge=data.you?.guessCorrect&&data.opponent?.guessCorrect?'DOBLE ACIERTO':data.roundGuessHits?`${data.roundGuessHits} ACIERTO${data.roundGuessHits===1?'':'S'}`:'SIN ACIERTOS';
       }else{
         headline=data.matched?'✨ ¡Coincidencia!':'👀 Diferentes, y eso da conversación';
-        result=`Tú: ${data.you?.choiceText||'—'}\n${data.opponent?.name||rivalNombre}: ${data.opponent?.choiceText||'—'}`;
+        youMain=data.you?.choiceText||'—';otherMain=data.opponent?.choiceText||'—';
+        result=data.personalized&&data.sharedInterest?`Los dos compartís ${data.sharedInterest}; la pregunta se creó a partir de ese interés.`:'';
+        badge=data.matched?'COINCIDENCIA':'DOS PUNTOS DE VISTA';
       }
-      $('syncRevealHeadline').textContent=headline;$('syncRevealResult').textContent=result;
+      $('syncRevealHeadline').textContent=headline;$('syncRevealYou').textContent=youMain;$('syncRevealOpponent').textContent=otherMain;
+      $('syncRevealYouMeta').textContent=youMeta;$('syncRevealOpponentMeta').textContent=otherMeta;$('syncRevealResult').textContent=result;
+      $('syncRevealBadge').textContent=badge;$('syncRevealBadge').classList.toggle('hidden',!badge);
+      $('syncReveal').classList.remove('hidden');
+      const accent=Boolean(data.matched||data.you?.guessCorrect||data.opponent?.guessCorrect);
+      tonoRevelacion(accent);pulsoHaptico(accent);lanzarParticulasRevelacion(accent?18:10);
+    }
+
+    function lanzarParticulasRevelacion(accent=false){
+      if(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)return;
+      const host=$('syncRoundPanel');if(!host)return;
+      const layer=document.createElement('div');layer.className='sync-particle-layer';host.appendChild(layer);
+      const symbols=accent?['✨','✦','•','✧']:['✦','•','·'];
+      for(let i=0;i<(accent?18:10);i++){
+        const el=document.createElement('i');el.textContent=symbols[i%symbols.length];
+        el.style.setProperty('--x',`${8+Math.random()*84}%`);el.style.setProperty('--delay',`${Math.random()*.18}s`);el.style.setProperty('--drift',`${Math.round((Math.random()-.5)*70)}px`);
+        layer.appendChild(el);
+      }
+      setTimeout(()=>layer.remove(),1700);
+    }
+
+    function animarRevelacionSync(data={}){
+      $('syncWaiting').classList.add('hidden');$('syncSubmitButton').classList.add('hidden');$('syncReveal').classList.add('hidden');
+      const stage=$('syncRevealStage'),count=$('syncRevealCountdown');stage.classList.remove('hidden');let n=3;count.textContent=String(n);
+      const timer=setInterval(()=>{n-=1;if(n>0){count.textContent=String(n);pulsoHaptico(false);return;}clearInterval(timer);stage.classList.add('hidden');pintarRevelacionSync(data);},430);
+    }
+
+    socket.on('vr_sync_reveal',(data={})=>{
+      if(!currentSyncRound||data.id!==currentSyncRound.id)currentSyncRound=data;
+      if(data.personalized){$('syncInterestTag').classList.remove('hidden');$('syncInterestName').textContent=data.sharedInterest||'interés compartido';}
+      animarRevelacionSync(data);
       $('barraReacciones').classList.remove('hidden');
       if(syncIsInitiator){gameStats.special+=1;completarTurnoLocal();}
       miTurno=Boolean(data.nextTurn);
-      actualizarBarraTurno(false,'Revelación');
+      actualizarBarraTurno(false,'Revelando');
     });
     socket.on('vr_sync_cancelled',(data={})=>{
       if(syncIsInitiator)completarTurnoLocal({timeout:true});

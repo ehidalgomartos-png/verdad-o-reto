@@ -1,32 +1,32 @@
-V/R MATCH 18.3.0 — JUEGO SINCRONIZADO
-17/09/2026
+V/R MATCH 18.4.0 — REVISIÓN DE ESTA ACTUALIZACIÓN
 
-ARCHIVOS PRINCIPALES MODIFICADOS
-- index.html
-- styles.css
-- server.js
-- package.json
-- sw.js
-- como-funciona.html
+Cambios principales
+- Cartas sincronizadas personalizadas por intereses compartidos desde servidor.
+- Más cartas A/B, Adivina a tu Match y Final a dos voces en los tres mazos.
+- Nueva revelación visual 3–2–1.
+- Comparación separada de la respuesta propia y la del Match.
+- Distintivos de coincidencia y aciertos.
+- Háptica y tono corto de interfaz cuando el dispositivo/navegador lo permite.
+- Partículas de celebración con respeto a prefers-reduced-motion.
+- Contadores compartidos de coincidencias, predicciones acertadas y cartas personalizadas.
+- Resumen final más informativo sin crear un “score de compatibilidad”.
+- Corrección de llamada duplicada a prepararMesa().
+- Privacidad actualizada para explicar el tratamiento temporal de respuestas sincronizadas.
+- Cache PWA actualizada a vr-match-shell-v18-4-0.
 
-NOVEDADES
-- Estado de turno autoritativo en servidor.
-- Los dos responden (A/B secreto + revelación simultánea).
-- Adivina a tu Match (respuesta + predicción).
-- Final a dos voces (texto secreto de ambos).
-- Final compartido de partida tras 8 turnos de cada jugador.
-- Decisión sincronizada para terminar o continuar con rondas extra.
-- Progreso y estadísticas compartidas.
-- El servidor controla expiración de cartas sincronizadas.
+Privacidad
+- No se añade una tabla de respuestas de juego.
+- Las respuestas secretas A/B, predicciones y texto sincronizado viven únicamente en memoria mientras la ronda está activa.
+- No se persisten fotos/vídeos de prueba como historial del juego.
+- La personalización por intereses usa perfiles ya existentes y solo comparte con los jugadores el interés común utilizado en esa carta.
 
-COMPATIBILIDAD
-- Node.js 22.x.
-- Express 4.21.x.
-- Socket.IO 4.8.x.
-- SQLite / better-sqlite3 actual.
-- No requiere nuevas dependencias npm ni nuevas variables de entorno.
-- No requiere migración de base de datos para el nuevo juego.
-
-IMPORTANTE
-Para desplegar esta versión deben actualizarse frontend Y server.js juntos.
-Probar siempre con dos usuarios distintos antes de darla por validada.
+Validaciones realizadas
+- node --check server.js: OK
+- node --check del JavaScript inline de index.html: OK
+- package.json: JSON válido
+- manifest.webmanifest: JSON válido
+- IDs HTML duplicados: 0
+- Referencias literales $('id') sin elemento HTML: 0
+- onclick con función ausente: 0
+- Llaves CSS equilibradas
+- Sin rótulos internos o de prelanzamiento visibles en los archivos públicos de la actualización

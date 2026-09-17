@@ -24,7 +24,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.3.0';
+const APP_VERSION = '18.4.0';
 const LEGAL_VERSION = '2026-09-17';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -165,7 +165,7 @@ function ensureColumn(table, column, definition) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();
   if (!cols.some(c => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
-// Migraciones compatibles con las bases creadas en Fase 3.
+// Migraciones compatibles con bases creadas por versiones anteriores.
 ensureColumn('users', 'email_verified', 'INTEGER NOT NULL DEFAULT 1');
 ensureColumn('users', 'email_verified_at', 'INTEGER');
 ensureColumn('profiles', 'discoverable', 'INTEGER NOT NULL DEFAULT 1');
@@ -182,7 +182,7 @@ ensureColumn('reports', 'evidence_json', "TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('users', 'onboarding_completed', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('sessions', 'session_id', 'TEXT');
 ensureColumn('sessions', 'last_seen_at', 'INTEGER');
-// Fase 13: cada sesión recibe un identificador opaco para poder gestionarla sin exponer tokens.
+// Cada sesión recibe un identificador opaco para poder gestionarla sin exponer tokens.
 for (const row of db.prepare('SELECT token_hash,session_id,created_at,last_seen_at FROM sessions').all()) {
   if (!row.session_id) db.prepare('UPDATE sessions SET session_id=? WHERE token_hash=?').run(safeId('ses'), row.token_hash);
   if (!row.last_seen_at) db.prepare('UPDATE sessions SET last_seen_at=? WHERE token_hash=?').run(row.created_at || now(), row.token_hash);
@@ -433,18 +433,24 @@ const SYNC_GAME_CARDS = {
       { prompt:'Para romper el hielo ahora mismo, ¿qué plan elegirías?', a:'Café tranquilo', b:'Plan improvisado' },
       { prompt:'¿Qué te representa más un viernes por la noche?', a:'Salir y descubrir algo', b:'Plan cómodo y conversación' },
       { prompt:'Si mañana pudieras escapar unas horas, ¿qué escogerías?', a:'Mar', b:'Montaña' },
-      { prompt:'¿Cómo prefieres conocer de verdad a alguien?', a:'Hablando sin prisa', b:'Haciendo algo juntos' }
+      { prompt:'¿Cómo prefieres conocer de verdad a alguien?', a:'Hablando sin prisa', b:'Haciendo algo juntos' },
+      { prompt:'Cuando conoces a alguien nuevo, ¿qué te sale más natural?', a:'Hacer muchas preguntas', b:'Contar historias y anécdotas' },
+      { prompt:'¿Qué hace mejor un plan sencillo?', a:'Una conversación inesperada', b:'Reírse sin parar' }
     ],
     guess: [
-      { prompt:'¿Qué elegiría tu Match para una primera cita?', a:'Algo sencillo', b:'Algo inesperado' },
-      { prompt:'¿Qué crees que prefiere tu Match?', a:'Viaje planificado', b:'Aventura improvisada' },
-      { prompt:'¿Qué encaja más con tu Match?', a:'Mensaje de buenos días', b:'Mensaje de buenas noches' },
-      { prompt:'Si tuviera que elegir ahora, ¿qué crees que escogería?', a:'Cena larga', b:'Paseo sin rumbo' }
+      { prompt:'Para una primera cita, ¿qué elegirías?', a:'Algo sencillo', b:'Algo inesperado' },
+      { prompt:'¿Qué preferirías?', a:'Viaje planificado', b:'Aventura improvisada' },
+      { prompt:'¿Qué detalle te gusta más recibir?', a:'Mensaje de buenos días', b:'Mensaje de buenas noches' },
+      { prompt:'Si tuvieras que elegir ahora, ¿qué escogerías?', a:'Cena larga', b:'Paseo sin rumbo' },
+      { prompt:'Para desconectar, ¿qué elegirías?', a:'Música y charla', b:'Salir a explorar' },
+      { prompt:'Si te regalaran una tarde libre, ¿qué escogerías?', a:'Improvisar algo', b:'Planear su plan favorito' }
     ],
     secret: [
       { prompt:'Sin ver la respuesta del otro: ¿qué te gustaría seguir descubriendo de esta persona?' },
       { prompt:'Escribe una cosa que te haya sorprendido positivamente durante la partida.' },
-      { prompt:'¿Qué tema te gustaría continuar hablando cuando termine el juego?' }
+      { prompt:'¿Qué tema te gustaría continuar hablando cuando termine el juego?' },
+      { prompt:'Escribe una pregunta que te gustaría hacerle después, fuera del juego.' },
+      { prompt:'¿Qué detalle de vuestra conversación te ha dado curiosidad por conocer mejor?' }
     ]
   },
   parejas: {
@@ -452,18 +458,24 @@ const SYNC_GAME_CARDS = {
       { prompt:'¿Qué plan os pega más para desconectar juntos?', a:'Escapada de fin de semana', b:'Cena larga sin reloj' },
       { prompt:'¿Qué gesto pesa más para ti?', a:'Una sorpresa', b:'Un detalle cotidiano' },
       { prompt:'¿Qué crea más conexión?', a:'Reírse mucho', b:'Hablar de verdad' },
-      { prompt:'¿Qué preferirías compartir?', a:'Un viaje nuevo', b:'Un lugar favorito' }
+      { prompt:'¿Qué preferirías compartir?', a:'Un viaje nuevo', b:'Un lugar favorito' },
+      { prompt:'¿Qué os acercaría más en un día normal?', a:'Cocinar o hacer algo juntos', b:'Salir sin un plan cerrado' },
+      { prompt:'¿Qué valoras más cuando hay confianza?', a:'Poder hablar de todo', b:'Sentirte cómodo/a en silencio' }
     ],
     guess: [
-      { prompt:'¿Qué crees que elegiría tu Match para una cita?', a:'Plan romántico', b:'Plan divertido' },
-      { prompt:'¿Qué valoraría más tu Match?', a:'Espontaneidad', b:'Atención a los detalles' },
-      { prompt:'¿Qué crees que prefiere tu Match?', a:'Hablar hasta tarde', b:'Hacer planes juntos' },
-      { prompt:'¿Qué opción le representa más?', a:'Sorpresa', b:'Plan bien pensado' }
+      { prompt:'Para una cita, ¿qué elegirías?', a:'Plan romántico', b:'Plan divertido' },
+      { prompt:'¿Qué valorarías más?', a:'Espontaneidad', b:'Atención a los detalles' },
+      { prompt:'¿Qué preferirías?', a:'Hablar hasta tarde', b:'Hacer planes juntos' },
+      { prompt:'¿Qué opción te representa más?', a:'Sorpresa', b:'Plan bien pensado' },
+      { prompt:'Para celebrar algo, ¿qué elegirías?', a:'Un detalle íntimo', b:'Un plan memorable' },
+      { prompt:'¿Qué te haría más ilusión?', a:'Una nota inesperada', b:'Una experiencia juntos' }
     ],
     secret: [
       { prompt:'¿Qué pequeño gesto te gustaría repetir más con esta persona?' },
       { prompt:'¿Qué crees que hace especial vuestra forma de conectar?' },
-      { prompt:'¿Qué conversación te gustaría tener después de esta partida?' }
+      { prompt:'¿Qué conversación te gustaría tener después de esta partida?' },
+      { prompt:'Escribe un plan sencillo que te gustaría compartir con esta persona algún día.' },
+      { prompt:'¿Qué cualidad de la otra persona te gustaría seguir descubriendo con calma?' }
     ]
   },
   seccionXX: {
@@ -471,18 +483,24 @@ const SYNC_GAME_CARDS = {
       { prompt:'¿Qué crea más tensión divertida para ti?', a:'Una mirada', b:'Una conversación' },
       { prompt:'¿Qué te parece más atractivo?', a:'Seguridad', b:'Sentido del humor' },
       { prompt:'¿Qué ambiente elegirías para una cita especial?', a:'Elegante y tranquilo', b:'Espontáneo y atrevido' },
-      { prompt:'¿Qué prefieres cuando hay química?', a:'Ir poco a poco', b:'Dejarse llevar' }
+      { prompt:'¿Qué prefieres cuando hay química?', a:'Ir poco a poco', b:'Dejarse llevar' },
+      { prompt:'¿Qué te gana antes?', a:'Una conversación con intención', b:'Una energía espontánea' },
+      { prompt:'¿Qué tipo de cita te parece más atractiva?', a:'Ambiente íntimo', b:'Algo con sorpresa' }
     ],
     guess: [
-      { prompt:'¿Qué crees que elegiría tu Match?', a:'Coqueteo sutil', b:'Coqueteo directo' },
-      { prompt:'¿Qué le atraería más?', a:'Una mirada intensa', b:'Una conversación con química' },
-      { prompt:'¿Qué opción le representa más?', a:'Misterio', b:'Espontaneidad' },
-      { prompt:'¿Qué crees que prefiere?', a:'Cita íntima', b:'Plan con aventura' }
+      { prompt:'Si hubiera química, ¿qué elegirías?', a:'Coqueteo sutil', b:'Coqueteo directo' },
+      { prompt:'¿Qué te atraería más?', a:'Una mirada intensa', b:'Una conversación con química' },
+      { prompt:'¿Qué opción te representa más?', a:'Misterio', b:'Espontaneidad' },
+      { prompt:'¿Qué preferirías?', a:'Cita íntima', b:'Plan con aventura' },
+      { prompt:'¿Qué te resulta más seductor?', a:'Humor y confianza', b:'Misterio y tensión' },
+      { prompt:'Si pudieras elegir el ambiente, ¿qué escogerías?', a:'Luz baja y charla', b:'Plan espontáneo fuera de casa' }
     ],
     secret: [
       { prompt:'¿Qué detalle hace que notes que existe química con alguien?' },
       { prompt:'¿Qué te gustaría que la otra persona entendiera sobre tu forma de coquetear?' },
-      { prompt:'¿Qué hace que una conversación pase de interesante a especial para ti?' }
+      { prompt:'¿Qué hace que una conversación pase de interesante a especial para ti?' },
+      { prompt:'Escribe una señal sutil que para ti indique que hay química real.' },
+      { prompt:'¿Qué te gustaría que la otra persona entendiera sobre lo que te hace sentir cómodo/a al coquetear?' }
     ]
   }
 };
@@ -2130,15 +2148,19 @@ function buildRoomState(playerIds, creatorId, mazo, dating=false) {
   return {
     players:new Set(ids), creatorId, mazo:validDeck(mazo), dating:Boolean(dating),
     turnSocketId:creatorId, activeCard:null, syncRound:null,
-    game:{turns:Object.fromEntries(ids.map(id=>[id,0])),reactions:0,syncRounds:0,completed:false,extended:false,decisions:{},resumeTurnSocketId:creatorId}
+    game:{turns:Object.fromEntries(ids.map(id=>[id,0])),reactions:0,syncRounds:0,coincidences:0,guessHits:0,personalizedSync:0,personalizedSyncUsed:false,completed:false,extended:false,decisions:{},resumeTurnSocketId:creatorId}
   };
 }
 function ensureRoomPlayerState(room, socketId) {
-  if(!room.game)room.game={turns:{},reactions:0,syncRounds:0,completed:false,extended:false,decisions:{},resumeTurnSocketId:room.creatorId||socketId};
+  if(!room.game)room.game={turns:{},reactions:0,syncRounds:0,coincidences:0,guessHits:0,personalizedSync:0,personalizedSyncUsed:false,completed:false,extended:false,decisions:{},resumeTurnSocketId:room.creatorId||socketId};
   if(!room.game.turns)room.game.turns={};
   if(!(socketId in room.game.turns))room.game.turns[socketId]=0;
   if(!room.turnSocketId)room.turnSocketId=room.creatorId||socketId;
   if(!room.game.decisions)room.game.decisions={};
+  if(!Number.isFinite(Number(room.game.coincidences)))room.game.coincidences=0;
+  if(!Number.isFinite(Number(room.game.guessHits)))room.game.guessHits=0;
+  if(!Number.isFinite(Number(room.game.personalizedSync)))room.game.personalizedSync=0;
+  if(typeof room.game.personalizedSyncUsed!=='boolean')room.game.personalizedSyncUsed=false;
 }
 function clearRoomSyncTimer(room){if(room?.syncRound?.timer){clearTimeout(room.syncRound.timer);room.syncRound.timer=null;}}
 function leaveRoom(socket, notifyOpponent=false) {
@@ -2199,6 +2221,7 @@ function emitGameProgress(room){
     sock.emit('vr_game_progress',{
       yourTurns:Number(room.game.turns?.[sid]||0),opponentTurns:Number(other?room.game.turns?.[other.id]||0:0),
       targetTurns:GAME_TARGET_TURNS,reactions:Number(room.game.reactions||0),syncRounds:Number(room.game.syncRounds||0),
+      coincidences:Number(room.game.coincidences||0),guessHits:Number(room.game.guessHits||0),personalizedSync:Number(room.game.personalizedSync||0),
       extended:Boolean(room.game.extended),completed:Boolean(room.game.completed),yourTurn:room.turnSocketId===sid
     });
   }
@@ -2210,7 +2233,8 @@ function emitGameComplete(room){
     const other=roomOpponentById(room,sid);
     sock.emit('vr_game_complete',{
       yourTurns:Number(room.game.turns?.[sid]||0),opponentTurns:Number(other?room.game.turns?.[other.id]||0:0),
-      syncRounds:Number(room.game.syncRounds||0),reactions:Number(room.game.reactions||0),targetTurns:GAME_TARGET_TURNS
+      syncRounds:Number(room.game.syncRounds||0),reactions:Number(room.game.reactions||0),coincidences:Number(room.game.coincidences||0),
+      guessHits:Number(room.game.guessHits||0),personalizedSync:Number(room.game.personalizedSync||0),targetTurns:GAME_TARGET_TURNS
     });
   }
 }
@@ -2232,10 +2256,38 @@ function completeRoomTurn(room, actingSocket, meta={}){
   }
   return {completed:false,next};
 }
-function pickSyncCard(mazo,mode){
-  const deck=SYNC_GAME_CARDS[validDeck(mazo)]||SYNC_GAME_CARDS.rompehielos;
+function normalizedInterests(profile){
+  const out=new Map();
+  for(const item of profile?.intereses||[]){
+    const label=cleanShortText(item,24);const key=label.toLowerCase();
+    if(key&&!out.has(key))out.set(key,label);
+  }
+  return out;
+}
+function sharedRoomInterests(room){
+  if(!room?.dating||room.players.size!==2)return [];
+  const profiles=[...room.players].map(sid=>roomSocket(room,sid)?.userId).filter(Boolean).map(getProfile).filter(Boolean);
+  if(profiles.length!==2)return [];
+  const a=normalizedInterests(profiles[0]),b=normalizedInterests(profiles[1]),shared=[];
+  for(const [key,label] of a){if(b.has(key))shared.push(label);}
+  return shared.slice(0,4);
+}
+function personalizedSyncCard(room,mode){
+  const shared=sharedRoomInterests(room);if(!shared.length)return null;
+  const interest=shared[Math.floor(Math.random()*shared.length)];
+  if(mode==='guess')return {personalized:true,sharedInterest:interest,prompt:`Los dos tenéis “${interest}” en común. Si hicierais un plan relacionado con eso, ¿qué elegirías?`,a:'Descubrir algo nuevo',b:'Repetir un favorito'};
+  if(mode==='secret')return {personalized:true,sharedInterest:interest,prompt:`Tenéis “${interest}” en común. Escribe un plan concreto relacionado con ese interés que te apetecería compartir con tu Match.`};
+  return {personalized:true,sharedInterest:interest,prompt:`Tenéis “${interest}” en común. Si lo compartierais en una cita, ¿qué os apetecería más?`,a:'Un plan tranquilo',b:'Algo nuevo e improvisado'};
+}
+function pickSyncCard(room,mode){
+  if(room?.dating&&!room.game?.personalizedSyncUsed){
+    const personalized=personalizedSyncCard(room,mode);
+    if(personalized){room.game.personalizedSyncUsed=true;return personalized;}
+  }
+  const deck=SYNC_GAME_CARDS[validDeck(room?.mazo)]||SYNC_GAME_CARDS.rompehielos;
   const list=deck[mode]||SYNC_GAME_CARDS.rompehielos[mode]||[];
-  return list.length?list[Math.floor(Math.random()*list.length)]:null;
+  const picked=list.length?list[Math.floor(Math.random()*list.length)]:null;
+  return picked?{...picked,personalized:false,sharedInterest:''}:null;
 }
 function closeRoomForAll(roomId,event='vr_game_finished',payload={}){
   const room=rooms.get(roomId);if(!room)return;
@@ -2425,12 +2477,12 @@ io.on('connection', socket => {
     if(room.turnSocketId!==socket.id)return done({ok:false,error:'Ahora mismo no es tu turno.'});
     if(room.activeCard||room.syncRound)return done({ok:false,error:'Ya hay una carta en curso.'});
     const mode=VALID_SYNC_MODES.has(String(d.mode||''))?String(d.mode):'choice';
-    const card=pickSyncCard(room.mazo,mode);if(!card)return done({ok:false,error:'No se pudo preparar la carta sincronizada.'});
+    const card=pickSyncCard(room,mode);if(!card)return done({ok:false,error:'No se pudo preparar la carta sincronizada.'});
     const syncId=safeId('sync');
-    const round={id:syncId,mode,prompt:cleanShortText(card.prompt,320),options:mode==='secret'?null:{a:cleanShortText(card.a,100),b:cleanShortText(card.b,100)},initiatorSocketId:socket.id,submissions:{},createdAt:now(),timer:null};
+    const round={id:syncId,mode,prompt:cleanShortText(card.prompt,320),options:mode==='secret'?null:{a:cleanShortText(card.a,100),b:cleanShortText(card.b,100)},personalized:Boolean(card.personalized),sharedInterest:cleanShortText(card.sharedInterest,24),initiatorSocketId:socket.id,submissions:{},createdAt:now(),timer:null};
     room.syncRound=round;room.activeCard=null;
     round.timer=setTimeout(()=>expireSyncRound(socket.room,syncId),SYNC_ROUND_TTL_MS);
-    for(const sid of room.players){const sock=roomSocket(room,sid);if(sock)sock.emit('vr_sync_round_started',{id:syncId,mode,prompt:round.prompt,options:round.options,initiatorSocketId:socket.id,initiatorName:socket.nombre||'Tu oponente',timeoutSeconds:Math.floor(SYNC_ROUND_TTL_MS/1000)});}
+    for(const sid of room.players){const sock=roomSocket(room,sid);if(sock)sock.emit('vr_sync_round_started',{id:syncId,mode,prompt:round.prompt,options:round.options,personalized:round.personalized,sharedInterest:round.sharedInterest,initiatorSocketId:socket.id,initiatorName:socket.nombre||'Tu oponente',timeoutSeconds:Math.floor(SYNC_ROUND_TTL_MS/1000)});}
     done({ok:true,id:syncId});
   });
   socket.on('vr_sync_submit',(d={},ack)=>{
@@ -2453,15 +2505,20 @@ io.on('connection', socket => {
     const initiator=roomSocket(room,round.initiatorSocketId);if(!initiator){room.syncRound=null;return;}
     const next=roomOpponentById(room,initiator.id);
     const players=[...room.players].map(sid=>{const sock=roomSocket(room,sid);return {sid,name:sock?.nombre||'Jugador',...(round.submissions[sid]||{})};});
+    const matched=round.mode==='choice'&&players.length===2&&Boolean(players[0].choice&&players[0].choice===players[1].choice);
+    const guessHits=round.mode==='guess'&&players.length===2?Number(players[0].prediction===players[1].choice)+Number(players[1].prediction===players[0].choice):0;
+    if(matched)room.game.coincidences=Number(room.game.coincidences||0)+1;
+    if(guessHits)room.game.guessHits=Number(room.game.guessHits||0)+guessHits;
+    if(round.personalized)room.game.personalizedSync=Number(room.game.personalizedSync||0)+1;
     for(const sid of room.players){
       const sock=roomSocket(room,sid);if(!sock)continue;
       const you=players.find(x=>x.sid===sid)||{};const other=players.find(x=>x.sid!==sid)||{};
       const optionText=key=>round.options?.[key]||'';
       sock.emit('vr_sync_reveal',{
-        id:round.id,mode:round.mode,prompt:round.prompt,options:round.options,initiatorSocketId:initiator.id,nextTurn:next?.id===sid,
+        id:round.id,mode:round.mode,prompt:round.prompt,options:round.options,personalized:round.personalized,sharedInterest:round.sharedInterest,initiatorSocketId:initiator.id,nextTurn:next?.id===sid,
         you:{name:you.name,choice:you.choice||'',choiceText:optionText(you.choice),prediction:you.prediction||'',predictionText:optionText(you.prediction),answer:you.answer||'',guessCorrect:round.mode==='guess'?you.prediction===other.choice:null},
         opponent:{name:other.name,choice:other.choice||'',choiceText:optionText(other.choice),prediction:other.prediction||'',predictionText:optionText(other.prediction),answer:other.answer||'',guessCorrect:round.mode==='guess'?other.prediction===you.choice:null},
-        matched:round.mode==='choice'?Boolean(you.choice&&you.choice===other.choice):null
+        matched:round.mode==='choice'?Boolean(you.choice&&you.choice===other.choice):null,roundGuessHits:guessHits
       });
     }
     room.syncRound=null;
@@ -2499,5 +2556,5 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.3 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.4 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size}`);
   console.log('Resiliencia F14: mantenimiento + backup manual protegidos');console.log('V18: funciones V/R+ actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad F13: sesiones + bloqueados + exportación de datos');});

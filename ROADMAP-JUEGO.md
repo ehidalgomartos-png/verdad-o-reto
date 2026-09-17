@@ -1,23 +1,30 @@
 # V/R Match — evolución del juego
 
-## V18.3 implementado
+## V18.4 implementado
 
-- Motor de turnos autoritativo en `server.js`.
-- Ronda 3: **Los dos responden** — elección A/B oculta y revelación simultánea.
-- Ronda 6: **Adivina a tu Match** — respuesta propia + predicción de la respuesta del otro.
-- Ronda 8: **Final a dos voces** — respuesta de texto secreta de ambos y revelación simultánea.
-- El servidor espera las dos respuestas antes de revelar datos.
-- Tiempo máximo de ronda sincronizada controlado por servidor.
-- Progreso compartido de partida y conteo de turnos por jugador.
-- Final compartido solo cuando ambos han completado 8 turnos.
-- Decisión final sincronizada: si ambos eligen seguir, se abren rondas extra; si cualquiera termina, se cierra la sala para ambos.
-- Reacciones incluidas en las estadísticas compartidas.
-- Se conserva Verdad/Reto, cámara, vídeo, salas privadas, lobby e invitaciones desde Match.
+- Mantiene el motor autoritativo de turnos de V18.3.
+- Amplía los bancos de cartas sincronizadas de Rompehielos, Parejas y +18.
+- Las partidas nacidas de un Match pueden recibir una carta sincronizada creada a partir de un interés que ambos perfiles tengan en común.
+- Esa personalización se decide en servidor y no depende del nombre visible del perfil.
+- Revelación renovada con cuenta atrás 3–2–1, comparación visual de respuestas y resultado destacado.
+- Feedback háptico y tono corto de interfaz cuando el navegador lo permite; se respeta `prefers-reduced-motion` para las animaciones.
+- Partículas visuales en coincidencias/aciertos sin recursos externos.
+- Nuevos contadores compartidos: coincidencias A/B, predicciones acertadas y cartas sincronizadas personalizadas.
+- El resumen final utiliza esos contadores sin convertirlos en una puntuación de compatibilidad.
+- Se corrige una llamada duplicada a `prepararMesa()` en el inicio de partida.
+- `server.js`, `package.json` y Service Worker pasan a 18.4.0.
+- Las respuestas secretas sincronizadas continúan viviendo solo en memoria durante la ronda; no se crea historial persistente de respuestas.
 
-## Siguiente bloque recomendado
+## Principio que se mantiene
 
-1. Historial opcional de partidas terminadas (sin guardar fotos/vídeos de retos).
-2. Más bancos de cartas sincronizadas por mazo.
-3. Cartas sincronizadas personalizadas con intereses compartidos desde servidor.
-4. Animaciones/sonido/háptica para revelaciones y Match mental.
-5. Métricas agregadas sobre abandono de partida y tipos de carta más usados, sin almacenar respuestas privadas.
+V/R Match sigue siendo primero una app de citas y después un juego. El recorrido principal continúa siendo:
+
+**DESCUBRIR → LIKE → MATCH → CHAT → JUGAR → VOLVER AL CHAT**
+
+## Siguiente bloque recomendado — V18.5
+
+1. Crear un historial opcional de partidas terminadas que guarde solo metadatos seguros: fecha, mazo, duración aproximada, número de rondas, coincidencias y reacciones; nunca respuestas, fotos ni vídeos.
+2. Incorporar métricas agregadas de abandono/completado por tipo de partida para mejorar el diseño sin almacenar contenido privado.
+3. Añadir “favoritos de partida”: permitir marcar una pregunta como interesante para retomarla después en el chat, guardando solo la referencia/tipo de carta y no la respuesta privada.
+4. Mejorar la recuperación ante una reconexión breve para que una partida activa pueda restaurar su estado durante unos segundos en vez de terminar inmediatamente.
+5. Revisar duración real de las partidas con pruebas de dos usuarios y ajustar el objetivo de 8 turnos por jugador si resulta demasiado largo.
