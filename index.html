@@ -70,6 +70,15 @@
         </div>
         <button id="authSubmit" class="btn btn-primary btn-xl" type="submit"><span>Entrar</span><b>→</b></button>
       </form>
+      <div id="verificationPendingBox" class="auth-verification-card hidden" role="status" aria-live="polite">
+        <span class="auth-verification-icon">✉</span>
+        <div class="auth-verification-copy">
+          <strong id="verificationPendingTitle">Verifica tu correo</strong>
+          <p>Te hemos enviado el enlace de verificación a <b id="verificationPendingEmail">—</b>.</p>
+          <small id="verificationPendingHint">Si no lo encuentras, revisa Spam o Promociones y puedes volver a enviarlo.</small>
+          <button id="resendPendingVerificationButton" class="auth-verification-resend" type="button" onclick="reenviarVerificacionPendiente()">Reenviar correo de verificación</button>
+        </div>
+      </div>
       <button id="forgotPasswordButton" class="auth-forgot" type="button" onclick="abrirRecuperacion()">¿Olvidaste tu contraseña?</button>
       <p class="legal-note">Solo +18. Consulta <a href="/como-funciona.html" target="_blank" rel="noopener">Cómo funciona</a>, nuestras <a href="/terms.html" target="_blank" rel="noopener">Condiciones beta</a>, <a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a> y <a href="/community.html" target="_blank" rel="noopener">Normas de comunidad</a>.</p>
       <a class="auth-plus-footer-link" href="/funciones.html" target="_blank" rel="noopener">✦ Funciones V/R+</a>
@@ -771,6 +780,7 @@
     let plusReturnScreen = 'pantallaDescubrir';
     let currentPrivacy = { discoverable:true, showOnline:true, allowGameInvites:true };
     let authMode = 'login';
+    let pendingVerificationEmail = '';
     let miSala = '';
     let mazoElegido = 'rompehielos';
     let miTurno = false;
@@ -1553,6 +1563,39 @@
       $('authPassword').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
       $('registerLegalBox').classList.toggle('hidden', authMode !== 'register');
       $('forgotPasswordButton').classList.toggle('hidden', authMode === 'register');
+      if(authMode === 'register') ocultarVerificacionPendiente();
+    }
+
+    function mostrarVerificacionPendiente(email, envioRealizado=true) {
+      pendingVerificationEmail = String(email || '').trim().toLowerCase();
+      if(!pendingVerificationEmail) return;
+      $('verificationPendingEmail').textContent = pendingVerificationEmail;
+      $('verificationPendingTitle').textContent = envioRealizado ? 'Revisa tu correo' : 'Correo pendiente de verificar';
+      $('verificationPendingHint').textContent = envioRealizado
+        ? 'Si no lo encuentras, revisa Spam o Promociones y puedes volver a enviarlo.'
+        : 'Esta cuenta todavía no está verificada. Puedes solicitar un nuevo correo ahora.';
+      $('verificationPendingBox').classList.remove('hidden');
+    }
+
+    function ocultarVerificacionPendiente() {
+      pendingVerificationEmail = '';
+      $('verificationPendingBox')?.classList.add('hidden');
+    }
+
+    async function reenviarVerificacionPendiente() {
+      const email = pendingVerificationEmail || String($('authEmail')?.value || '').trim().toLowerCase();
+      if(!email) return mostrarToast('Escribe el correo de tu cuenta.','warn');
+      const btn = $('resendPendingVerificationButton');
+      const old = btn?.textContent || 'Reenviar correo de verificación';
+      if(btn){ btn.disabled=true; btn.textContent='Enviando…'; }
+      try {
+        const res = await api('/api/auth/resend-verification',{method:'POST',body:{email}});
+        if(!res.ok) return mostrarToast(res.error || 'No se pudo reenviar el correo.','error');
+        mostrarVerificacionPendiente(email,true);
+        mostrarToast('Si la cuenta está pendiente, hemos enviado un nuevo correo de verificación.','info');
+      } finally {
+        if(btn){ btn.disabled=false; btn.textContent=old; }
+      }
     }
 
     function conectarSocket() {
@@ -3440,12 +3483,30 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
       const body={email,password};
       if(authMode==='register'){body.confirmAdult=$('confirmAdult').checked;body.acceptTerms=$('acceptTerms').checked;if(!body.confirmAdult)return mostrarToast('Confirma que tienes 18 años o más.','warn');if(!body.acceptTerms)return mostrarToast('Acepta las condiciones beta y la privacidad.','warn');}
       const res=await api(endpoint,{method:'POST',body});
-      if (!res.ok) return mostrarToast(res.error || 'No se pudo acceder.','error');
-      if (res.verificationRequired && !res.token) { mostrarToast(res.emailSent?'Cuenta creada. Revisa tu correo para verificarla.':'Cuenta creada, pero falta configurar el envío de correo en el servidor.','info'); cambiarAuthMode('login'); return; }
+      if (!res.ok) {
+        if(res.verificationRequired){
+          cambiarAuthMode('login');
+          mostrarVerificacionPendiente(email,false);
+          mostrarToast('Tu correo todavía no está verificado. Puedes reenviar el enlace desde aquí.','info');
+          return;
+        }
+        return mostrarToast(res.error || 'No se pudo acceder.','error');
+      }
+      if (res.verificationRequired && !res.token) {
+        cambiarAuthMode('login');
+        mostrarVerificacionPendiente(email,Boolean(res.emailSent));
+        mostrarToast(res.emailSent?`Cuenta creada. Enviamos la verificación a ${email}.`:'Cuenta creada, pero no se pudo confirmar el envío del correo. Puedes reenviarlo.','info');
+        return;
+      }
+      ocultarVerificacionPendiente();
       await completarAcceso(res);
       mostrarToast(authMode==='register'?(res.emailVerificationPending?'Cuenta creada. Puedes verificar tu correo desde Cuenta y seguridad.':'Cuenta creada. Completa tu perfil.'):'Sesión iniciada.','info');
     });
 
+    $('authEmail').addEventListener('input', () => {
+      const email = String($('authEmail').value || '').trim().toLowerCase();
+      if(pendingVerificationEmail && email !== pendingVerificationEmail) ocultarVerificacionPendiente();
+    });
     $('nombreUsuario').addEventListener('input', () => { $('nombreUsuario').value = limpiarNombre($('nombreUsuario').value); });
     $('bioUsuario').addEventListener('input', () => { $('bioCounter').textContent = String($('bioUsuario').value.length); });
     $('feedbackMessage').addEventListener('input',()=>{$('feedbackCounter').textContent=`${$('feedbackMessage').value.length} / 1200`;});

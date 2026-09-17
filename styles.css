@@ -578,3 +578,16 @@ textarea { font: inherit; }
 @media(max-width:900px){.admin-tabs{grid-template-columns:repeat(4,1fr)}.monetization-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:640px){.admin-tabs{grid-template-columns:1fr 1fr}.monetization-status-grid{grid-template-columns:1fr}}
 .monetization-legal-check{grid-template-columns:auto 1fr!important;align-items:flex-start;gap:9px!important;padding:12px;border:1px solid rgba(255,190,64,.18);border-radius:13px;background:rgba(255,190,64,.05);font-weight:700!important;line-height:1.45}.monetization-legal-check input{margin-top:2px;accent-color:#ff4a89}.monetization-legal-check span{font-size:.68rem;color:#c8c3cc}
+
+/* V18.1.1 · verificación visible en login */
+.auth-verification-card{display:flex;gap:12px;align-items:flex-start;margin:14px 0 2px;padding:14px 15px;border:1px solid rgba(64,210,142,.34);border-radius:16px;background:linear-gradient(135deg,rgba(19,53,42,.58),rgba(18,25,37,.78));box-shadow:0 14px 36px rgba(0,0,0,.16)}
+.auth-verification-card.hidden{display:none}
+.auth-verification-icon{display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;border-radius:12px;background:#132d29;color:#6de2ad;font-size:18px}
+.auth-verification-copy{min-width:0;flex:1}
+.auth-verification-copy strong{display:block;color:#f5fff9;font-size:13px;margin-bottom:4px}
+.auth-verification-copy p{margin:0;color:#c9d8d0;font-size:11px;line-height:1.45;overflow-wrap:anywhere}
+.auth-verification-copy p b{color:#7aefb7}
+.auth-verification-copy small{display:block;margin-top:5px;color:#889991;font-size:10px;line-height:1.45}
+.auth-verification-resend{margin-top:9px;padding:0;border:0;background:none;color:#62e8a9;font:inherit;font-size:10px;font-weight:900;cursor:pointer;text-decoration:none}
+.auth-verification-resend:hover{color:#fff}
+.auth-verification-resend:disabled{opacity:.55;cursor:wait}
