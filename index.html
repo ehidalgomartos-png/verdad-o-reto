@@ -53,9 +53,9 @@
       <span class="eyebrow">V/R MATCH</span>
       <h1>Conecta de verdad.</h1>
       <p class="subtitle">Crea tu cuenta o vuelve a entrar. Tus matches y conversaciones se guardarán.</p>
-      <div class="launch-free-card">
-        <span class="launch-free-icon">🎉</span>
-        <div><strong>Todo incluido gratis durante el lanzamiento</strong><p>V/R Match seguirá teniendo una modalidad gratuita. Más adelante, solo algunos extras Premium serán de pago y siempre serán opcionales.</p><div class="launch-free-links"><a href="/como-funciona.html" target="_blank" rel="noopener">Cómo funciona</a><a href="/premium.html" target="_blank" rel="noopener">Gratis y Premium</a></div></div>
+      <div id="publicCommercialBanner" class="launch-free-card">
+        <span id="publicCommercialIcon" class="launch-free-icon">🎉</span>
+        <div><strong id="publicCommercialTitle">Todo incluido gratis durante el lanzamiento</strong><p id="publicCommercialCopy">V/R Match seguirá teniendo una modalidad gratuita. Más adelante, solo algunos extras Premium serán de pago y siempre serán opcionales.</p><div class="launch-free-links"><a href="/como-funciona.html" target="_blank" rel="noopener">Cómo funciona</a><a href="/premium.html" target="_blank" rel="noopener">Gratis y Premium</a></div></div>
       </div>
       <div class="auth-tabs">
         <button id="authTabLogin" class="active" type="button" onclick="cambiarAuthMode('login')">Entrar</button>
@@ -332,6 +332,7 @@
         <button id="adminTabHistory" type="button" onclick="cambiarAdminTab('history')">🕘 Historial</button>
         <button id="adminTabMetrics" type="button" onclick="cambiarAdminTab('metrics')">📈 Métricas</button>
         <button id="adminTabFeedback" type="button" onclick="cambiarAdminTab('feedback')">💬 Feedback</button>
+        <button id="adminTabMonetization" type="button" onclick="cambiarAdminTab('monetization')">💳 Monetización</button>
         <button id="adminTabProduction" type="button" onclick="cambiarAdminTab('production')">🚀 Producción</button>
         <button id="adminTabSystem" type="button" onclick="cambiarAdminTab('system')">🛠 Sistema</button>
       </div>
@@ -372,6 +373,11 @@
           <button class="btn btn-secondary" type="button" onclick="cargarAdminFeedback()">↻ Actualizar</button>
         </div>
         <div id="adminFeedbackList" class="admin-feedback-list"><div class="empty-state"><span>💬</span><strong>Sin cargar</strong></div></div>
+      </div>
+
+      <div id="adminPaneMonetization" class="admin-pane hidden">
+        <div class="admin-history-head"><div><strong>Control de monetización</strong><small>Activa Premium de pago cuando tú decidas. Las claves del proveedor nunca se muestran aquí.</small></div><button class="btn btn-secondary" type="button" onclick="cargarAdminMonetization()">↻ Actualizar</button></div>
+        <div id="adminMonetization" class="admin-monetization"><div class="empty-state"><span>💳</span><strong>Comprueba el estado comercial</strong></div></div>
       </div>
 
       <div id="adminPaneProduction" class="admin-pane hidden">
@@ -758,6 +764,18 @@
     let currentOnboardingCompleted = true;
     let currentPlus = { active:false, plan:'free', status:'inactive', launchFree:false, expiresAt:null, settings:{verifiedOnly:false,minSharedInterests:0,sortMode:'smart'}, boost:{active:false,activeUntil:null,cooldownUntil:null,available:false}, billingEnabled:false };
     let currentBilling = {enabled:false,prepared:false,mode:'off',launchMode:'beta',customer:false,subscription:null};
+    async function cargarEstadoComercialPublico(){
+      try{
+        const response=await fetch('/api/product/monetization',{headers:{Accept:'application/json'},cache:'no-store'});
+        const data=await response.json();
+        const c=data?.commercial||{};
+        if(!c.freePremiumDuringLaunch && c.paidPremiumAvailable){
+          if($('publicCommercialIcon'))$('publicCommercialIcon').textContent='✨';
+          if($('publicCommercialTitle'))$('publicCommercialTitle').textContent='V/R Match sigue siendo gratis. Premium es opcional.';
+          if($('publicCommercialCopy'))$('publicCommercialCopy').textContent='Puedes usar la modalidad gratuita sin suscribirte. Si quieres funciones adicionales, V/R Premium ya está disponible y solo se contrata de forma expresa.';
+        }
+      }catch{}
+    }
     let plusReturnScreen = 'pantallaDescubrir';
     let currentPrivacy = { discoverable:true, showOnline:true, allowGameInvites:true };
     let authMode = 'login';
@@ -1852,6 +1870,68 @@
       await cargarAdminStats();
       await cambiarAdminTab(adminCurrentTab || 'reports');
     }
+    async function cargarAdminMonetization(){
+      if(!currentUserAdmin)return;
+      const box=$('adminMonetization');
+      box.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Comprobando monetización…</strong></div>';
+      const res=await api('/api/admin/monetization');
+      if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudo comprobar')}</strong></div>`;return;}
+      renderAdminMonetization(res.monetization||{});
+    }
+    function renderAdminMonetization(m){
+      const free=Boolean(m.freePremiumDuringLaunch),paid=Boolean(m.paidPremiumActive);
+      const statusTitle=free?'Premium incluido gratis':(paid?'Premium de pago activo':'Premium de pago pendiente');
+      const statusCopy=free?'Todos los usuarios disfrutan temporalmente de V/R+ sin tarjeta ni checkout.':(paid?'La modalidad gratuita sigue activa y los extras Premium requieren una suscripción.':'El modo comercial figura como de pago, pero el proveedor aún no está habilitado.');
+      const providerLabel=(m.provider||'stripe').toUpperCase();
+      const readiness=Boolean(m.activationReady);
+      const activeSubs=Number(m.activePaidSubscriptions)||0;
+      const target=free?'paid':'launch_free';
+      const confirmPhrase=free?'ACTIVAR PREMIUM':'VOLVER A GRATIS';
+      const buttonText=free?'Activar Premium de pago':'Volver a Premium incluido gratis';
+      const blocked=free&&!readiness;
+      const returnBlocked=!free&&activeSubs>0;
+      $('adminMonetization').innerHTML=`
+        <div class="monetization-hero ${free?'free':(paid?'paid':'warn')}">
+          <span>${free?'🎁':(paid?'💳':'⚠️')}</span><div><small>ESTADO COMERCIAL</small><strong>${escapeHtml(statusTitle)}</strong><p>${escapeHtml(statusCopy)}</p></div>
+        </div>
+        <div class="monetization-status-grid">
+          <div><span>Modalidad base</span><strong>V/R Match Gratis</strong><small>Se mantiene gratuita.</small></div>
+          <div><span>Extras V/R+</span><strong>${free?'Incluidos':'Premium'}</strong><small>${free?'Acceso para todos':'Solo miembros activos'}</small></div>
+          <div><span>Proveedor</span><strong>${escapeHtml(providerLabel)}</strong><small>${m.providerPrepared?'Configurado':'Pendiente de configurar'}</small></div>
+          <div><span>Entorno de pago</span><strong>${escapeHtml(String(m.providerMode||'off').toUpperCase())}</strong><small>${m.productionMode?'App en producción':'App en beta'}</small></div>
+          <div><span>Suscripciones de pago</span><strong>${activeSubs}</strong><small>Activas / trialing / past_due</small></div>
+          <div><span>Checkout</span><strong>${m.billingConfigured?'Activo':'Bloqueado'}</strong><small>${m.billingConfigured?'Puede iniciar pagos':'No se pueden iniciar cobros'}</small></div>
+        </div>
+        ${free&&!readiness?'<div class="monetization-warning"><strong>Activación protegida</strong><p>El botón de pago permanecerá bloqueado hasta que Producción esté lista y el proveedor esté configurado en modo LIVE.</p></div>':''}
+        ${returnBlocked?`<div class="monetization-warning danger"><strong>No se puede volver a gratis todavía</strong><p>Hay ${activeSubs} suscripción(es) de pago activa(s). Primero deben gestionarse para no cobrar por funciones que pasarían a ser gratuitas.</p></div>`:''}
+        <div class="monetization-control-card">
+          <div><strong>${free?'¿Quieres empezar a cobrar por los extras Premium?':'¿Quieres volver a incluir Premium gratis?'}</strong><p>${free?'Nadie será suscrito automáticamente. Los usuarios deberán contratar Premium expresamente.':'Esta acción solo se permite si no quedan suscripciones de pago activas.'}</p></div>
+          <label>Contraseña de administrador<input id="monetizationPassword" class="profile-input" type="password" autocomplete="current-password" maxlength="72" placeholder="Tu contraseña"></label>
+          <label>Confirmación<input id="monetizationConfirmText" class="profile-input" type="text" autocomplete="off" maxlength="32" placeholder="Escribe ${confirmPhrase}"></label>
+          ${free?'<label class="monetization-legal-check"><input id="monetizationLegalConfirmed" type="checkbox"><span>Confirmo que he revisado las condiciones legales, fiscales y comerciales necesarias antes de activar cobros reales.</span></label>':''}
+          <button id="monetizationModeButton" class="btn ${free?'btn-primary':'btn-secondary'}" type="button" ${(blocked||returnBlocked)?'disabled':''} onclick="cambiarModoMonetizacion('${target}','${confirmPhrase}')">${escapeHtml(buttonText)}</button>
+          <small class="monetization-safety">Este botón nunca suscribe ni cobra automáticamente a usuarios existentes.</small>
+        </div>`;
+    }
+    async function cambiarModoMonetizacion(mode,phrase){
+      const password=String($('monetizationPassword')?.value||'');
+      const confirmText=String($('monetizationConfirmText')?.value||'').trim().toUpperCase();
+      if(password.length<8)return mostrarToast('Escribe la contraseña de tu cuenta administradora.','warn');
+      if(confirmText!==phrase)return mostrarToast(`Para confirmar escribe exactamente: ${phrase}`,'warn');
+      const paid=mode==='paid';
+      const legalConfirmed=paid?Boolean($('monetizationLegalConfirmed')?.checked):false;
+      if(paid&&!legalConfirmed)return mostrarToast('Confirma la revisión legal, fiscal y comercial.','warn');
+      const msg=paid?'¿Activar Premium de pago? La versión gratuita seguirá disponible y nadie será suscrito automáticamente.':'¿Volver a incluir los extras Premium gratis para todos?';
+      if(!confirm(msg))return;
+      const btn=$('monetizationModeButton'),old=btn?.textContent||'';if(btn){btn.disabled=true;btn.textContent='Aplicando…';}
+      const res=await api('/api/admin/monetization/mode',{method:'POST',body:{mode,password,confirmText,legalConfirmed}});
+      if(!res.ok){if(btn){btn.disabled=false;btn.textContent=old;}return mostrarToast(res.error||'No se pudo cambiar el modo.','error');}
+      mostrarToast(paid?'Premium de pago activado.':'Premium vuelve a estar incluido gratis.','info');
+      renderAdminMonetization(res.monetization||{});
+      await cargarProductionReadiness();
+      await cargarAdminHistory();
+    }
+
     async function cargarProductionReadiness() {
       if(!currentUserAdmin)return;
       const box=$('productionReadiness'); box.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Comprobando…</strong></div>';
@@ -1923,12 +2003,13 @@
       [...$('adminStats').querySelectorAll('strong')].forEach((el,i)=>el.textContent=String(vals[i]??'—'));
     }
     async function cambiarAdminTab(tab='reports') {
-      adminCurrentTab=['reports','users','history','metrics','feedback','production','system'].includes(tab)?tab:'reports';
+      adminCurrentTab=['reports','users','history','metrics','feedback','monetization','production','system'].includes(tab)?tab:'reports';
       $('adminPaneReports').classList.toggle('hidden',adminCurrentTab!=='reports');
       $('adminPaneUsers').classList.toggle('hidden',adminCurrentTab!=='users');
       $('adminPaneHistory').classList.toggle('hidden',adminCurrentTab!=='history');
       $('adminPaneMetrics').classList.toggle('hidden',adminCurrentTab!=='metrics');
       $('adminPaneFeedback').classList.toggle('hidden',adminCurrentTab!=='feedback');
+      $('adminPaneMonetization').classList.toggle('hidden',adminCurrentTab!=='monetization');
       $('adminPaneProduction').classList.toggle('hidden',adminCurrentTab!=='production');
       $('adminPaneSystem').classList.toggle('hidden',adminCurrentTab!=='system');
       $('adminTabReports').classList.toggle('active',adminCurrentTab==='reports');
@@ -1936,6 +2017,7 @@
       $('adminTabHistory').classList.toggle('active',adminCurrentTab==='history');
       $('adminTabMetrics').classList.toggle('active',adminCurrentTab==='metrics');
       $('adminTabFeedback').classList.toggle('active',adminCurrentTab==='feedback');
+      $('adminTabMonetization').classList.toggle('active',adminCurrentTab==='monetization');
       $('adminTabProduction').classList.toggle('active',adminCurrentTab==='production');
       $('adminTabSystem').classList.toggle('active',adminCurrentTab==='system');
       if(adminCurrentTab==='reports')await cargarAdminReports();
@@ -1943,11 +2025,12 @@
       if(adminCurrentTab==='history')await cargarAdminHistory();
       if(adminCurrentTab==='metrics')await cargarAdminMetrics();
       if(adminCurrentTab==='feedback')await cargarAdminFeedback();
+      if(adminCurrentTab==='monetization')await cargarAdminMonetization();
       if(adminCurrentTab==='production')await cargarProductionReadiness();
       if(adminCurrentTab==='system')await cargarAdminSystem();
     }
     const adminReasonLabels={harassment:'Acoso',fake:'Perfil falso',spam:'Spam / estafa',sexual:'Contenido sexual no consentido',underage:'Posible menor de edad',other:'Otro'};
-    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',suspend:'Cuenta suspendida',reactivate:'Cuenta reactivada',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado',feedback_resolve:'Feedback resuelto',feedback_dismiss:'Feedback descartado',feedback_reopen:'Feedback reabierto',system_cleanup_expired:'Limpieza de sesiones/tokens',system_cleanup_telemetry:'Depuración de telemetría',system_cleanup_orphan_uploads:'Limpieza de fotos huérfanas',system_optimize:'Optimización SQLite',system_backup_download:'Backup manual descargado'};
+    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',suspend:'Cuenta suspendida',reactivate:'Cuenta reactivada',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado',feedback_resolve:'Feedback resuelto',feedback_dismiss:'Feedback descartado',feedback_reopen:'Feedback reabierto',system_cleanup_expired:'Limpieza de sesiones/tokens',system_cleanup_telemetry:'Depuración de telemetría',system_cleanup_orphan_uploads:'Limpieza de fotos huérfanas',system_optimize:'Optimización SQLite',system_backup_download:'Backup manual descargado',monetization_paid_enabled:'Premium de pago activado',monetization_launch_free_enabled:'Premium gratis activado'};
     function adminFecha(ts){return ts?new Date(Number(ts)).toLocaleString('es-ES'):'—';}
     async function cargarAdminReports() {
       if(!currentUserAdmin)return;
@@ -3475,6 +3558,7 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
       });
     }
     actualizarEstadoPWA();
+    cargarEstadoComercialPublico();
     initDatingSwipe();
     $('deckAdult').title = 'Solo mayores de 18 años';
     if (mazoInvitacion) $('mazoSeleccionadoLabel').textContent = `Mazo: ${nombreMazo(mazoInvitacion)}`;

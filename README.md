@@ -1,37 +1,57 @@
-# V/R Match — Fase 15 · Lanzamiento comercial preparado
+# V/R Match — Fase 17 · Control de monetización desde Admin
 
-Versión **15.0.0** construida sobre la Fase 14.
+Versión **17.0.0**, construida sobre la Fase 16.
 
-## Novedades
-- Centro de producción ampliado con **modo beta/producción**, dominio, persistencia, correo y Stripe.
-- Billing V/R+ opcional mediante **Stripe Checkout** y **Customer Portal**.
-- Webhook firmado de Stripe con deduplicación de eventos.
-- V/R+ se activa o revoca automáticamente según el estado de la suscripción.
-- La app no almacena datos completos de tarjeta.
-- El borrado de cuenta intenta cancelar primero una suscripción activa para evitar cobros posteriores.
-- El sistema sigue funcionando en beta si Stripe no está configurado.
-- Render Free sigue siendo válido para pruebas, pero **no** para el lanzamiento con datos persistentes.
+## Novedad principal
 
-## Muy importante
-Por defecto: `VR_LAUNCH_MODE=beta` y `VR_BILLING_ENABLED=false`. Subir esta fase **no empieza a cobrar a nadie**.
+El modo comercial ya no se cambia entrando a Render. El administrador puede controlar desde **Admin → Monetización** si los extras V/R+ están incluidos gratis o si V/R Premium está habilitado como servicio de pago.
 
-## Versión
-`/healthz` debe mostrar `15.0.0`.
+### Estado inicial seguro
 
-Consulta `LANZAMIENTO-FASE15.md` antes de activar producción.
+En una instalación nueva de Fase 17 el sistema arranca siempre así:
 
+- V/R Match base: gratis.
+- Extras V/R+: incluidos gratis durante el lanzamiento.
+- Checkout: bloqueado.
+- Nadie necesita tarjeta.
+- Nadie se suscribe automáticamente.
 
-## Fase 16 — Gratis permanente + Premium opcional (17/09/2026)
+El estado se guarda en SQLite (`app_settings`) y, con almacenamiento persistente, sobrevive a reinicios y despliegues.
 
-- Nueva página pública: `/como-funciona.html`.
-- Nueva página pública: `/premium.html`.
-- Mensaje visible en registro: la modalidad gratuita continuará.
-- `VR_FREE_PREMIUM_DURING_LAUNCH=true` activa temporalmente todos los extras V/R+ para usuarios autenticados durante el periodo gratuito, incluso si después se cambia el modo general a producción.
-- Mientras esa variable esté activa, el checkout queda bloqueado aunque existan credenciales de Stripe.
-- No se requiere tarjeta durante el lanzamiento.
-- Una cuenta gratuita no se convierte automáticamente en Premium.
-- Service Worker actualizado a `vr-match-shell-v16` y corregido para no sobrescribir el caché del inicio al visitar páginas legales/informativas.
+## Activar Premium de pago
 
-### Para terminar el periodo gratuito
+El botón **Activar Premium de pago** solo funciona si:
 
-Cuando llegue el momento de ofrecer Premium de pago, primero define qué funciones seguirán siendo gratuitas y cuáles serán Premium. Después cambia `VR_FREE_PREMIUM_DURING_LAUNCH=false`, configura y prueba el proveedor de pago en sandbox y solo entonces habilita cobros.
+- la aplicación está en `VR_LAUNCH_MODE=production`;
+- dominio propio y almacenamiento persistente están listos;
+- SMTP y verificación obligatoria están listos;
+- hay administrador configurado;
+- el proveedor de pago está completamente configurado;
+- el proveedor está en modo LIVE;
+- el administrador vuelve a escribir su contraseña;
+- escribe exactamente `ACTIVAR PREMIUM`;
+- confirma la revisión legal, fiscal y comercial.
+
+Activar Premium **no suscribe ni cobra a usuarios existentes**. Solo cambia la disponibilidad de los extras; cada usuario debe contratar Premium expresamente.
+
+## Volver a Premium gratis
+
+Existe el botón **Volver a Premium incluido gratis**. Por seguridad, se bloquea si quedan suscripciones de pago activas, `trialing` o `past_due`, para evitar cobrar por extras que pasarían a ser gratuitos.
+
+## Páginas públicas dinámicas
+
+`/`, `/como-funciona.html` y `/premium.html` consultan `/api/product/monetization`. Cuando el administrador cambia el modo comercial, los textos públicos se adaptan automáticamente sin nuevo deploy.
+
+## Proveedor de pago actual
+
+El código recibido ya traía Stripe Checkout, Customer Portal y webhooks. Fase 17 conserva ese motor como proveedor actual y deja el control de activación desacoplado en Admin. Las claves permanecen exclusivamente en Render → Environment.
+
+## PWA
+
+Service Worker actualizado a `vr-match-shell-v17`.
+
+## Verificación
+
+`/healthz` debe mostrar `17.0.0`.
+
+Consulta `LANZAMIENTO-FASE17-CONTROL-MONETIZACION.md` y `PRUEBA-FASE17.md` antes del deploy.
