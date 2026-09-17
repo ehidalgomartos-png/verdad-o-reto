@@ -1,0 +1,58 @@
+V/R MATCH 18.6.0 — REVISIÓN
+================================
+
+NUEVO
+-----
+
+- Lanzamiento por ciudades.
+- Lista de espera persistente en SQLite.
+- Contadores reales, sin cifras ficticias.
+- Códigos personales de referido.
+- V/R People con consentimiento expreso.
+- Estados WAITING / READY / ACTIVE.
+- Panel /admin/launch.
+- Cambio de objetivo por ciudad.
+- Exportación CSV por ciudad.
+- Desbloqueo manual por administrador.
+- Tokens de activación individuales de 7 días.
+- Activación de cuenta desde correo.
+- Cola persistente de emails.
+- Envío mediante el SMTP ya existente.
+- Worker automático de correos cada 30 segundos.
+- Registro directo opcionalmente bloqueable con VR_CITY_LAUNCH_ENABLED.
+- Enlace “Lista de espera por ciudades” en la pantalla pública.
+- Botón “🔓 Lanzamiento” en el Admin actual.
+- Privacidad actualizada con la nueva lista de espera.
+- Service Worker actualizado a v18-6-0.
+
+FLUJO
+-----
+
+/espera
+→ registro de lista
+→ invitaciones
+→ ciudad READY
+→ Admin desbloquea
+→ ciudad ACTIVE
+→ email
+→ /activar
+→ creación/activación de cuenta
+→ sesión V/R Match
+→ completar perfil
+→ app normal
+
+ARCHIVOS QUE CAMBIAN
+--------------------
+
+- server.js
+- index.html
+- package.json
+- sw.js
+- privacy.html
+
+ARCHIVOS NUEVOS
+---------------
+
+- public/waitlist.html
+- public/activate.html
+- public/admin-launch.html

@@ -1,0 +1,281 @@
+V/R MATCH 18.6.0 — LANZAMIENTO POR CIUDADES
+================================================
+
+QUÉ SUBIR A GITHUB
+------------------
+
+REEMPLAZA estos archivos que ya existen en la RAÍZ del repositorio:
+
+- server.js
+- index.html
+- package.json
+- sw.js
+- privacy.html
+
+CREA / USA la carpeta:
+
+public/
+
+Y dentro sube estos 3 archivos NUEVOS:
+
+- public/waitlist.html
+- public/activate.html
+- public/admin-launch.html
+
+
+NO MUEVAS A PUBLIC
+------------------
+
+Estos archivos siguen en la raíz, como hasta ahora:
+
+- index.html
+- styles.css
+- server.js
+- package.json
+- sw.js
+- manifest.webmanifest
+- offline.html
+- terms.html
+- privacy.html
+- community.html
+- como-funciona.html
+- funciones.html
+
+
+NO HACE FALTA migration.sql
+---------------------------
+
+La V18.6 crea automáticamente las tablas nuevas en la SQLite existente
+cuando arranca server.js.
+
+Tablas añadidas:
+
+- launch_cities
+- launch_waitlist_users
+- launch_referral_events
+- launch_activation_tokens
+- launch_mail_queue
+
+
+RUTAS NUEVAS
+------------
+
+Públicas:
+
+/espera
+/activar
+
+Administrador:
+
+/admin/launch
+
+API pública:
+
+/api/launch/cities
+/api/launch/cities/:slug/people
+/api/launch/waitlist
+/api/launch/referrals/visit
+/api/launch/activation/:token
+/api/launch/activate
+
+API administradora:
+
+/api/admin/launch/summary
+/api/admin/launch/cities
+/api/admin/launch/cities/:slug/users
+/api/admin/launch/cities/:slug/goal
+/api/admin/launch/cities/:slug/unlock
+/api/admin/launch/mail/send
+/api/admin/launch/cities/:slug/export.csv
+
+
+CÓMO ENTRAR TÚ COMO ADMINISTRADOR
+---------------------------------
+
+1. Entra normalmente en V/R Match con tu cuenta administradora.
+2. Abre el Admin.
+3. Ahora verás el botón:
+
+   🔓 Lanzamiento
+
+4. También puedes ir directamente a:
+
+   https://TU-DOMINIO/admin/launch
+
+El panel reutiliza la sesión que V/R Match guarda en el navegador.
+Las APIs están protegidas por requireAuth + requireAdmin.
+
+
+CÓMO FUNCIONA PARA EL USUARIO
+-----------------------------
+
+1. Entra a /espera
+2. Elige ciudad.
+3. Escribe alias, edad y correo.
+4. Decide si quiere aparecer públicamente en V/R People.
+5. Recibe un código/enlace de invitación.
+6. Su registro queda guardado en SQLite.
+7. Cuando una ciudad alcanza la meta pasa a READY.
+8. El administrador pulsa “Desbloquear ciudad”.
+9. La ciudad pasa a ACTIVE.
+10. Se crea un token individual para cada persona.
+11. Se envían correos mediante el SMTP que ya usa V/R Match.
+12. El usuario pulsa el enlace /activar?token=...
+13. Si es nuevo, crea su contraseña y acepta las condiciones.
+14. El enlace confirma además su correo.
+15. Se crea su cuenta real V/R Match.
+16. Se guarda la sesión en el navegador.
+17. Entra en la app y completa su perfil normal.
+18. El usuario pasa de WAITLIST → CITY_READY → ACTIVATED.
+
+
+EMAILS
+------
+
+No se ha añadido un segundo proveedor.
+
+La V18.6 reutiliza:
+
+- nodemailer
+- SMTP_HOST
+- SMTP_PORT
+- SMTP_FROM
+- SMTP_USER
+- SMTP_PASS
+- SMTP_SECURE
+
+que ya existen en V/R Match.
+
+Los correos se guardan primero en launch_mail_queue.
+
+Estados:
+
+- PENDING
+- SENT
+- ERROR
+
+El servidor procesa la cola automáticamente cada 30 segundos.
+También puedes pulsar “Enviar emails pendientes” desde /admin/launch.
+
+
+IMPORTANTE: ACTIVAR EL MODO POR CIUDADES
+----------------------------------------
+
+Se ha añadido una variable nueva de Render:
+
+VR_CITY_LAUNCH_ENABLED
+
+Para las primeras pruebas déjala:
+
+VR_CITY_LAUNCH_ENABLED=false
+
+Así la app actual continúa permitiendo registros normales mientras pruebas
+la nueva lista.
+
+Cuando quieras que las nuevas personas tengan que pasar por la lista
+de espera, cambia en Render:
+
+VR_CITY_LAUNCH_ENABLED=true
+
+Con true:
+
+- las cuentas que ya existen pueden seguir entrando normalmente;
+- “Crear cuenta” redirige hacia /espera;
+- las cuentas nuevas se crean desde el enlace de activación cuando
+  su ciudad se desbloquea.
+
+NO subas esta configuración en un .env a GitHub.
+
+
+PRUEBA RECOMENDADA ANTES DEL LANZAMIENTO REAL
+---------------------------------------------
+
+1. Sube los archivos.
+2. Espera el deploy de Render.
+3. Abre:
+
+   /healthz
+
+   Debe indicar:
+
+   version: 18.6.0
+
+4. Mantén VR_CITY_LAUNCH_ENABLED=false.
+
+5. Entra como administrador y abre:
+
+   /admin/launch
+
+6. Cambia temporalmente Valencia de 500 a 2.
+
+7. Abre /espera en una ventana privada.
+8. Registra un primer correo de prueba.
+9. Registra un segundo correo de prueba.
+10. Confirma que Valencia pasa a READY.
+11. En Admin pulsa “Desbloquear ciudad”.
+12. Comprueba la cola de emails.
+13. Abre uno de los correos.
+14. Pulsa el enlace de activación.
+15. Crea la contraseña.
+16. Confirma que V/R Match abre la pantalla normal para completar el perfil.
+17. Comprueba que en Admin el usuario aparece ACTIVATED.
+
+Después vuelve a poner la meta real antes de captar usuarios.
+
+
+PERSISTENCIA EN RENDER
+----------------------
+
+La lista de espera utiliza la MISMA SQLite del proyecto.
+
+Por tanto, antes de captar usuarios reales, confirma que tienes almacenamiento
+persistente en Render.
+
+La configuración actual del proyecto ya contempla:
+
+VR_STORAGE_DIR=/var/data
+
+con un Persistent Disk montado en /var/data.
+
+Si SQLite está en filesystem temporal, NO hagas una campaña real todavía,
+porque un redeploy podría hacer desaparecer los registros.
+
+
+SEGURIDAD / PRIVACIDAD
+----------------------
+
+V/R People devuelve únicamente:
+
+- alias
+- edad
+- ciudad
+- avatar, si más adelante existe un perfil real
+
+y únicamente cuando public_profile=1.
+
+No publica:
+
+- email
+- teléfono
+- apellidos
+- coordenadas
+- ubicación exacta
+- chats
+
+privacy.html se ha actualizado para explicar la lista de espera.
+
+
+VALIDACIONES REALIZADAS EN ESTE PAQUETE
+---------------------------------------
+
+- node --check server.js: OK
+- node --check sw.js: OK
+- JavaScript inline de index.html: OK
+- JavaScript de waitlist.html: OK
+- JavaScript de activate.html: OK
+- JavaScript de admin-launch.html: OK
+- SQL estático de creación de tablas: OK
+
+El entorno de preparación no tiene instalados los node_modules del proyecto,
+por lo que el arranque completo debe comprobarse después de que Render ejecute
+npm install. Revisa Render Logs tras el deploy.
