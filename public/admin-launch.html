@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>V/R Match · Lanzamiento</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0a0a0f;color:#f7f7fa;font-family:Inter,system-ui,sans-serif}.wrap{width:min(1240px,calc(100% - 34px));margin:auto}.top{height:78px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #23232d}.logo{font-weight:950}.logo b{background:#ff386d;padding:8px;border-radius:9px}.muted{color:#93919d}.title{margin:38px 0 22px}.title h1{font-size:38px;letter-spacing:-.04em;margin:0}.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}.stat,.city,.panel{background:#13131a;border:1px solid #292934;border-radius:18px}.stat{padding:18px}.stat b{display:block;font-size:28px;margin-top:6px}.cities{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:25px 0}.city{padding:20px;cursor:pointer}.city.active{border-color:#ff386d}.citytop{display:flex;justify-content:space-between;gap:12px}.badge{font-size:10px;font-weight:900;padding:6px 8px;border-radius:99px;background:#24242e}.badge.ACTIVE{background:#153d2a;color:#8cffbc}.badge.READY{background:#4a2d12;color:#ffbf78}.track{height:9px;background:#292933;border-radius:99px;overflow:hidden;margin:15px 0}.fill{height:100%;background:linear-gradient(90deg,#ff386d,#8c5cff)}.panel{padding:20px;margin-bottom:50px}.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:17px}.toolbar input{background:#0d0d12;border:1px solid #30303b;color:#fff;padding:11px 13px;border-radius:10px}.btn{border:0;background:#ff386d;color:#fff;padding:11px 14px;border-radius:10px;font-weight:850;cursor:pointer}.btn.alt{background:#22222b}.btn.danger{background:#7b2940}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:12px 10px;border-bottom:1px solid #25252f;white-space:nowrap}th{color:#9997a3}.empty{padding:35px;text-align:center;color:#9997a3}.notice{margin:12px 0;color:#9bffbf}.err{color:#ff8fab}.modal{display:none;position:fixed;inset:0;background:#000a;place-items:center;padding:20px}.modal.open{display:grid}.dialog{width:min(520px,100%);background:#15151d;border:1px solid #333340;border-radius:22px;padding:26px}.dialog h2{margin-top:0}.row{display:flex;gap:10px;justify-content:flex-end}@media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}.cities{grid-template-columns:1fr 1fr}}@media(max-width:600px){.cities,.stats{grid-template-columns:1fr}}
+</style></head>
+<body><div class="wrap">
+<header class="top"><div class="logo"><b>V/R</b> MATCH · ADMIN</div><div class="muted">Lanzamiento / Lista de espera</div></header>
+<section class="title"><h1>Control de lanzamiento</h1><p class="muted">Ciudades, usuarios, referidos y activaciones.</p></section>
+<section class="stats" id="stats"></section>
+<section class="cities" id="cities"></section>
+<section class="panel">
+<div class="toolbar"><strong id="selectedTitle">Selecciona una ciudad</strong><input id="search" placeholder="Buscar alias, email o código"><button class="btn alt" id="searchBtn">Buscar</button><button class="btn alt" id="goalBtn">Cambiar objetivo</button><button class="btn" id="unlockBtn">Desbloquear ciudad</button><button class="btn alt" id="exportBtn">Exportar CSV</button><button class="btn alt" id="mailBtn">Enviar correos pendientes</button></div>
+<div id="notice"></div><div class="tablewrap"><table><thead><tr><th>Alias</th><th>Edad</th><th>Email</th><th>Estado</th><th>Código</th><th>Invitados</th><th>Visitas</th><th>Registro</th></tr></thead><tbody id="users"><tr><td colspan="8" class="empty">Selecciona una ciudad.</td></tr></tbody></table></div>
+</section></div>
+<div class="modal" id="modal"><div class="dialog"><h2 id="modalTitle">Confirmar</h2><div id="modalBody"></div><div class="row" style="margin-top:20px"><button class="btn alt" id="cancel">Cancelar</button><button class="btn" id="confirm">Confirmar</button></div></div></div>
+<script>
+const API='/api/admin/launch';let cities=[],selected=null;const $=s=>document.querySelector(s);
+async function j(u,o){const r=await fetch(u,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d}
+function fmt(n){return Number(n||0).toLocaleString('es-ES')}
+async function load(){
+ try{
+  const [s,c]=await Promise.all([j(API+'/summary'),j(API+'/cities')]);cities=c.cities;
+  $('#stats').innerHTML=[['En espera',s.total],['Altas hoy',s.today],['Por referidos',s.referred],['Activados',s.activated],['Emails pendientes',s.pendingMail]].map(x=>`<div class="stat"><span class="muted">${x[0]}</span><b>${fmt(x[1])}</b></div>`).join('');
+  $('#cities').innerHTML=cities.map(x=>`<article class="city ${selected===x.slug?'active':''}" data-slug="${x.slug}"><div class="citytop"><strong>${x.name}</strong><span class="badge ${x.status}">${x.status}</span></div><div style="font-size:25px;font-weight:950;margin-top:10px">${fmt(x.current)} / ${fmt(x.goal)}</div><div class="track"><div class="fill" style="width:${x.percent}%"></div></div><div class="muted">${x.percent}%</div></article>`).join('');
+  document.querySelectorAll('.city').forEach(el=>el.onclick=()=>selectCity(el.dataset.slug));
+  if(selected){const c=cities.find(x=>x.slug===selected);$('#selectedTitle').textContent=c.name+' · '+c.current+'/'+c.goal;await loadUsers()}
+ }catch(e){$('#notice').innerHTML=`<div class="err">${e.message}</div>`}
+}
+async function selectCity(slug){selected=slug;await load()}
+async function loadUsers(){
+ const q=encodeURIComponent($('#search').value.trim());const d=await j(API+'/cities/'+selected+'/users?limit=300&q='+q);
+ $('#users').innerHTML=d.users.length?d.users.map(u=>`<tr><td>${esc(u.alias)}</td><td>${u.age}</td><td>${esc(u.email)}</td><td>${u.status}</td><td>${esc(u.referralCode)}</td><td>${u.successfulInvites}</td><td>${u.referralVisits}</td><td>${new Date(u.createdAt).toLocaleString('es-ES')}</td></tr>`).join(''):`<tr><td colspan="8" class="empty">No hay usuarios.</td></tr>`;
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function msg(t,err=false){$('#notice').innerHTML=`<div class="${err?'err':'notice'}">${t}</div>`}
+function modal(title,body,action){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.add('open');$('#confirm').onclick=async()=>{try{await action();$('#modal').classList.remove('open')}catch(e){msg(e.message,true)}}}
+$('#cancel').onclick=()=>$('#modal').classList.remove('open');
+$('#searchBtn').onclick=()=>selected&&loadUsers();
+$('#goalBtn').onclick=()=>{if(!selected)return;const c=cities.find(x=>x.slug===selected);modal('Cambiar objetivo',`<p>${c.name}</p><input id="newGoal" type="number" min="1" value="${c.goal}" style="width:100%;padding:12px;background:#0d0d12;color:#fff;border:1px solid #333;border-radius:10px">`,async()=>{const goal=Number($('#newGoal').value);await j(API+'/cities/'+selected+'/goal',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({goal})});msg('Objetivo actualizado.');await load()})};
+$('#unlockBtn').onclick=()=>{if(!selected)return;const c=cities.find(x=>x.slug===selected);if(c.status==='ACTIVE'){msg('Esta ciudad ya está activa.');return}modal('Desbloquear '+c.name,`<p>Esto activará la ciudad y generará un enlace de acceso para <b>${c.current}</b> personas. También pondrá en cola los correos de lanzamiento.</p><p><b>No se puede tratar como una prueba:</b> los usuarios recibirán acceso real.</p>`,async()=>{const d=await j(API+'/cities/'+selected+'/unlock',{method:'POST'});msg(`Ciudad activada. ${d.activationEmailsQueued} accesos generados. Emails enviados ahora: ${d.mail.sent||0}.`);await load()})};
+$('#exportBtn').onclick=()=>{if(selected)location.href=API+'/cities/'+selected+'/export.csv'};
+$('#mailBtn').onclick=async()=>{try{const d=await j(API+'/mail/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({limit:500})});msg(`Correos enviados: ${d.sent||0}. Errores: ${d.errors||0}${d.skipped?' · '+d.reason:''}`);await load()}catch(e){msg(e.message,true)}};
+load();
+</script></body></html>

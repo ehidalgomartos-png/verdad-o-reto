@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>V/R Match · Desbloquea tu ciudad</title>
+<style>
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#09090e;color:#f7f6fa;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif}a{color:inherit;text-decoration:none}button,input,select{font:inherit}.vr-wrap{width:min(1120px,calc(100% - 36px));margin:auto}.vr-top{height:78px;display:flex;align-items:center;justify-content:space-between}.vr-logo{font-weight:950;letter-spacing:.04em;font-size:20px}.vr-logo b{background:linear-gradient(135deg,#ff386d,#8c5cff);padding:9px 10px;border-radius:11px}.vr-logo span{margin-left:8px}.vr-hero{padding:72px 0 70px;text-align:center}.vr-kicker{font-size:11px;letter-spacing:.18em;font-weight:850;color:#bcb9c5}.vr-hero h1{font-size:clamp(46px,7vw,82px);line-height:.95;letter-spacing:-.055em;margin:16px auto 24px;max-width:900px}.vr-hero h1 em{font-style:normal;background:linear-gradient(90deg,#fff,#ff4775,#a47cff);color:transparent;background-clip:text}.vr-lead{color:#aaa8b4;font-size:18px;line-height:1.6;max-width:690px;margin:auto}.vr-box{max-width:720px;margin:38px auto 0;background:#13131b;border:1px solid #292936;border-radius:24px;padding:22px;text-align:left}.vr-row{display:flex;justify-content:space-between;align-items:center;gap:16px}.vr-city-select{width:100%;margin-bottom:18px;background:#0d0d13;border:1px solid #2b2b38;border-radius:14px;color:#fff;padding:14px}.vr-big{font-size:22px;font-weight:900}.vr-percent{font-size:28px;font-weight:950}.vr-track{height:12px;background:#262632;border-radius:99px;margin:17px 0 13px;overflow:hidden}.vr-fill{height:100%;background:linear-gradient(90deg,#ff386d,#8c5cff);width:0;border-radius:99px;transition:.35s}.vr-muted{color:#92909c;font-size:13px}.vr-btn{border:0;border-radius:13px;padding:14px 18px;font-weight:900;cursor:pointer;background:linear-gradient(135deg,#ff386d,#ff5d73);color:#fff}.vr-btn.alt{background:#171720;border:1px solid #30303c}.vr-people{padding:40px 0 85px}.vr-head{display:flex;justify-content:space-between;align-items:end;gap:25px;margin-bottom:24px}.vr-head h2{font-size:clamp(34px,5vw,52px);letter-spacing:-.04em;margin:7px 0 0}.vr-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.vr-person{border:1px solid #292936;background:#121219;border-radius:21px;overflow:hidden}.vr-avatar{height:205px;display:grid;place-items:center;background:linear-gradient(140deg,#512248,#252452);font-size:45px;font-weight:950}.vr-info{padding:16px}.vr-info strong{font-size:19px}.vr-form-sec{padding:30px 0 110px}.vr-formbox{max-width:760px;margin:auto;border:1px solid #292936;background:#121219;border-radius:26px;padding:30px}.vr-formbox h2{font-size:38px;letter-spacing:-.04em;margin:5px 0 9px}.vr-form{display:grid;gap:14px;margin-top:25px}.vr-form label{font-size:13px;color:#cbc8d1;display:grid;gap:7px}.vr-form input,.vr-form select{width:100%;padding:14px;border-radius:12px;border:1px solid #30303c;background:#0b0b10;color:#fff}.vr-two{display:grid;grid-template-columns:.35fr .65fr;gap:12px}.vr-check{grid-template-columns:auto 1fr!important;display:grid!important}.vr-check input{width:auto}.vr-result{display:none;margin-top:18px;padding:18px;border-radius:16px;background:#0d221a;border:1px solid #24523d}.vr-error{color:#ff8ca9;font-size:13px}.vr-share{word-break:break-all;color:#a9ffcc;font-size:13px}.vr-loading{opacity:.55;pointer-events:none}@media(max-width:760px){.vr-grid{grid-template-columns:repeat(2,1fr)}.vr-head{align-items:start;flex-direction:column}.vr-two{grid-template-columns:1fr}}@media(max-width:480px){.vr-grid{grid-template-columns:1fr}.vr-hero{padding-top:45px}}
+</style>
+</head>
+<body>
+<header class="vr-wrap vr-top"><div class="vr-logo"><b>V/R</b><span>MATCH</span></div><a href="#registro" class="vr-btn">Quiero entrar</a></header>
+<main>
+<section class="vr-wrap vr-hero">
+<div class="vr-kicker">CITAS + JUEGO + QUÍMICA REAL</div>
+<h1>¿Quién está esperando <em>hacer Match</em> en tu ciudad?</h1>
+<p class="vr-lead">Apúntate, invita gente y ayuda a desbloquear V/R Match. Cuando tu ciudad se active recibirás tu acceso.</p>
+<div class="vr-box">
+<select id="city" class="vr-city-select" aria-label="Ciudad"><option>Cargando ciudades…</option></select>
+<div class="vr-row"><div><div class="vr-muted">DESBLOQUEO DE CIUDAD</div><div class="vr-big" id="cityName">—</div></div><div class="vr-percent" id="pct">—</div></div>
+<div class="vr-track"><div class="vr-fill" id="fill"></div></div>
+<div class="vr-row vr-muted"><span><b id="current">—</b> personas dentro</span><span>Meta: <b id="goal">—</b></span></div>
+</div>
+</section>
+<section class="vr-wrap vr-people">
+<div class="vr-head"><div><div class="vr-kicker">V/R PEOPLE</div><h2>Gente esperando en <span id="peopleCity">tu ciudad</span></h2></div><div class="vr-muted">Solo personas que hayan aceptado aparecer públicamente.</div></div>
+<div class="vr-grid" id="people"><div class="vr-muted">Cargando…</div></div>
+</section>
+<section class="vr-wrap vr-form-sec" id="registro">
+<div class="vr-formbox">
+<div class="vr-kicker">ACCESO ANTICIPADO</div><h2>Entra en la lista.</h2>
+<p class="vr-muted">Te avisaremos cuando se desbloquee tu ciudad y tendrás un enlace personal para invitar gente.</p>
+<form id="form" class="vr-form">
+<label>Nombre o alias<input name="alias" maxlength="30" required placeholder="Ej. Sebas"></label>
+<div class="vr-two"><label>Edad<input name="age" type="number" min="18" max="99" required></label><label>Ciudad<select name="city" id="formCity"></select></label></div>
+<label>Email<input name="email" type="email" required placeholder="tu@email.com"></label>
+<label class="vr-check"><input name="publicProfile" type="checkbox"><span>Quiero poder aparecer en V/R People.</span></label>
+<label class="vr-check"><input name="marketingConsent" type="checkbox" required><span>Acepto recibir los mensajes necesarios sobre mi lista de espera y lanzamiento.</span></label>
+<button class="vr-btn" type="submit">Conseguir mi acceso anticipado</button>
+<div id="error" class="vr-error"></div>
+</form>
+<div id="result" class="vr-result"><b>Ya estás dentro 🔥</b><p>Tu enlace personal:</p><div id="shareUrl" class="vr-share"></div><p><button id="shareBtn" class="vr-btn" type="button">Compartir</button></p></div>
+</div>
+</section>
+</main>
+<script>
+const API='/api/launch'; let cities=[]; let referral=new URLSearchParams(location.search).get('ref')||'';
+const $=s=>document.querySelector(s);
+async function j(url,opt){const r=await fetch(url,opt);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Error');return d}
+async function boot(){
+ try{
+  const d=await j(API+'/cities'); cities=d.cities||[];
+  if(!cities.length) throw new Error('No hay ciudades configuradas.');
+  $('#city').innerHTML=$('#formCity').innerHTML=cities.map(c=>`<option value="${c.slug}">${c.name}</option>`).join('');
+  const wanted=new URLSearchParams(location.search).get('city');
+  if(wanted&&cities.some(c=>c.slug===wanted)) $('#city').value=$('#formCity').value=wanted;
+  $('#city').addEventListener('change',()=>{ $('#formCity').value=$('#city').value; renderCity(); });
+  $('#formCity').addEventListener('change',()=>{ $('#city').value=$('#formCity').value; renderCity(); });
+  if(referral) fetch(API+'/referrals/visit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:referral})}).catch(()=>{});
+  await renderCity();
+ }catch(e){ $('#cityName').textContent='No disponible'; $('#people').innerHTML=`<div class="vr-error">${e.message}</div>`; }
+}
+async function renderCity(){
+ const c=cities.find(x=>x.slug===$('#city').value)||cities[0]; if(!c)return;
+ $('#cityName').textContent=c.name+(c.status==='ACTIVE'?' · ABIERTA 🔓':c.status==='READY'?' · LISTA 🔥':'');
+ $('#pct').textContent=c.percent+'%'; $('#fill').style.width=c.percent+'%'; $('#current').textContent=c.current; $('#goal').textContent=c.goal; $('#peopleCity').textContent=c.name;
+ try{
+  const d=await j(API+'/cities/'+encodeURIComponent(c.slug)+'/people?limit=8');
+  const p=d.people||[];
+  $('#people').innerHTML=p.length?p.map(x=>`<article class="vr-person"><div class="vr-avatar">${String(x.alias).slice(0,2).toUpperCase()}</div><div class="vr-info"><strong>${esc(x.alias)}, ${x.age}</strong><div class="vr-muted">📍 ${esc(c.name)}</div></div></article>`).join(''):'<div class="vr-muted">Aún no hay perfiles públicos en esta ciudad.</div>';
+ }catch(e){ $('#people').innerHTML='<div class="vr-muted">No se pudieron cargar los perfiles.</div>'; }
+}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+$('#form').addEventListener('submit',async e=>{
+ e.preventDefault(); $('#error').textContent=''; const f=new FormData(e.currentTarget); e.currentTarget.classList.add('vr-loading');
+ try{
+  const d=await j(API+'/waitlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    alias:f.get('alias'),age:Number(f.get('age')),email:f.get('email'),city:f.get('city'),
+    publicProfile:f.get('publicProfile')==='on',marketingConsent:f.get('marketingConsent')==='on',referredBy:referral||null
+  })});
+  $('#shareUrl').textContent=d.referralUrl; $('#result').style.display='block'; window._share=d.referralUrl;
+  const refreshed=await j(API+'/cities'); cities=refreshed.cities; await renderCity();
+ }catch(err){$('#error').textContent=err.message}finally{e.currentTarget.classList.remove('vr-loading')}
+});
+$('#shareBtn').addEventListener('click',async()=>{
+ const url=window._share;if(!url)return;
+ if(navigator.share){try{await navigator.share({title:'V/R Match',text:'Ayúdame a desbloquear V/R Match en mi ciudad 🔥',url})}catch{}}
+ else{await navigator.clipboard.writeText(url);$('#shareBtn').textContent='Enlace copiado ✓'}
+});
+boot();
+</script>
+</body></html>

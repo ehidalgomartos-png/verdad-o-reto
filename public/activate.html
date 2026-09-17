@@ -1,0 +1,13 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Activar V/R Match</title>
+<style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#09090e;color:#fff;font-family:Inter,system-ui,sans-serif;padding:22px}.box{width:min(560px,100%);background:#13131a;border:1px solid #2b2b36;border-radius:28px;padding:38px}.logo{font-weight:950}.logo b{background:linear-gradient(135deg,#ff386d,#8c5cff);padding:9px;border-radius:10px}h1{font-size:42px;letter-spacing:-.05em;line-height:1.05;margin:28px 0 12px}.muted{color:#aaa8b4;line-height:1.6}.btn{width:100%;border:0;background:#ff386d;color:#fff;padding:15px;border-radius:13px;font-weight:900;font-size:16px;cursor:pointer;margin-top:20px}.err{color:#ff91ab}</style></head>
+<body><main class="box"><div class="logo"><b>V/R</b> MATCH</div><div id="content"><p class="muted">Comprobando tu acceso…</p></div></main>
+<script>
+const token=new URLSearchParams(location.search).get('token');const box=document.querySelector('#content');
+async function j(u,o){const r=await fetch(u,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Error');return d}
+(async()=>{try{
+ if(!token)throw new Error('Falta el enlace de activación.');
+ const d=await j('/api/launch/activation/'+encodeURIComponent(token));
+ box.innerHTML=`<div style="font-size:12px;letter-spacing:.16em;color:#ff7195;font-weight:800">CIUDAD DESBLOQUEADA</div><h1>${d.city} está abierta 🔓</h1><p class="muted">${d.alias}, activa tu acceso y termina tu perfil para empezar a descubrir personas.</p><button id="go" class="btn">Entrar en V/R Match</button>`;
+ document.querySelector('#go').onclick=async()=>{try{const x=await j('/api/launch/activation/'+encodeURIComponent(token)+'/claim',{method:'POST'});location.href=x.nextUrl}catch(e){box.insertAdjacentHTML('beforeend',`<p class="err">${e.message}</p>`)}};
+}catch(e){box.innerHTML=`<h1>No podemos activar este enlace</h1><p class="err">${e.message}</p>`}})();
+</script></body></html>
