@@ -66,7 +66,7 @@
         <div class="field"><label for="authPassword">Contraseña</label><input id="authPassword" type="password" minlength="8" maxlength="72" autocomplete="current-password" placeholder="Mínimo 8 caracteres" required></div>
         <div id="registerLegalBox" class="register-legal-box hidden">
           <label class="legal-check"><input id="confirmAdult" type="checkbox"><span><b>Confirmo que tengo 18 años o más.</b><small>V/R Match es exclusivamente para personas adultas.</small></span></label>
-          <label class="legal-check"><input id="acceptTerms" type="checkbox"><span><b>Acepto las condiciones beta y la privacidad.</b><small><a href="/terms.html" target="_blank" rel="noopener">Condiciones</a> · <a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a> · <a href="/community.html" target="_blank" rel="noopener">Comunidad</a></small></span></label>
+          <label class="legal-check"><input id="acceptTerms" type="checkbox"><span><b>Acepto las Condiciones y la Privacidad.</b><small><a href="/terms.html" target="_blank" rel="noopener">Condiciones</a> · <a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a> · <a href="/community.html" target="_blank" rel="noopener">Comunidad</a></small></span></label>
         </div>
         <button id="authSubmit" class="btn btn-primary btn-xl" type="submit"><span>Entrar</span><b>→</b></button>
       </form>
@@ -80,7 +80,7 @@
         </div>
       </div>
       <button id="forgotPasswordButton" class="auth-forgot" type="button" onclick="abrirRecuperacion()">¿Olvidaste tu contraseña?</button>
-      <p class="legal-note">Solo +18. Consulta <a href="/como-funciona.html" target="_blank" rel="noopener">Cómo funciona</a>, nuestras <a href="/terms.html" target="_blank" rel="noopener">Condiciones beta</a>, <a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a> y <a href="/community.html" target="_blank" rel="noopener">Normas de comunidad</a>.</p>
+      <p class="legal-note">Solo +18. Consulta <a href="/como-funciona.html" target="_blank" rel="noopener">Cómo funciona</a>, nuestras <a href="/terms.html" target="_blank" rel="noopener">Condiciones</a>, <a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a> y <a href="/community.html" target="_blank" rel="noopener">Normas de comunidad</a>.</p>
       <a class="auth-plus-footer-link" href="/funciones.html" target="_blank" rel="noopener">✦ Funciones V/R+</a>
     </section>
 
@@ -661,7 +661,7 @@
       <div class="settings-section account-control-section"><strong>Control de cuenta y datos</strong><p class="account-legal-copy">Gestiona sesiones abiertas, personas bloqueadas y una copia de la información asociada a tu cuenta.</p><div class="account-control-grid"><button class="account-control-card" type="button" onclick="abrirCentroCuenta('sessions')"><span>🔐</span><b>Sesiones</b><small>Revisa y cierra accesos abiertos.</small></button><button class="account-control-card" type="button" onclick="abrirCentroCuenta('blocked')"><span>⊘</span><b>Bloqueados</b><small>Consulta o desbloquea perfiles.</small></button></div><button id="exportDataButton" class="btn btn-secondary" type="button" onclick="descargarMisDatos()">⇩ Descargar mis datos</button></div>
       <button id="accountPlusButton" class="btn btn-secondary" type="button" onclick="cerrarCuenta();abrirPlus()">✦ Ver V/R+</button>
       <div class="settings-section"><strong>Beta y soporte</strong><p class="account-legal-copy">¿Encontraste un error o tienes una idea? Envíala desde aquí. No adjuntamos chats ni ubicación a tu comentario.</p><button class="btn btn-secondary" type="button" onclick="abrirFeedback()">💬 Enviar comentario beta</button></div>
-      <div class="settings-section"><strong>Información, legal y seguridad</strong><p class="account-legal-copy">Consulta cómo funciona la plataforma, las funciones disponibles y los documentos de la beta.</p><div class="account-legal-links"><a href="/como-funciona.html" target="_blank" rel="noopener">Cómo funciona</a><a href="/funciones.html" target="_blank" rel="noopener">Funciones V/R+</a><a href="/terms.html" target="_blank" rel="noopener">Condiciones beta</a><a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a><a href="/community.html" target="_blank" rel="noopener">Normas de comunidad</a></div></div>
+      <div class="settings-section"><strong>Información, legal y seguridad</strong><p class="account-legal-copy">Consulta cómo funciona la plataforma, las funciones disponibles, las condiciones, la privacidad y las normas de comunidad.</p><div class="account-legal-links"><a href="/como-funciona.html" target="_blank" rel="noopener">Cómo funciona</a><a href="/funciones.html" target="_blank" rel="noopener">Funciones V/R+</a><a href="/terms.html" target="_blank" rel="noopener">Condiciones</a><a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a><a href="/community.html" target="_blank" rel="noopener">Normas de comunidad</a></div></div>
       <button id="adminPanelButton" class="btn btn-secondary hidden" type="button" onclick="abrirAdmin()">⚑ Abrir panel de moderación</button>
       <div class="danger-zone"><strong>Zona de riesgo</strong><p>Eliminar la cuenta borra perfil, matches, mensajes, fotos y sesiones de forma permanente.</p><button class="btn btn-danger-soft" type="button" onclick="abrirEliminarCuenta()">Eliminar mi cuenta</button></div>
     </div>
@@ -3481,7 +3481,7 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
       if (!email || !password) return mostrarToast('Completa correo y contraseña.','warn');
       const endpoint=authMode==='register'?'/api/auth/register':'/api/auth/login';
       const body={email,password};
-      if(authMode==='register'){body.confirmAdult=$('confirmAdult').checked;body.acceptTerms=$('acceptTerms').checked;if(!body.confirmAdult)return mostrarToast('Confirma que tienes 18 años o más.','warn');if(!body.acceptTerms)return mostrarToast('Acepta las condiciones beta y la privacidad.','warn');}
+      if(authMode==='register'){body.confirmAdult=$('confirmAdult').checked;body.acceptTerms=$('acceptTerms').checked;if(!body.confirmAdult)return mostrarToast('Confirma que tienes 18 años o más.','warn');if(!body.acceptTerms)return mostrarToast('Acepta las Condiciones y la Privacidad.','warn');}
       const res=await api(endpoint,{method:'POST',body});
       if (!res.ok) {
         if(res.verificationRequired){
