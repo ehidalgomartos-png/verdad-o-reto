@@ -24,7 +24,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.0.0';
+const APP_VERSION = '18.1.0';
 const LEGAL_VERSION = 'beta-2026-09-17';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;

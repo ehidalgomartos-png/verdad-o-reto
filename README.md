@@ -1,6 +1,6 @@
 # V/R Match — V18 · Producto sin monetización pública
 
-Versión **18.0.0**, construida sobre V17.
+Versión **18.1.0**, construida sobre V17.
 
 ## Decisión de producto
 
@@ -19,8 +19,12 @@ Las funciones actuales agrupadas bajo **V/R+** —Rewind, filtros avanzados, Boo
 - Funciones V/R+ actuales: habilitadas para todos los usuarios.
 - Configuración de Stripe retirada de `.env.example` y `render.yaml`.
 - Service Worker actualizado a `vr-match-shell-v18`.
-- `/healthz` debe mostrar **18.0.0**.
+- `/healthz` debe mostrar **18.1.0**.
 
 ## Regla de esta versión
 
 No presentar las funciones actuales como una prueba de un plan comercial. Cualquier cambio de modelo de negocio deberá diseñarse como una fase nueva y separada, sin alterar silenciosamente las funciones que ya forman parte de la experiencia actual.
+
+
+### V18.1
+En la pantalla de acceso, Funciones V/R+ se mueve al pie, debajo del aviso +18 y enlaces legales.
