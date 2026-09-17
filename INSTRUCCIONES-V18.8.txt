@@ -1,0 +1,138 @@
+V/R MATCH 18.8.0 — RECUPERACIÓN DE PARTIDAS
+===========================================
+
+REEMPLAZA EN LA RAÍZ:
+
+- server.js
+- index.html
+- package.json
+- sw.js
+
+
+QUÉ CAMBIA
+----------
+
+Antes:
+si uno de los dos sockets se desconectaba, la partida se cerraba inmediatamente.
+
+Ahora:
+- una desconexión breve NO elimina la sala;
+- la partida entra en pausa;
+- el otro usuario ve “Tu Match ha perdido conexión”;
+- el servidor conserva la sala durante 45 segundos;
+- al reconectar, el nuevo socket sustituye al anterior;
+- se conservan:
+  - turno;
+  - progreso;
+  - carta activa;
+  - ronda sincronizada;
+  - decisiones del final;
+  - historial de la misma partida;
+- no se crea una segunda partida en game_sessions.
+
+
+VENTANA DE GRACIA
+-----------------
+
+Por defecto:
+
+45 segundos
+
+Puedes cambiarla en Render con:
+
+VR_GAME_RECONNECT_GRACE_SECONDS=45
+
+Rango admitido:
+
+15 a 120 segundos.
+
+Para las primeras pruebas recomiendo mantener 45.
+
+
+SI NO VUELVE A TIEMPO
+---------------------
+
+Cuando vence la ventana:
+- la partida termina;
+- el usuario conectado recibe el aviso normal de abandono;
+- game_sessions queda como abandoned;
+- finish_reason = disconnect_timeout.
+
+
+SI PULSA “ABANDONAR”
+--------------------
+
+No se aplica la ventana de gracia.
+
+Salir voluntariamente sigue cerrando la partida inmediatamente.
+
+
+RONDAS SINCRONIZADAS
+--------------------
+
+Si la desconexión ocurre mientras está activa una carta sincronizada:
+- el temporizador del servidor se pausa;
+- la respuesta ya bloqueada se conserva;
+- al volver el segundo jugador se reanuda el tiempo restante.
+
+
+RECARGAR LA PÁGINA
+------------------
+
+También está contemplado.
+
+Al cargar la aplicación con una sesión válida, el cliente solicita al servidor
+si existe una partida pendiente para ese usuario.
+
+Si sigue dentro de la ventana de gracia, vuelve automáticamente a la
+pantalla de juego.
+
+
+PRUEBA RECOMENDADA
+------------------
+
+1. /healthz debe indicar 18.8.0.
+2. Abre dos cuentas diferentes.
+3. Haz Match.
+4. Inicia una partida.
+5. Juega 2 o 3 turnos.
+6. En uno de los navegadores:
+   - desactiva Wi‑Fi unos segundos, o
+   - recarga la página.
+7. En el otro navegador debe aparecer:
+   “Tu Match ha perdido conexión.”
+8. Vuelve a conectar antes de 45 segundos.
+9. Los dos deben regresar a la misma partida.
+10. Comprueba que el contador de turnos no vuelve a cero.
+11. Prueba también durante:
+   - una VERDAD;
+   - un RETO;
+   - “Los dos responden”.
+12. Finalmente deja una cuenta desconectada más de 45 segundos.
+13. La partida debe cerrarse como abandono.
+
+
+IMPORTANTE
+----------
+
+La recuperación es en memoria del proceso Node.
+
+Esto protege:
+- Wi‑Fi;
+- cambio de red;
+- pestaña recargada;
+- cortes breves de Socket.IO.
+
+No puede conservar una sala si Render reinicia por completo el proceso.
+El historial agregado de game_sessions sí sigue persistiendo en SQLite.
+
+
+VALIDACIONES
+------------
+
+- node --check server.js: OK
+- node --check sw.js: OK
+- JavaScript inline index.html: OK
+
+El comportamiento Socket.IO completo debe verificarse después del deploy
+con dos cuentas reales/de prueba.

@@ -1,0 +1,26 @@
+V/R MATCH 18.8.0 — REVISIÓN
+================================
+
+BLOQUE: resiliencia de partidas.
+
+NUEVO:
+- gracia de reconexión Socket.IO;
+- sala en pausa ante desconexión;
+- sustitución segura de socket al volver;
+- reconstrucción de pantalla de juego;
+- recuperación de turno y progreso;
+- recuperación de carta activa;
+- recuperación de rondas sincronizadas;
+- pausa/reanudación del timer sincronizado;
+- cierre por disconnect_timeout;
+- variable VR_GAME_RECONNECT_GRACE_SECONDS.
+
+NO CAMBIA:
+- lista de espera;
+- ciudades;
+- analítica de lanzamiento;
+- perfiles;
+- likes/matches;
+- chat;
+- reglas de juego;
+- historial privado de respuestas.

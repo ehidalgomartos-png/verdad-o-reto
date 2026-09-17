@@ -858,6 +858,7 @@
     const datingChats = new Map();
     const gameHistoryByPartner = new Map();
     let currentGameMatchId = '';
+    let gameReconnectPaused = false;
     let pointerStartX = 0;
     let pointerDeltaX = 0;
     let pointerDragging = false;
@@ -3050,8 +3051,22 @@
       $('connectionText').textContent = online ? 'Conectado' : 'Reconectando';
     }
 
-    socket.on('connect', () => { actualizarConexion(true); if (nombreJugador && edadJugador >= 18) registrarDating(); });
-    socket.on('disconnect', () => { actualizarConexion(false); if (authToken) mostrarToast('Conexión perdida. Intentando reconectar…','warn'); });
+    socket.on('connect', () => {
+      actualizarConexion(true);
+      if (nombreJugador && edadJugador >= 18) registrarDating();
+      socket.emit('vr_resume_request',{},()=>{});
+    });
+    socket.on('disconnect', () => {
+      actualizarConexion(false);
+      if(miSala){
+        gameReconnectPaused=true;
+        detenerTemporizador();
+        $('controlesJuego').classList.add('hidden');
+        $('syncStartPanel').classList.add('hidden');
+        actualizarBarraTurno(false,'Reconectando…');
+      }
+      if (authToken) mostrarToast('Conexión perdida. Intentando reconectar…','warn');
+    });
     socket.on('connect_error', (err) => {
       actualizarConexion(false);
       const msg=String(err&&err.message||'');
@@ -3489,6 +3504,101 @@
       mostrarToast('La ronda compartida terminó por tiempo.','warn');
       if(miTurno){actualizarBarraTurno(true,'Tu turno');mostrarControlesTurno();}else actualizarBarraTurno(false,'Esperando');
     });
+
+    socket.on('vr_opponent_reconnecting',(data={})=>{
+      if(!miSala)return;
+      gameReconnectPaused=true;
+      detenerTemporizador();
+      $('controlesJuego').classList.add('hidden');
+      $('syncStartPanel').classList.add('hidden');
+      $('seccionRespuesta').classList.add('hidden');
+      $('seccionPrueba').classList.add('hidden');
+      const seconds=Math.max(1,Number(data.seconds)||45);
+      actualizarBarraTurno(false,'Esperando reconexión');
+      actualizarCartaAnimada(`Tu Match ha perdido conexión.\n\nGuardamos la partida durante ${seconds} segundos para que pueda volver.`, 'RECONECTANDO');
+      mostrarToast('Tu Match perdió conexión. La partida queda en pausa.','warn');
+    });
+
+    socket.on('vr_game_resumed',(data={})=>{
+      gameReconnectPaused=false;
+      miSala=data.salaID||miSala;
+      mazoElegido=data.mazo||mazoElegido||'rompehielos';
+      origenPartida=data.origen||origenPartida||'legacy';
+      currentGameMatchId=data.matchId||currentGameMatchId||'';
+      rivalNombre=data.oponenteNombre||rivalNombre||'Tu oponente';
+      rivalAvatar=data.oponenteAvatar||rivalAvatar||'';
+      const partnerId=data.opponentId||'';
+      if(partnerId){
+        gamePartnerProfile=datingMatches.find(m=>String(m.id)===String(partnerId))||gamePartnerProfile;
+        if(origenPartida==='dating'&&gamePartnerProfile){currentChatMatch=gamePartnerProfile;currentMatch=gamePartnerProfile;}
+      }
+      showScreen('pantallaJuego');
+      prepararMesa('Partida recuperada');
+      $('opponentName').textContent=rivalNombre;
+      pintarAvatar($('opponentAvatar'),rivalAvatar,rivalNombre);
+      $('zonaInvitacion').classList.add('hidden');
+
+      serverGameProgress={...serverGameProgress,...(data.progress||{})};
+      rondaActual=Math.max(1,Number(serverGameProgress.yourTurns||0)+1);
+      gameExtended=Boolean(serverGameProgress.extended);
+      actualizarProgresoPartida();
+
+      if(data.finalPending||serverGameProgress.completed){
+        mostrarFinalPartida(serverGameProgress);
+        mostrarToast('Partida recuperada. Podéis decidir cómo terminar.','success');
+        return;
+      }
+
+      if(data.syncRound){
+        configurarRondaSync(data.syncRound);
+        if(data.syncRound.youSubmitted){
+          syncSubmitted=true;
+          $('syncSubmitButton').classList.add('hidden');
+          $('syncWaiting').classList.remove('hidden');
+          $('syncWaitingText').textContent='Esperando a tu Match…';
+        }
+        mostrarToast('Partida recuperada. Seguís en la misma ronda.','success');
+        return;
+      }
+
+      if(data.activeCard){
+        const info=analizarCarta(data.activeCard.textoCarta,data.activeCard.tipo);
+        ultimaCartaJugada=data.activeCard.textoCarta;
+        currentCardMeta=info.meta;
+        aplicarEstiloCarta(info.meta);
+        $('controlesJuego').classList.add('hidden');
+        $('seccionRespuesta').classList.add('hidden');
+        $('seccionPrueba').classList.add('hidden');
+        $('barraReacciones').classList.add('hidden');
+        const etiqueta=info.meta.final?'🏁 FINAL':info.meta.personalized?'✨ EN COMÚN':info.meta.special?'⚡ CARTA V/R':(data.activeCard.tipo==='verdad'?'VERDAD':'RETO');
+        if(data.activeCard.isYours){
+          actualizarCartaAnimada(`Retomamos tu ${data.activeCard.tipo==='verdad'?'VERDAD':'RETO'}\n\n“${info.text}”`,etiqueta);
+          if(data.activeCard.tipo==='verdad')$('seccionRespuesta').classList.remove('hidden');
+          else $('seccionPrueba').classList.remove('hidden');
+          miTurno=false;
+          actualizarBarraTurno(false,'Retoma tu respuesta');
+          iniciarTemporizador(Math.max(45,Number(info.meta.seconds)||60));
+        }else{
+          const espera=data.activeCard.tipo==='verdad'?'Esperando su respuesta…':'Esperando su foto o vídeo de prueba…';
+          actualizarCartaAnimada(`Tu Match estaba con ${data.activeCard.tipo==='verdad'?'VERDAD':'RETO'}\n\n“${info.text}”\n\n${espera}`,`OPONENTE · ${etiqueta}`);
+          miTurno=false;actualizarBarraTurno(false,espera.replace('…',''));
+        }
+        mostrarToast('Conexión recuperada. La partida continúa.','success');
+        return;
+      }
+
+      miTurno=Boolean(data.yourTurn);
+      if(miTurno){
+        actualizarCartaAnimada('Conexión recuperada. Te toca continuar.','TU TURNO');
+        actualizarBarraTurno(true,gameExtended?'Tu turno · ronda extra':'Tu turno');
+        mostrarControlesTurno();
+      }else{
+        actualizarCartaAnimada('Conexión recuperada. Esperando a tu Match.','ESPERANDO');
+        actualizarBarraTurno(false,'Esperando rival');
+      }
+      mostrarToast('Partida recuperada. Seguís donde estabais.','success');
+    });
+
     socket.on('vr_game_progress',(data={})=>{serverGameProgress={...serverGameProgress,...data};});
     socket.on('vr_game_complete',(data={})=>{serverGameProgress={...serverGameProgress,...data,completed:true};mostrarFinalPartida(data);});
     socket.on('vr_game_decision_wait',()=>{$('gamePhaseHint').textContent='Has elegido seguir. Esperando la decisión de tu Match.';});
@@ -3959,7 +4069,7 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
     }
     function abandonarPartidaLocal() {
       detenerTemporizador(); clearTimeout(timeoutEscribiendo); cerrarCamara();
-      miSala=''; rivalNombre=''; rivalAvatar=''; rondaActual=1; enlaceSalaActual=''; gamePartnerProfile=null;currentGameMatchId='';
+      miSala=''; rivalNombre=''; rivalAvatar=''; rondaActual=1; enlaceSalaActual=''; gamePartnerProfile=null;currentGameMatchId='';gameReconnectPaused=false;
       resetExperienciaPartida();
       limpiarPruebaVisual();
       $('zonaInvitacion').classList.add('hidden'); $('controlesJuego').classList.add('hidden'); $('syncStartPanel').classList.add('hidden'); $('syncRoundPanel').classList.add('hidden');

@@ -24,7 +24,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.7.0';
+const APP_VERSION = '18.8.0';
 const LEGAL_VERSION = '2026-09-17';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -561,6 +561,7 @@ const onlineUsers = new Map(); // userId -> Set(socket.id)
 
 const GAME_TARGET_TURNS = 8;
 const SYNC_ROUND_TTL_MS = 95 * 1000;
+const GAME_RECONNECT_GRACE_MS = Math.max(15000,Math.min(120000,(Number(process.env.VR_GAME_RECONNECT_GRACE_SECONDS)||45)*1000));
 const VALID_SYNC_MODES = new Set(['choice','guess','secret']);
 const SYNC_GAME_CARDS = {
   rompehielos: {
@@ -2957,8 +2958,11 @@ function gameHistoryForPair(userId, partnerId) {
 
 function buildRoomState(playerIds, creatorId, mazo, dating=false) {
   const ids=[...playerIds];
+  const userIds={};
+  for(const sid of ids){const sock=io.sockets.sockets.get(sid);if(sock?.userId)userIds[sid]=sock.userId;}
   return {
     players:new Set(ids), creatorId, mazo:validDeck(mazo), dating:Boolean(dating),
+    userIds,reconnects:{},syncPauseRemainingMs:null,
     turnSocketId:creatorId, activeCard:null, syncRound:null,historyId:null,matchId:null,startedAt:now(),historyFinalized:false,
     game:{turns:Object.fromEntries(ids.map(id=>[id,0])),reactions:0,syncRounds:0,coincidences:0,guessHits:0,personalizedSync:0,personalizedSyncUsed:false,completed:false,extended:false,coreCompletedAt:null,decisions:{},resumeTurnSocketId:creatorId}
   };
@@ -2975,12 +2979,160 @@ function ensureRoomPlayerState(room, socketId) {
   if(typeof room.game.personalizedSyncUsed!=='boolean')room.game.personalizedSyncUsed=false;
   if(!('coreCompletedAt' in room.game))room.game.coreCompletedAt=null;
   if(!('historyFinalized' in room))room.historyFinalized=false;
+  if(!room.userIds)room.userIds={};
+  if(!room.reconnects)room.reconnects={};
+  const sock=roomSocket(room,socketId);if(sock?.userId&&!room.userIds[socketId])room.userIds[socketId]=sock.userId;
 }
 function clearRoomSyncTimer(room){if(room?.syncRound?.timer){clearTimeout(room.syncRound.timer);room.syncRound.timer=null;}}
+
+function roomUserId(room,socketId){
+  return String(room?.userIds?.[socketId] || roomSocket(room,socketId)?.userId || '');
+}
+function roomConnectedSockets(room){
+  return [...(room?.players||[])].map(sid=>roomSocket(room,sid)).filter(Boolean);
+}
+function roomReconnectCount(room){return Object.keys(room?.reconnects||{}).length;}
+function clearRoomReconnect(room,userId){
+  const item=room?.reconnects?.[userId];
+  if(item?.timer)clearTimeout(item.timer);
+  if(room?.reconnects)delete room.reconnects[userId];
+}
+function clearAllRoomReconnects(room){
+  for(const userId of Object.keys(room?.reconnects||{}))clearRoomReconnect(room,userId);
+}
+function replaceRoomSocketId(room,oldSid,newSocket){
+  const newSid=newSocket.id,userId=newSocket.userId;
+  room.players.delete(oldSid);room.players.add(newSid);
+  room.userIds[newSid]=userId;delete room.userIds[oldSid];
+  if(room.creatorId===oldSid)room.creatorId=newSid;
+  if(room.turnSocketId===oldSid)room.turnSocketId=newSid;
+  if(room.game?.resumeTurnSocketId===oldSid)room.game.resumeTurnSocketId=newSid;
+  if(room.activeCard?.ownerSocketId===oldSid)room.activeCard.ownerSocketId=newSid;
+  if(room.syncRound?.initiatorSocketId===oldSid)room.syncRound.initiatorSocketId=newSid;
+  if(room.game?.turns && Object.prototype.hasOwnProperty.call(room.game.turns,oldSid)){
+    room.game.turns[newSid]=room.game.turns[oldSid];delete room.game.turns[oldSid];
+  }
+  if(room.game?.decisions && Object.prototype.hasOwnProperty.call(room.game.decisions,oldSid)){
+    room.game.decisions[newSid]=room.game.decisions[oldSid];delete room.game.decisions[oldSid];
+  }
+  if(room.syncRound?.submissions && Object.prototype.hasOwnProperty.call(room.syncRound.submissions,oldSid)){
+    room.syncRound.submissions[newSid]=room.syncRound.submissions[oldSid];delete room.syncRound.submissions[oldSid];
+  }
+}
+function gameResumePayload(room,sid){
+  const otherSid=[...room.players].find(x=>x!==sid)||'';
+  const otherUserId=roomUserId(room,otherSid);
+  const otherProfile=otherUserId?getProfile(otherUserId):null;
+  const yourTurns=Number(room.game?.turns?.[sid]||0);
+  const opponentTurns=Number(room.game?.turns?.[otherSid]||0);
+  const progress={
+    yourTurns,opponentTurns,targetTurns:GAME_TARGET_TURNS,reactions:Number(room.game?.reactions||0),
+    syncRounds:Number(room.game?.syncRounds||0),coincidences:Number(room.game?.coincidences||0),
+    guessHits:Number(room.game?.guessHits||0),personalizedSync:Number(room.game?.personalizedSync||0),
+    extended:Boolean(room.game?.extended),completed:Boolean(room.game?.completed),yourTurn:room.turnSocketId===sid
+  };
+  let activeCard=null;
+  if(room.activeCard){
+    activeCard={
+      tipo:room.activeCard.tipo,
+      textoCarta:room.activeCard.textoCarta,
+      isYours:room.activeCard.ownerSocketId===sid,
+      startedAt:Number(room.activeCard.startedAt||0)
+    };
+  }
+  let syncRound=null;
+  if(room.syncRound){
+    const remaining=Math.max(5,Math.ceil(Number(room.syncPauseRemainingMs||SYNC_ROUND_TTL_MS)/1000));
+    syncRound={
+      id:room.syncRound.id,mode:room.syncRound.mode,prompt:room.syncRound.prompt,options:room.syncRound.options,
+      personalized:Boolean(room.syncRound.personalized),sharedInterest:room.syncRound.sharedInterest||'',
+      initiatorSocketId:room.syncRound.initiatorSocketId,
+      initiatorName:roomSocket(room,room.syncRound.initiatorSocketId)?.nombre||'Tu Match',
+      timeoutSeconds:remaining,
+      youSubmitted:Boolean(room.syncRound.submissions?.[sid])
+    };
+  }
+  return {
+    salaID:[...rooms.entries()].find(([,r])=>r===room)?.[0]||'',
+    mazo:room.mazo,origen:room.dating?'dating':'legacy',matchId:room.matchId||'',
+    opponentId:otherUserId,oponenteNombre:otherProfile?.nombre||roomSocket(room,otherSid)?.nombre||'Tu oponente',
+    oponenteAvatar:otherProfile?.avatar||roomSocket(room,otherSid)?.avatar||'',
+    yourTurn:room.turnSocketId===sid,progress,activeCard,syncRound,
+    finalPending:Boolean(room.game?.completed),reconnectGraceSeconds:Math.round(GAME_RECONNECT_GRACE_MS/1000)
+  };
+}
+function resumeSyncTimerIfReady(room,roomId){
+  if(!room?.syncRound||roomReconnectCount(room)>0)return;
+  const ms=Math.max(5000,Number(room.syncPauseRemainingMs||SYNC_ROUND_TTL_MS));
+  room.syncPauseRemainingMs=null;
+  clearRoomSyncTimer(room);
+  const syncId=room.syncRound.id;
+  room.syncRound.timer=setTimeout(()=>expireSyncRound(roomId,syncId),ms);
+}
+function expireDisconnectedRoom(roomId,userId){
+  const room=rooms.get(roomId);if(!room||!room.reconnects?.[userId])return;
+  clearAllRoomReconnects(room);
+  clearRoomSyncTimer(room);
+  gameHistoryFinalize(room,'disconnect_timeout');
+  for(const sid of [...room.players]){
+    const sock=roomSocket(room,sid);
+    if(!sock)continue;
+    sock.emit('oponente_abandono',{reason:'disconnect_timeout'});
+    sock.leave(roomId);sock.room=null;
+  }
+  rooms.delete(roomId);
+}
+function scheduleRoomReconnect(socket){
+  const roomId=socket.room;if(!roomId)return false;
+  const room=rooms.get(roomId);if(!room||!room.players.has(socket.id))return false;
+  ensureRoomPlayerState(room,socket.id);
+  const userId=socket.userId||roomUserId(room,socket.id);if(!userId)return false;
+  if(room.reconnects[userId])clearRoomReconnect(room,userId);
+  if(room.syncRound?.timer && roomReconnectCount(room)===0){
+    const elapsed=Math.max(0,now()-Number(room.syncRound.createdAt||now()));
+    room.syncPauseRemainingMs=Math.max(5000,SYNC_ROUND_TTL_MS-elapsed);
+    clearRoomSyncTimer(room);
+  }
+  const expiresAt=now()+GAME_RECONNECT_GRACE_MS;
+  const timer=setTimeout(()=>expireDisconnectedRoom(roomId,userId),GAME_RECONNECT_GRACE_MS);
+  room.reconnects[userId]={socketId:socket.id,expiresAt,timer};
+  for(const sid of room.players){
+    if(sid===socket.id)continue;
+    const other=roomSocket(room,sid);
+    if(other)other.emit('vr_opponent_reconnecting',{seconds:Math.round(GAME_RECONNECT_GRACE_MS/1000),expiresAt});
+  }
+  socket.room=null;
+  return true;
+}
+function resumeRoomForSocket(socket){
+  const userId=socket.userId;if(!userId)return null;
+  for(const [roomId,room] of rooms){
+    const pending=room.reconnects?.[userId];
+    if(!pending)continue;
+    if(Number(pending.expiresAt||0)<=now()){expireDisconnectedRoom(roomId,userId);return null;}
+    const oldSid=pending.socketId;
+    clearRoomReconnect(room,userId);
+    replaceRoomSocketId(room,oldSid,socket);
+    socket.join(roomId);socket.room=roomId;socket.mazo=room.mazo;
+    ensureRoomPlayerState(room,socket.id);
+    if(roomReconnectCount(room)>0){
+      socket.emit('vr_opponent_reconnecting',{seconds:Math.max(1,Math.ceil((Math.max(...Object.values(room.reconnects).map(x=>Number(x.expiresAt||0)))-now())/1000))});
+      return roomId;
+    }
+    resumeSyncTimerIfReady(room,roomId);
+    for(const sid of room.players){
+      const sock=roomSocket(room,sid);if(sock)sock.emit('vr_game_resumed',gameResumePayload(room,sid));
+    }
+    emitGameProgress(room);
+    return roomId;
+  }
+  return null;
+}
+
 function leaveRoom(socket, notifyOpponent=false, reason='left') {
   const roomId=socket.room; if(!roomId)return;
   const room=rooms.get(roomId);
-  if(room)gameHistoryFinalize(room,reason);
+  if(room){clearAllRoomReconnects(room);gameHistoryFinalize(room,reason);}
   socket.leave(roomId); socket.room=null; if(!room)return;
   room.players.delete(socket.id);
   if(room.game?.turns)delete room.game.turns[socket.id];
@@ -3114,7 +3266,7 @@ function pickSyncCard(room,mode){
 }
 function closeRoomForAll(roomId,event='vr_game_finished',payload={}){
   const room=rooms.get(roomId);if(!room)return;
-  clearRoomSyncTimer(room);gameHistoryFinalize(room,cleanShortText(payload?.reason,40)||'finish');
+  clearAllRoomReconnects(room);clearRoomSyncTimer(room);gameHistoryFinalize(room,cleanShortText(payload?.reason,40)||'finish');
   for(const sid of [...room.players]){const sock=roomSocket(room,sid);if(!sock)continue;sock.emit(event,payload);sock.leave(roomId);sock.room=null;}
   rooms.delete(roomId);
 }
@@ -3136,6 +3288,8 @@ io.on('connection', socket => {
   const p=getProfile(userId); if(p){socket.nombre=p.nombre;socket.avatar=p.avatar;socket.edad=p.edad;}
   socket.emit('dating_profiles',discoverFor(userId)); socket.emit('dating_matches',matchesFor(userId)); socket.emit('plus_state',getPlusState(userId)); socket.emit('notification_state',notificationState(userId));
   setTimeout(()=>broadcastDiscovery(),20);
+  setTimeout(()=>resumeRoomForSocket(socket),40);
+  socket.on('vr_resume_request',(data={},ack)=>{const done=typeof ack==='function'?ack:()=>{};const roomId=resumeRoomForSocket(socket);done({ok:true,resumed:Boolean(roomId),roomId:roomId||''});});
 
   socket.on('dating_join',(data={},ack)=>{
     const done=typeof ack==='function'?ack:()=>{};
@@ -3253,7 +3407,7 @@ io.on('connection', socket => {
   socket.on('unirse_sala',(payload,ack)=>{
     const done=typeof ack==='function'?ack:()=>{};const data=(payload&&typeof payload==='object')?payload:{salaID:payload};const roomId=String(data.salaID||'').slice(0,64);if(!roomId)return done({ok:false,error:'Sala no válida.'});
     if(data.nombre)socket.nombre=cleanName(data.nombre);if(data.mazo)socket.mazo=validDeck(data.mazo);removeFromLobby(socket.id);const room=rooms.get(roomId);if(room&&room.players.size>=2&&!room.players.has(socket.id))return done({ok:false,error:'La sala ya está completa.'});
-    socket.join(roomId);socket.room=roomId;if(room){room.players.add(socket.id);ensureRoomPlayerState(room,socket.id);socket.mazo=room.mazo;done({ok:true,roomId,full:true});const opponent=[...room.players].filter(id=>id!==socket.id).map(id=>io.sockets.sockets.get(id)).find(Boolean);if(opponent){socket.emit('oponente_unido',{nombre:opponent.nombre||'Tu amigo',avatar:opponent.avatar||'',tuTurno:room.turnSocketId===socket.id});opponent.emit('oponente_unido',{nombre:socket.nombre||'Tu amigo',avatar:socket.avatar||'',tuTurno:room.turnSocketId===opponent.id});emitGameProgress(room);}}else{rooms.set(roomId,buildRoomState([socket.id],socket.id,socket.mazo||'rompehielos',false));done({ok:true,roomId,full:false});}
+    socket.join(roomId);socket.room=roomId;if(room){room.players.add(socket.id);room.userIds=room.userIds||{};room.userIds[socket.id]=socket.userId;ensureRoomPlayerState(room,socket.id);socket.mazo=room.mazo;done({ok:true,roomId,full:true});const opponent=[...room.players].filter(id=>id!==socket.id).map(id=>io.sockets.sockets.get(id)).find(Boolean);if(opponent){socket.emit('oponente_unido',{nombre:opponent.nombre||'Tu amigo',avatar:opponent.avatar||'',tuTurno:room.turnSocketId===socket.id});opponent.emit('oponente_unido',{nombre:socket.nombre||'Tu amigo',avatar:socket.avatar||'',tuTurno:room.turnSocketId===opponent.id});emitGameProgress(room);}}else{rooms.set(roomId,buildRoomState([socket.id],socket.id,socket.mazo||'rompehielos',false));done({ok:true,roomId,full:false});}
   });
   socket.on('accion_juego',(d={},ack)=>{
     const done=typeof ack==='function'?ack:()=>{};const room=roomForSocket(socket,d.sala);
@@ -3377,9 +3531,13 @@ io.on('connection', socket => {
   socket.on('abandonar_partida',salaID=>{if(socket.room&&socket.room===salaID)leaveRoom(socket,true,'user_left');});
 
   socket.on('disconnect',()=>{
-    removeFromLobby(socket.id);leaveRoom(socket,true,'disconnect');const set=onlineUsers.get(userId);if(set){set.delete(socket.id);if(!set.size){onlineUsers.delete(userId);clearGameInvitesFor(userId);}}db.prepare('UPDATE users SET last_seen_at=? WHERE id=?').run(now(),userId);setTimeout(()=>broadcastDiscovery(),20);
+    removeFromLobby(socket.id);
+    const preserved=scheduleRoomReconnect(socket);
+    if(!preserved)leaveRoom(socket,true,'disconnect');
+    const set=onlineUsers.get(userId);if(set){set.delete(socket.id);if(!set.size){onlineUsers.delete(userId);clearGameInvitesFor(userId);}}
+    db.prepare('UPDATE users SET last_seen_at=? WHERE id=?').run(now(),userId);setTimeout(()=>broadcastDiscovery(),20);
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.7 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
-  console.log('Resiliencia: mantenimiento + backup manual protegidos');console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad: sesiones + bloqueados + exportación de datos');});
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.8 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
+  console.log(`Resiliencia: reconexión de partidas ${Math.round(GAME_RECONNECT_GRACE_MS/1000)}s + mantenimiento + backup manual`);console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad: sesiones + bloqueados + exportación de datos');});
