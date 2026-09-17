@@ -24,7 +24,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.6.1';
+const APP_VERSION = '18.6.2';
 const LEGAL_VERSION = '2026-09-17';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -364,6 +364,7 @@ CREATE TABLE IF NOT EXISTS launch_cities (
   slug TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   target_users INTEGER NOT NULL DEFAULT 500,
+  default_target_users INTEGER NOT NULL DEFAULT 500,
   status TEXT NOT NULL DEFAULT 'WAITING',
   activated_at INTEGER,
   created_at INTEGER NOT NULL,
@@ -426,9 +427,23 @@ const launchSeedCities = [
   ['alicante','Alicante',400],
   ['castellon','Castellón',250]
 ];
+
+// V18.6.2: las ciudades pueden crearse desde Admin y cada una conserva
+// un objetivo base independiente del objetivo temporal usado para pruebas.
+const launchCityColsBeforeDefaultGoalMigration = db.prepare('PRAGMA table_info(launch_cities)').all();
+const launchDefaultGoalNeedsMigration = !launchCityColsBeforeDefaultGoalMigration.some(c => c.name === 'default_target_users');
+ensureColumn('launch_cities', 'default_target_users', 'INTEGER NOT NULL DEFAULT 500');
+
 for (const [slug,name,target] of launchSeedCities) {
-  db.prepare(`INSERT OR IGNORE INTO launch_cities(slug,name,target_users,status,created_at,updated_at)
-    VALUES(?,?,?,'WAITING',?,?)`).run(slug,name,target,now(),now());
+  db.prepare(`INSERT OR IGNORE INTO launch_cities(slug,name,target_users,default_target_users,status,created_at,updated_at)
+    VALUES(?,?,?,?,'WAITING',?,?)`).run(slug,name,target,target,now(),now());
+}
+// Solo en la primera migración desde 18.6.1 se corrigen los objetivos base
+// de las ciudades incluidas originalmente.
+if (launchDefaultGoalNeedsMigration) {
+  for (const [slug,,target] of launchSeedCities) {
+    db.prepare('UPDATE launch_cities SET default_target_users=? WHERE slug=?').run(target,slug);
+  }
 }
 
 // Compatibilidad de datos: migra comentarios de instalaciones anteriores sin conservar el nombre histórico en la interfaz ni en el esquema nuevo.
@@ -862,12 +877,12 @@ function makeLaunchReferralCode(alias, citySlug) {
   return `VR-${a}-${c}${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
 }
 function launchDefaultGoal(slug) {
-  const row=launchSeedCities.find(item=>item[0]===slug);
-  return Number(row?.[2] || 500);
+  const row=db.prepare('SELECT default_target_users,target_users FROM launch_cities WHERE slug=?').get(slug);
+  return Number(row?.default_target_users || row?.target_users || 500);
 }
 function launchCityStats(slug) {
   const row = db.prepare(`
-    SELECT c.slug,c.name,c.target_users goal,c.status,c.activated_at activatedAt,
+    SELECT c.slug,c.name,c.target_users goal,c.default_target_users defaultGoal,c.status,c.activated_at activatedAt,
       COUNT(w.id) current
     FROM launch_cities c
     LEFT JOIN launch_waitlist_users w ON w.city_slug=c.slug AND w.status!='BLOCKED'
@@ -876,11 +891,11 @@ function launchCityStats(slug) {
   `).get(slug);
   if (!row) return null;
   const current = Number(row.current || 0), goal = Number(row.goal || 0);
-  return {...row,current,goal,defaultGoal:launchDefaultGoal(row.slug),percent:goal?Math.min(100,Math.round(current*100/goal)):0};
+  return {...row,current,goal,defaultGoal:Number(row.defaultGoal||launchDefaultGoal(row.slug)),percent:goal?Math.min(100,Math.round(current*100/goal)):0};
 }
 function launchCitiesStats() {
   return db.prepare(`
-    SELECT c.slug,c.name,c.target_users goal,c.status,c.activated_at activatedAt,
+    SELECT c.slug,c.name,c.target_users goal,c.default_target_users defaultGoal,c.status,c.activated_at activatedAt,
       COUNT(w.id) current
     FROM launch_cities c
     LEFT JOIN launch_waitlist_users w ON w.city_slug=c.slug AND w.status!='BLOCKED'
@@ -888,7 +903,7 @@ function launchCitiesStats() {
     ORDER BY current DESC,c.name ASC
   `).all().map(row => {
     const current=Number(row.current||0),goal=Number(row.goal||0);
-    return {...row,current,goal,defaultGoal:launchDefaultGoal(row.slug),percent:goal?Math.min(100,Math.round(current*100/goal)):0};
+    return {...row,current,goal,defaultGoal:Number(row.defaultGoal||launchDefaultGoal(row.slug)),percent:goal?Math.min(100,Math.round(current*100/goal)):0};
   });
 }
 function refreshLaunchCityStatus(slug) {
@@ -2088,6 +2103,27 @@ app.get('/api/admin/launch/summary', requireAuth, requireAdmin, (req,res) => {
 
 app.get('/api/admin/launch/cities', requireAuth, requireAdmin, (req,res) => res.json({ok:true,cities:launchCitiesStats()}));
 
+app.post('/api/admin/launch/cities', requireAuth, requireAdmin, rateLimit({limit:20,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  try {
+    const name=cleanShortText(req.body?.name,50);
+    const slug=normalizeLaunchCity(name);
+    const goal=Number(req.body?.goal);
+    if (name.length<2 || slug.length<2) return res.status(400).json({ok:false,error:'Escribe un nombre de ciudad válido.'});
+    if (!Number.isInteger(goal)||goal<1||goal>1000000) return res.status(400).json({ok:false,error:'Objetivo no válido.'});
+    if (db.prepare('SELECT 1 FROM launch_cities WHERE slug=?').get(slug)) {
+      return res.status(409).json({ok:false,error:'Esa ciudad ya existe en el lanzamiento.'});
+    }
+    const ts=now();
+    db.prepare(`INSERT INTO launch_cities(slug,name,target_users,default_target_users,status,activated_at,created_at,updated_at)
+      VALUES(?,?,?,?, 'WAITING',NULL,?,?)`).run(slug,name,goal,goal,ts,ts);
+    logModerationAction(req.user.id,req.user.id,'launch_city_created',`Ciudad ${name} creada · objetivo ${goal}`,null);
+    res.status(201).json({ok:true,city:launchCityStats(slug)});
+  } catch(e) {
+    console.error('Create launch city:',e);
+    res.status(500).json({ok:false,error:'No se pudo añadir la ciudad.'});
+  }
+});
+
 app.get('/api/admin/launch/cities/:slug/users', requireAuth, requireAdmin, (req,res) => {
   const slug=normalizeLaunchCity(req.params.slug),q=cleanShortText(req.query.q,80),limit=Math.max(1,Math.min(500,Number(req.query.limit)||200));
   const like=`%${q}%`;
@@ -2104,10 +2140,17 @@ app.get('/api/admin/launch/cities/:slug/users', requireAuth, requireAdmin, (req,
 });
 
 app.patch('/api/admin/launch/cities/:slug/goal', requireAuth, requireAdmin, (req,res) => {
-  const slug=normalizeLaunchCity(req.params.slug),goal=Number(req.body?.goal);
+  const slug=normalizeLaunchCity(req.params.slug),goal=Number(req.body?.goal),setAsDefault=req.body?.setAsDefault===true;
   if (!Number.isInteger(goal)||goal<1||goal>1000000) return res.status(400).json({ok:false,error:'Objetivo no válido.'});
-  const result=db.prepare('UPDATE launch_cities SET target_users=?,updated_at=? WHERE slug=?').run(goal,now(),slug);
-  if (!result.changes) return res.status(404).json({ok:false,error:'Ciudad no encontrada.'});
+  const city=db.prepare('SELECT name FROM launch_cities WHERE slug=?').get(slug);
+  if (!city) return res.status(404).json({ok:false,error:'Ciudad no encontrada.'});
+  if (setAsDefault) {
+    db.prepare('UPDATE launch_cities SET target_users=?,default_target_users=?,updated_at=? WHERE slug=?').run(goal,goal,now(),slug);
+  } else {
+    db.prepare('UPDATE launch_cities SET target_users=?,updated_at=? WHERE slug=?').run(goal,now(),slug);
+  }
+  logModerationAction(req.user.id,req.user.id,'launch_city_goal_changed',
+    `Ciudad ${city.name} · objetivo ${goal}${setAsDefault?' · objetivo base actualizado':''}`,null);
   res.json({ok:true,city:refreshLaunchCityStatus(slug)});
 });
 
@@ -3163,5 +3206,5 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.6.1 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.6.2 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
   console.log('Resiliencia: mantenimiento + backup manual protegidos');console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad: sesiones + bloqueados + exportación de datos');});

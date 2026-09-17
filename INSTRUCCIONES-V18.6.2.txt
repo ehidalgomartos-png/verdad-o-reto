@@ -1,0 +1,95 @@
+V/R MATCH 18.6.2 — ADMIN · CIUDADES Y OBJETIVOS
+================================================
+
+REEMPLAZA EN LA RAÍZ:
+
+- server.js
+- package.json
+- sw.js
+
+REEMPLAZA EN /public:
+
+- public/admin-launch.html
+
+
+NUEVO EN ADMIN
+--------------
+
+En /admin/launch aparece un bloque:
+
+AÑADIR CIUDAD
+
+Campos:
+
+- nombre de ciudad;
+- objetivo inicial;
+- botón “＋ Añadir ciudad”.
+
+Ejemplo:
+
+Sevilla
+500
+
+Al crearla:
+
+- se genera automáticamente el slug `sevilla`;
+- queda en estado WAITING;
+- objetivo actual = 500;
+- objetivo base = 500;
+- aparece inmediatamente entre las ciudades;
+- también aparece automáticamente en /espera.
+
+
+OBJETIVO ACTUAL VS OBJETIVO BASE
+--------------------------------
+
+“Cambiar objetivo” ahora permite decidir si el cambio es:
+
+TEMPORAL
+- cambia solo el objetivo actual;
+- útil para pruebas, por ejemplo 500 → 2;
+- “Reiniciar ciudad de prueba” devuelve la ciudad al objetivo base.
+
+PERMANENTE
+- marca “Guardar también como objetivo base”;
+- cambia el objetivo actual y el objetivo base.
+
+Ejemplo:
+
+Sevilla se crea con objetivo 400.
+Luego haces una prueba a 2 sin marcar objetivo base.
+Al reiniciar prueba vuelve a 400.
+
+
+BASE DE DATOS
+-------------
+
+Se añade automáticamente a launch_cities:
+
+default_target_users
+
+No hay que ejecutar SQL manual.
+
+La migración es compatible con la SQLite de V18.6.1.
+
+
+SEGURIDAD
+---------
+
+- crear ciudades requiere requireAuth + requireAdmin;
+- cambiar objetivos requiere requireAuth + requireAdmin;
+- las acciones quedan registradas en moderation_actions.
+
+
+DESPUÉS DEL DEPLOY
+------------------
+
+1. Abre /healthz
+2. Debe mostrar version: 18.6.2
+3. Entra en /admin/launch
+4. Prueba “Añadir ciudad”
+5. Ejemplo: Sevilla / objetivo 10
+6. Confirma que aparece también en /espera
+7. Si era una prueba, usa el reset o deja la ciudad sin captar usuarios reales.
+
+Mantén VR_CITY_LAUNCH_ENABLED=false mientras sigas probando.
