@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vr-match-shell-v18-1-2';
+const CACHE_NAME = 'vr-match-shell-v18-1-4';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -17,7 +17,14 @@ const APP_SHELL = [
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    const required = ['/', '/index.html', '/styles.css'];
+    await cache.addAll(required);
+    const optional = APP_SHELL.filter(path => !required.includes(path));
+    await Promise.allSettled(optional.map(path => cache.add(path)));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', event => {

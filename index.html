@@ -15,18 +15,6 @@
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <link rel="stylesheet" href="/styles.css">
-
-  <!-- =========================================================
-       GOOGLE ADSENSE · PASO 1
-       Cuando AdSense te entregue tu ID de editor, sustituye
-       ca-pub-TU_ID_DE_EDITOR y descomenta SOLO este <script>.
-       Este script debe cargarse una sola vez por página.
-       ========================================================= -->
-  <!--
-  <script async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-TU_ID_DE_EDITOR"
-          crossorigin="anonymous"></script>
-  -->
 </head>
 <body>
   <div class="bg-orb orb-1"></div>
@@ -55,7 +43,7 @@
       <p class="subtitle">Crea tu cuenta o vuelve a entrar. Tus matches y conversaciones se guardarán.</p>
       <div id="publicCommercialBanner" class="launch-free-card">
         <span id="publicCommercialIcon" class="launch-free-icon">✨</span>
-        <div><strong id="publicCommercialTitle">V/R Match está en beta</strong><p id="publicCommercialCopy">Descubre personas, haz Match, conversa y juega desde una sola experiencia.</p><div class="launch-free-links"><a href="/como-funciona.html" target="_blank" rel="noopener">Cómo funciona</a></div></div>
+        <div><strong id="publicCommercialTitle">Conecta, haz match y juega</strong><p id="publicCommercialCopy">Descubre personas, haz Match, conversa y juega desde una sola experiencia.</p><div class="launch-free-links"><a href="/como-funciona.html" target="_blank" rel="noopener">Cómo funciona</a></div></div>
       </div>
       <div class="auth-tabs">
         <button id="authTabLogin" class="active" type="button" onclick="cambiarAuthMode('login')">Entrar</button>
@@ -105,15 +93,15 @@
               <button type="button" class="mini-link" onclick="document.getElementById('inputAvatar').click()">Añadir fotos</button>
             </div>
           </div>
-          <input type="file" id="inputAvatar" accept="image/*" multiple style="display:none">
+          <input type="file" id="inputAvatar" accept="image/*" multiple style="display:none" aria-label="Seleccionar fotos de perfil">
           <div id="profilePhotoGrid" class="profile-photo-grid" aria-label="Fotos seleccionadas"></div>
           <div class="avatar-options" id="avatarOptions" aria-label="Avatares disponibles">
-            <button type="button" onclick="seleccionarAvatarEmoji('😎')">😎</button>
-            <button type="button" onclick="seleccionarAvatarEmoji('😈')">😈</button>
-            <button type="button" onclick="seleccionarAvatarEmoji('🤠')">🤠</button>
-            <button type="button" onclick="seleccionarAvatarEmoji('🥷')">🥷</button>
-            <button type="button" onclick="seleccionarAvatarEmoji('👽')">👽</button>
-            <button type="button" onclick="seleccionarAvatarEmoji('🐯')">🐯</button>
+            <button type="button" onclick="seleccionarAvatarEmoji('😎')" aria-label="Usar avatar con gafas de sol">😎</button>
+            <button type="button" onclick="seleccionarAvatarEmoji('😈')" aria-label="Usar avatar travieso">😈</button>
+            <button type="button" onclick="seleccionarAvatarEmoji('🤠')" aria-label="Usar avatar vaquero">🤠</button>
+            <button type="button" onclick="seleccionarAvatarEmoji('🥷')" aria-label="Usar avatar ninja">🥷</button>
+            <button type="button" onclick="seleccionarAvatarEmoji('👽')" aria-label="Usar avatar alienígena">👽</button>
+            <button type="button" onclick="seleccionarAvatarEmoji('🐯')" aria-label="Usar avatar tigre">🐯</button>
           </div>
         </div>
         <div class="field">
@@ -203,7 +191,7 @@
             <label>Intereses en común<select id="filterSharedInterests" class="profile-select"><option value="0">Sin mínimo</option><option value="1">Al menos 1</option><option value="2">Al menos 2</option><option value="3">Al menos 3</option></select></label>
             <label>Ordenar por<select id="filterSortMode" class="profile-select"><option value="smart">Compatibilidad</option><option value="distance">Cercanía</option><option value="interests">Intereses comunes</option><option value="recent">Actividad reciente</option></select></label>
           </div>
-          <small id="plusFilterLock">Filtros V/R+ disponibles en tu cuenta.</small>
+          <small id="plusFilterLock">Activa V/R+ para usar los filtros avanzados.</small>
         </div>
         <div class="filter-actions"><button class="mini-link" type="button" onclick="limpiarDatingFilters()">Limpiar</button><button class="btn btn-primary" type="button" onclick="aplicarDatingFilters()">Aplicar filtros</button></div>
       </div>
@@ -212,7 +200,7 @@
         <div id="datingEmpty" class="dating-empty hidden">
           <span>✨</span>
           <strong>No hay más perfiles ahora</strong>
-          <small>Cuando alguien entre, aparecerá aquí automáticamente. Abre otra pestaña para probar el match.</small>
+          <small>Cuando haya nuevos perfiles disponibles, aparecerán aquí automáticamente.</small>
         </div>
         <article id="datingCard" class="dating-card hidden" aria-live="polite">
           <div class="dating-photo" id="datingPhoto">
@@ -252,13 +240,13 @@
     </section>
 
     <section id="pantallaPlus" class="screen dating-screen plus-screen hidden">
-      <div class="screen-topbar"><button class="link-btn" type="button" onclick="cerrarPlus()">← Volver</button><span class="topbar-title">V/R+</span><span id="plusTopBadge" class="plus-status-badge">FREE</span></div>
+      <div class="screen-topbar"><button class="link-btn" type="button" onclick="cerrarPlus()">← Volver</button><span class="topbar-title">V/R+</span><span id="plusTopBadge" class="plus-status-badge">V/R+</span></div>
       <div class="plus-hero">
         <span class="plus-kicker">V/R+ · MÁS HERRAMIENTAS PARA DESCUBRIR</span>
         <h2>Más control. Más descubrimiento.</h2>
         <p>V/R+ reúne herramientas para personalizar cómo descubres personas y moverte con más libertad dentro de V/R Match.</p>
         <div class="plus-membership-card">
-          <div><small>ESTADO</small><strong id="plusPlanName">V/R+ activo</strong><span id="plusExpiryText">Funciones disponibles en tu cuenta.</span></div>
+          <div><small>ESTADO</small><strong id="plusPlanName">Descubre V/R+</strong><span id="plusExpiryText">Herramientas avanzadas para personalizar tu experiencia.</span></div>
           <div id="plusPlanIcon" class="plus-plan-icon">V/R+</div>
         </div>
       </div>
@@ -278,7 +266,7 @@
       <div class="plus-production-note">
         <strong id="plusBillingTitle">V/R+ forma parte de tu experiencia</strong>
         <p id="plusBillingCopy">Explora Rewind, filtros avanzados, Boost y ranking inteligente directamente desde tu cuenta.</p>
-        <div class="plus-billing-actions"><button id="plusUpgradeButton" class="btn btn-primary" type="button" onclick="solicitarPlusInfo()">Funciones activas</button><button id="plusManageButton" class="btn btn-secondary hidden" type="button">V/R+</button></div>
+        <div class="plus-billing-actions"><button id="plusUpgradeButton" class="btn btn-primary" type="button" onclick="solicitarPlusInfo()">Más información</button><button id="plusManageButton" class="btn btn-secondary hidden" type="button">V/R+</button></div>
         <small id="plusBillingMeta" class="plus-billing-meta">Más herramientas para descubrir y conectar.</small>
       </div>
     </section>
@@ -301,7 +289,7 @@
 
     <section id="pantallaChat" class="screen dating-screen chat-screen hidden">
       <div class="chat-header">
-        <button class="chat-back" type="button" onclick="irAMatches()">←</button>
+        <button class="chat-back" type="button" onclick="irAMatches()" aria-label="Volver a matches">←</button>
         <div id="chatAvatar" class="chat-avatar">♥</div>
         <div class="chat-person"><strong id="chatName">Tu match</strong><small id="chatStatus">Match reciente · rompe el hielo</small></div>
         <button class="chat-game-button" type="button" onclick="toggleChatGameTray()" aria-label="Invitar a jugar">🎮</button>
@@ -324,14 +312,14 @@
         <button type="button" onclick="usarInicioChat(this)">Descríbete usando solo 3 emojis.</button>
       </div>
       <form id="chatForm" class="chat-composer">
-        <input id="chatInput" type="text" maxlength="500" autocomplete="off" placeholder="Escribe algo mejor que “hola”…">
+        <input id="chatInput" type="text" maxlength="500" autocomplete="off" placeholder="Escribe algo mejor que “hola”…" aria-label="Mensaje">
         <button type="submit" aria-label="Enviar">➤</button>
       </form>
     </section>
 
     <section id="pantallaAdmin" class="screen admin-screen hidden">
       <div class="screen-topbar"><button class="link-btn" onclick="cerrarAdmin()">← Volver</button><span class="topbar-title">MODERACIÓN</span><span class="live-pill"><i></i> ADMIN</span></div>
-      <div class="section-heading"><span class="eyebrow">ADMIN · FASE 15</span><h2>Centro de control</h2><p>Moderación, métricas, producción, privacidad y mantenimiento técnico en un solo panel.</p></div>
+      <div class="section-heading"><span class="eyebrow">ADMINISTRACIÓN</span><h2>Centro de control</h2><p>Moderación, métricas, producción, privacidad y mantenimiento técnico en un solo panel.</p></div>
       <div id="adminStats" class="admin-stats admin-stats-six">
         <div><strong>—</strong><span>activos</span></div><div><strong>—</strong><span>suspendidos</span></div><div><strong>—</strong><span>matches</span></div>
         <div><strong>—</strong><span>denuncias abiertas</span></div><div><strong>—</strong><span>mensajes</span></div><div><strong>—</strong><span>acciones 24h</span></div>
@@ -372,7 +360,7 @@
       </div>
 
       <div id="adminPaneMetrics" class="admin-pane hidden">
-        <div class="admin-history-head"><div><strong>Métricas internas de producto</strong><small>Sin píxeles de terceros ni contenido privado de chats.</small></div><div class="metrics-toolbar"><select id="adminMetricsDays" class="profile-select" onchange="cargarAdminMetrics()"><option value="1">24 horas</option><option value="7" selected>7 días</option><option value="30">30 días</option></select><button class="btn btn-secondary" type="button" onclick="cargarAdminMetrics()">↻ Actualizar</button></div></div>
+        <div class="admin-history-head"><div><strong>Métricas internas de producto</strong><small>Sin píxeles de terceros ni contenido privado de chats.</small></div><div class="metrics-toolbar"><select id="adminMetricsDays" class="profile-select" aria-label="Periodo de métricas" onchange="cargarAdminMetrics()"><option value="1">24 horas</option><option value="7" selected>7 días</option><option value="30">30 días</option></select><button class="btn btn-secondary" type="button" onclick="cargarAdminMetrics()">↻ Actualizar</button></div></div>
         <div id="adminMetrics" class="admin-metrics"><div class="empty-state"><span>📈</span><strong>Cargando métricas…</strong></div></div>
       </div>
 
@@ -399,7 +387,7 @@
         <div id="adminSystem" class="admin-system"><div class="empty-state"><span>🛠</span><strong>Comprueba el sistema</strong></div></div>
         <div class="admin-backup-card">
           <div><span>🧰</span><div><strong>Copia manual de seguridad</strong><small>Incluye SQLite y fotos. Contiene datos sensibles: guárdala de forma privada. Requiere tu contraseña admin.</small></div></div>
-          <div class="admin-backup-actions"><input id="adminBackupPassword" type="password" minlength="8" maxlength="72" autocomplete="current-password" placeholder="Contraseña de tu cuenta"><button id="adminBackupButton" class="btn btn-primary" type="button" onclick="descargarBackupAdmin()">Descargar backup</button></div>
+          <div class="admin-backup-actions"><input id="adminBackupPassword" type="password" aria-label="Contraseña para copia de seguridad" minlength="8" maxlength="72" autocomplete="current-password" placeholder="Contraseña de tu cuenta"><button id="adminBackupButton" class="btn btn-primary" type="button" onclick="descargarBackupAdmin()">Descargar backup</button></div>
         </div>
       </div>
     </section>
@@ -491,7 +479,7 @@
       </div>
 
       <div id="seccionRespuesta" class="answer-panel hidden">
-        <div class="input-row"><input type="text" id="inputRespuesta" placeholder="Escribe tu respuesta…" maxlength="500" autocomplete="off"><button class="btn btn-primary" onclick="enviarRespuestaTexto()">Enviar</button></div>
+        <div class="input-row"><input type="text" id="inputRespuesta" placeholder="Escribe tu respuesta…" aria-label="Respuesta" maxlength="500" autocomplete="off"><button class="btn btn-primary" onclick="enviarRespuestaTexto()">Enviar</button></div>
       </div>
 
       <div id="seccionPrueba" class="proof-panel hidden">
@@ -513,46 +501,12 @@
       <div class="game-hint" id="gameHint">El turno pasa automáticamente al completar tu respuesta.</div>
     </section>
   </main>
-
-  <!-- =========================================================
-       GOOGLE ADSENSE · BANNER INFERIOR
-
-       PASO 2: crea en AdSense un bloque de anuncio Display
-       adaptable y sustituye:
-         1) ca-pub-TU_ID_DE_EDITOR
-         2) TU_ID_DE_BLOQUE
-
-       PASO 3: elimina los símbolos de comentario que rodean
-       el bloque <ins> + <script> que aparece más abajo.
-
-       Mientras no lo actives, se verá el placeholder de prueba.
-       ========================================================= -->
-  <aside class="ad-slot" id="bannerInferior" aria-label="Espacio publicitario">
-    <div class="ad-placeholder" id="adsensePlaceholder">
-      <span>ESPACIO PUBLICITARIO</span>
-      <strong>Google AdSense · bloque responsive preparado</strong>
-      <small>Actívalo reemplazando el ID de editor y el ID del bloque.</small>
-    </div>
-
-    <!-- INICIO GOOGLE ADSENSE - DESCOMENTAR CUANDO TENGAS LOS IDs
-    <ins class="adsbygoogle adsense-mobile-banner"
-         style="display:block"
-         data-ad-client="ca-pub-TU_ID_DE_EDITOR"
-         data-ad-slot="TU_ID_DE_BLOQUE"
-         data-ad-format="auto"
-         data-full-width-responsive="false"></ins>
-    <script>
-      (adsbygoogle = window.adsbygoogle || []).push({});
-    </script>
-    FIN GOOGLE ADSENSE -->
-  </aside>
-
   <footer class="app-copyright" aria-label="Copyright"><span>Copyright © 2026 Hidalgo Entertainment</span><nav><a href="/terms.html" target="_blank" rel="noopener">Condiciones</a><a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a><a href="/community.html" target="_blank" rel="noopener">Comunidad</a></nav></footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <div id="confirmModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card">
-      <button class="modal-close" onclick="cerrarModal()">×</button>
+      <button class="modal-close" type="button" aria-label="Cerrar" onclick="cerrarModal()">×</button>
       <span class="modal-icon">🔥</span>
       <h3>Sección XX · +18</h3>
       <p>Este mazo es exclusivo para personas mayores de 18 años.</p>
@@ -562,7 +516,7 @@
 
   <div id="matchModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card match-modal-card">
-      <button class="modal-close" onclick="cerrarMatchModal()">×</button>
+      <button class="modal-close" type="button" aria-label="Cerrar" onclick="cerrarMatchModal()">×</button>
       <span class="match-kicker">✨ ES MUTUO</span>
       <div class="match-hearts">
         <div class="match-avatar" id="matchMyAvatar">🙂</div>
@@ -582,7 +536,7 @@
 
   <div id="gameInviteModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card match-modal-card">
-      <button class="modal-close" onclick="rechazarInvitacionJuego()">×</button>
+      <button class="modal-close" type="button" aria-label="Cerrar invitación" onclick="rechazarInvitacionJuego()">×</button>
       <span class="modal-icon">🎮</span>
       <h3 id="gameInviteTitle">Te invitan a jugar</h3>
       <p>Un match quiere romper el hielo contigo con una ronda rápida.</p>
@@ -595,7 +549,7 @@
 
   <div id="reportModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card safety-modal-card">
-      <button class="modal-close" onclick="cerrarReporte()">×</button>
+      <button class="modal-close" type="button" aria-label="Cerrar denuncia" onclick="cerrarReporte()">×</button>
       <span class="modal-icon">⚑</span><h3>Denunciar perfil</h3>
       <p>La denuncia se guardará para revisión. Si existe riesgo inmediato, utiliza también los canales de emergencia de tu zona.</p>
       <div class="field"><label for="reportReason">Motivo</label><select id="reportReason" class="profile-select"><option value="">Selecciona…</option><option value="harassment">Acoso o comportamiento ofensivo</option><option value="fake">Perfil falso / suplantación</option><option value="spam">Spam o estafa</option><option value="sexual">Contenido sexual no consentido</option><option value="underage">Posible menor de edad</option><option value="other">Otro</option></select></div>
@@ -606,7 +560,7 @@
 
   <div id="adminUserModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card account-modal-card admin-user-modal-card">
-      <button class="modal-close" onclick="cerrarAdminUsuario()">×</button>
+      <button class="modal-close" type="button" aria-label="Cerrar usuario" onclick="cerrarAdminUsuario()">×</button>
       <span class="eyebrow">MODERACIÓN DE CUENTA</span>
       <div id="adminUserDetail"><div class="empty-state"><span class="spinner"></span><strong>Cargando usuario…</strong></div></div>
       <div class="field admin-note-field"><label for="adminUserNote">Nota interna <small>(opcional)</small></label><textarea id="adminUserNote" class="profile-textarea" maxlength="500" placeholder="Motivo o contexto de la acción"></textarea></div>
@@ -616,7 +570,7 @@
 
   <div id="onboardingModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card onboarding-modal-card">
-      <span class="onboarding-badge">V/R MATCH · BETA</span>
+      <span class="onboarding-badge">V/R MATCH</span>
       <h3>Haz match. Habla. Juega.</h3>
       <p class="onboarding-lead">Cuatro ideas antes de empezar para que V/R Match sea más claro, privado y seguro.</p>
       <div class="onboarding-grid">
@@ -631,7 +585,7 @@
 
   <div id="forgotModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card account-modal-card">
-      <button class="modal-close" onclick="cerrarRecuperacion()">×</button>
+      <button class="modal-close" type="button" aria-label="Cerrar recuperación" onclick="cerrarRecuperacion()">×</button>
       <span class="modal-icon">🔐</span><h3>Recuperar contraseña</h3>
       <p>Escribe el correo de tu cuenta. Si existe, generaremos un enlace para crear una contraseña nueva.</p>
       <div class="field"><label for="forgotEmail">Correo</label><input id="forgotEmail" type="email" maxlength="254" placeholder="tu@email.com"></div>
@@ -651,16 +605,16 @@
 
   <div id="accountModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card account-modal-card account-settings-card">
-      <button class="modal-close" onclick="cerrarCuenta()">×</button>
+      <button class="modal-close" type="button" aria-label="Cerrar cuenta" onclick="cerrarCuenta()">×</button>
       <span class="eyebrow">CUENTA</span><h3>Privacidad y seguridad</h3>
       <div class="account-email-card"><div><small>CORREO</small><strong id="settingsEmail">—</strong></div><span id="emailVerifiedBadge" class="security-badge">Pendiente</span></div>
       <button id="resendVerificationButton" class="mini-link account-resend" type="button" onclick="reenviarVerificacion()">Reenviar verificación</button>
       <div class="settings-section"><strong>Privacidad</strong><label class="setting-switch"><span><b>Mostrarme en Descubrir</b><small>Desactívalo para pausar temporalmente tu perfil.</small></span><input id="privacyDiscoverable" type="checkbox" checked></label><label class="setting-switch"><span><b>Mostrar estado online</b><small>Oculta el indicador de conexión a otros usuarios.</small></span><input id="privacyShowOnline" type="checkbox" checked></label><label class="setting-switch"><span><b>Permitir invitaciones a jugar</b><small>Tus matches podrán proponerte una partida.</small></span><input id="privacyGameInvites" type="checkbox" checked></label><button class="btn btn-secondary" type="button" onclick="guardarPrivacidad()">Guardar privacidad</button></div>
       <div id="pwaInstallSection" class="settings-section"><strong>Aplicación</strong><div class="pwa-install-card"><div class="pwa-install-icon">V/R</div><div><b>Instalar V/R Match</b><small id="pwaInstallStatus">Añade V/R Match a tu pantalla de inicio y ábrelo como una app.</small></div></div><button id="pwaInstallButton" class="btn btn-secondary" type="button" onclick="instalarPWA()">⇩ Instalar aplicación</button></div>
-      <div class="settings-section"><strong>Cambiar contraseña</strong><div class="field"><input id="currentPassword" type="password" maxlength="72" autocomplete="current-password" placeholder="Contraseña actual"></div><div class="field"><input id="newPassword" type="password" maxlength="72" autocomplete="new-password" placeholder="Nueva contraseña · mínimo 8"></div><button class="btn btn-secondary" type="button" onclick="cambiarPasswordCuenta()">Actualizar contraseña</button></div>
+      <div class="settings-section"><strong>Cambiar contraseña</strong><div class="field"><input id="currentPassword" type="password" aria-label="Contraseña actual" maxlength="72" autocomplete="current-password" placeholder="Contraseña actual"></div><div class="field"><input id="newPassword" type="password" aria-label="Nueva contraseña" maxlength="72" autocomplete="new-password" placeholder="Nueva contraseña · mínimo 8"></div><button class="btn btn-secondary" type="button" onclick="cambiarPasswordCuenta()">Actualizar contraseña</button></div>
       <div class="settings-section account-control-section"><strong>Control de cuenta y datos</strong><p class="account-legal-copy">Gestiona sesiones abiertas, personas bloqueadas y una copia de la información asociada a tu cuenta.</p><div class="account-control-grid"><button class="account-control-card" type="button" onclick="abrirCentroCuenta('sessions')"><span>🔐</span><b>Sesiones</b><small>Revisa y cierra accesos abiertos.</small></button><button class="account-control-card" type="button" onclick="abrirCentroCuenta('blocked')"><span>⊘</span><b>Bloqueados</b><small>Consulta o desbloquea perfiles.</small></button></div><button id="exportDataButton" class="btn btn-secondary" type="button" onclick="descargarMisDatos()">⇩ Descargar mis datos</button></div>
       <button id="accountPlusButton" class="btn btn-secondary" type="button" onclick="cerrarCuenta();abrirPlus()">✦ Ver V/R+</button>
-      <div class="settings-section"><strong>Beta y soporte</strong><p class="account-legal-copy">¿Encontraste un error o tienes una idea? Envíala desde aquí. No adjuntamos chats ni ubicación a tu comentario.</p><button class="btn btn-secondary" type="button" onclick="abrirFeedback()">💬 Enviar comentario beta</button></div>
+      <div class="settings-section"><strong>Soporte</strong><p class="account-legal-copy">¿Encontraste un error o tienes una idea? Envíala desde aquí. No adjuntamos chats ni ubicación a tu comentario.</p><button class="btn btn-secondary" type="button" onclick="abrirFeedback()">💬 Enviar comentario</button></div>
       <div class="settings-section"><strong>Información, legal y seguridad</strong><p class="account-legal-copy">Consulta cómo funciona la plataforma, las funciones disponibles, las condiciones, la privacidad y las normas de comunidad.</p><div class="account-legal-links"><a href="/como-funciona.html" target="_blank" rel="noopener">Cómo funciona</a><a href="/funciones.html" target="_blank" rel="noopener">Funciones V/R+</a><a href="/terms.html" target="_blank" rel="noopener">Condiciones</a><a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a><a href="/community.html" target="_blank" rel="noopener">Normas de comunidad</a></div></div>
       <button id="adminPanelButton" class="btn btn-secondary hidden" type="button" onclick="abrirAdmin()">⚑ Abrir panel de moderación</button>
       <div class="danger-zone"><strong>Zona de riesgo</strong><p>Eliminar la cuenta borra perfil, matches, mensajes, fotos y sesiones de forma permanente.</p><button class="btn btn-danger-soft" type="button" onclick="abrirEliminarCuenta()">Eliminar mi cuenta</button></div>
@@ -669,19 +623,19 @@
 
   <div id="feedbackModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card account-modal-card feedback-modal-card">
-      <button class="modal-close" type="button" onclick="cerrarFeedback()">×</button>
-      <span class="eyebrow">BETA · FASE 12</span><h3>Ayúdanos a mejorar V/R Match</h3>
+      <button class="modal-close" type="button" aria-label="Cerrar soporte" onclick="cerrarFeedback()">×</button>
+      <span class="eyebrow">SOPORTE</span><h3>Ayúdanos a mejorar V/R Match</h3>
       <p>Recibimos el tipo de comentario, tu texto y la pantalla desde la que lo envías. No se adjuntan conversaciones ni coordenadas.</p>
       <div class="field"><label for="feedbackKind">Tipo</label><select id="feedbackKind" class="profile-select"><option value="bug">Encontré un error</option><option value="idea">Tengo una idea</option><option value="ux">Experiencia / diseño</option><option value="other">Otro</option></select></div>
       <div class="field"><label for="feedbackMessage">Comentario</label><textarea id="feedbackMessage" class="profile-textarea" maxlength="1200" placeholder="Cuéntanos qué ocurrió o qué mejorarías…"></textarea><small id="feedbackCounter">0 / 1200</small></div>
-      <div class="modal-actions"><button class="btn btn-ghost" type="button" onclick="cerrarFeedback()">Cancelar</button><button class="btn btn-primary" type="button" onclick="enviarFeedbackBeta()">Enviar comentario</button></div>
+      <div class="modal-actions"><button class="btn btn-ghost" type="button" onclick="cerrarFeedback()">Cancelar</button><button class="btn btn-primary" type="button" onclick="enviarFeedback()">Enviar comentario</button></div>
     </div>
   </div>
 
   <div id="accountControlModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card account-modal-card account-control-modal-card">
-      <button class="modal-close" type="button" onclick="cerrarCentroCuenta()">×</button>
-      <span class="eyebrow">FASE 13 · PRIVACIDAD</span><h3>Control de cuenta</h3>
+      <button class="modal-close" type="button" aria-label="Cerrar control de cuenta" onclick="cerrarCentroCuenta()">×</button>
+      <span class="eyebrow">PRIVACIDAD Y SEGURIDAD</span><h3>Control de cuenta</h3>
       <p>V/R Match no muestra tokens, contraseñas, IP ni una huella del dispositivo. Aquí puedes gestionar tus accesos y bloqueos.</p>
       <div class="account-control-tabs"><button id="accountControlTabSessions" class="active" type="button" onclick="cambiarCentroCuentaTab('sessions')">🔐 Sesiones</button><button id="accountControlTabBlocked" type="button" onclick="cambiarCentroCuentaTab('blocked')">⊘ Bloqueados</button></div>
       <div id="accountSessionsPanel" class="account-control-panel">
@@ -697,7 +651,7 @@
 
   <div id="deleteAccountModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card safety-modal-card">
-      <button class="modal-close" onclick="cerrarEliminarCuenta()">×</button><span class="modal-icon">⚠️</span><h3>Eliminar cuenta</h3><p>Esta acción es permanente. Escribe tu contraseña para confirmar.</p>
+      <button class="modal-close" type="button" aria-label="Cerrar eliminación de cuenta" onclick="cerrarEliminarCuenta()">×</button><span class="modal-icon">⚠️</span><h3>Eliminar cuenta</h3><p>Esta acción es permanente. Escribe tu contraseña para confirmar.</p>
       <div class="field"><label for="deleteAccountPassword">Contraseña</label><input id="deleteAccountPassword" type="password" maxlength="72" autocomplete="current-password"></div>
       <div class="modal-actions"><button class="btn btn-ghost" onclick="cerrarEliminarCuenta()">Cancelar</button><button class="btn btn-danger-soft" onclick="eliminarCuentaDefinitiva()">Eliminar definitivamente</button></div>
     </div>
@@ -705,8 +659,8 @@
 
   <div id="pwaInstallModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card account-modal-card pwa-install-modal-card">
-      <button class="modal-close" type="button" onclick="cerrarInstalacionPWA()">×</button>
-      <span class="modal-icon">📲</span><span class="eyebrow">FASE 10 · PWA</span><h3>Instalar V/R Match</h3>
+      <button class="modal-close" type="button" aria-label="Cerrar instalación" onclick="cerrarInstalacionPWA()">×</button>
+      <span class="modal-icon">📲</span><span class="eyebrow">APLICACIÓN</span><h3>Instalar V/R Match</h3>
       <p id="pwaInstallHelp">Puedes añadir V/R Match a tu pantalla de inicio y abrirlo como una aplicación independiente.</p>
       <div id="pwaInstallSteps" class="pwa-install-steps"></div>
       <button class="btn btn-primary" type="button" onclick="cerrarInstalacionPWA()">Entendido</button>
@@ -715,9 +669,9 @@
 
   <div id="notificationModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card notification-modal-card">
-      <button class="modal-close" type="button" onclick="cerrarNotificaciones()">×</button>
+      <button class="modal-close" type="button" aria-label="Cerrar notificaciones" onclick="cerrarNotificaciones()">×</button>
       <div class="notification-head">
-        <div><span class="eyebrow">FASE 9 · NOTIFICACIONES</span><h3>Centro de avisos</h3><p>Matches, mensajes e invitaciones sin perder el hilo.</p></div>
+        <div><span class="eyebrow">NOTIFICACIONES</span><h3>Centro de avisos</h3><p>Matches, mensajes e invitaciones sin perder el hilo.</p></div>
         <button class="mini-link" type="button" onclick="marcarTodasNotificaciones()">Marcar todo leído</button>
       </div>
 
@@ -772,7 +726,6 @@
     let currentUserAdmin = false;
     let currentOnboardingCompleted = true;
     let currentPlus = { active:false, plan:'free', status:'inactive', launchFree:false, expiresAt:null, settings:{verifiedOnly:false,minSharedInterests:0,sortMode:'smart'}, boost:{active:false,activeUntil:null,cooldownUntil:null,available:false}, billingEnabled:false };
-    let currentBilling = {enabled:false,prepared:false,mode:'off',launchMode:'beta',customer:false,subscription:null};
     async function cargarEstadoComercialPublico(){
       // V18: no se publica información comercial ni de monetización.
       return;
@@ -1322,14 +1275,14 @@
         button.textContent='Bloqueado';button.disabled=true;return;
       }
       if(pushSubscriptionActive && pushConfigured) {
-        status.textContent='Push en segundo plano activo en este dispositivo.';
-        button.textContent='Desactivar push';return;
+        status.textContent='Notificaciones en segundo plano activas en este dispositivo.';
+        button.textContent='Desactivar avisos';return;
       }
       if(Notification.permission==='granted' && notificationBrowserEnabled) {
-        status.textContent=pushConfigured?'Permiso concedido. Falta sincronizar el push.':'Avisos activos mientras V/R Match esté abierto. Push de fondo preparado para producción.';
-        button.textContent=pushConfigured?'Sincronizar push':'Avisos activos';return;
+        status.textContent=pushConfigured?'Permiso concedido. Falta completar la sincronización.':'Avisos activos mientras V/R Match esté abierto.';
+        button.textContent=pushConfigured?'Sincronizar avisos':'Avisos activos';return;
       }
-      status.textContent=pushConfigured?'Activa el permiso para recibir avisos incluso en segundo plano.':'Activa avisos del navegador; el push de fondo se habilitará al configurar VAPID.';
+      status.textContent=pushConfigured?'Activa el permiso para recibir avisos incluso en segundo plano.':'Activa los avisos del navegador para recibir novedades mientras usas V/R Match.';
       button.textContent='Activar';
     }
     function renderNotificaciones() {
@@ -1531,7 +1484,7 @@
           else mostrarToast(res.error||'No se pudo activar el push de fondo.','warn');
         }catch(e){mostrarToast('Permiso concedido, pero no se pudo registrar el push.','warn');}
       } else {
-        mostrarToast('Avisos del navegador activos. El push de fondo se habilitará al configurar VAPID.','info');
+        mostrarToast('Avisos del navegador activados para esta sesión.','info');
       }
       actualizarControlesNotificaciones();
     }
@@ -1632,16 +1585,16 @@
     function aplicarPlusState(data={}) {
       currentPlus=normalizarPlus(data);
       const pill=$('vrPlusPill');
-      if(pill){pill.classList.toggle('is-active',true);pill.textContent='V/R+';}
+      if(pill){pill.classList.toggle('is-active',currentPlus.active);pill.textContent='V/R+';}
       const controls=[$('filterVerifiedOnly'),$('filterSharedInterests'),$('filterSortMode')].filter(Boolean);
       controls.forEach(el=>el.disabled=!currentPlus.active);
       if($('filterVerifiedOnly'))$('filterVerifiedOnly').checked=currentPlus.settings.verifiedOnly;
       if($('filterSharedInterests'))$('filterSharedInterests').value=String(currentPlus.settings.minSharedInterests);
       if($('filterSortMode'))$('filterSortMode').value=currentPlus.settings.sortMode;
-      if($('plusFilterLock'))$('plusFilterLock').textContent='Filtros V/R+ disponibles y sincronizados con tu cuenta.';
+      if($('plusFilterLock'))$('plusFilterLock').textContent=currentPlus.active?'Filtros V/R+ disponibles y sincronizados con tu cuenta.':'Activa V/R+ para usar los filtros avanzados.';
       if($('plusFilterBlock'))$('plusFilterBlock').classList.toggle('locked',!currentPlus.active);
       if($('rewindButton'))$('rewindButton').classList.toggle('plus-locked',!currentPlus.active);
-      if($('accountPlusButton'))$('accountPlusButton').textContent='✦ Ver funciones V/R+';
+      if($('accountPlusButton'))$('accountPlusButton').textContent=currentPlus.active?'✦ Ver funciones V/R+':'✦ Conocer V/R+';
       renderPlusScreen();
     }
     function plusFecha(ts) {
@@ -1659,23 +1612,26 @@
     function cerrarPlus(){showScreen(plusReturnScreen||'pantallaDescubrir');}
     function renderPlusScreen() {
       if(!$('plusPlanName'))return;
-      $('plusTopBadge').textContent='ACTIVO';
-      $('plusTopBadge').classList.add('active');
-      $('plusPlanName').textContent='V/R+ activo';
-      $('plusPlanIcon').classList.add('active');
-      $('plusExpiryText').textContent='Funciones disponibles en tu cuenta.';
+      const active=Boolean(currentPlus.active);
+      $('plusTopBadge').textContent=active?'ACTIVO':'V/R+';
+      $('plusTopBadge').classList.toggle('active',active);
+      $('plusPlanName').textContent=active?'V/R+ activo':'Descubre V/R+';
+      $('plusPlanIcon').classList.toggle('active',active);
+      $('plusExpiryText').textContent=active?'Funciones disponibles en tu cuenta.':'Herramientas avanzadas para personalizar tu experiencia.';
       const boost=currentPlus.boost||{};
-      if(boost.active)$('plusBoostStatus').textContent=`Boost activo hasta ${plusFecha(boost.activeUntil)}.`;
+      if(!active)$('plusBoostStatus').textContent='Disponible al activar V/R+.';
+      else if(boost.active)$('plusBoostStatus').textContent=`Boost activo hasta ${plusFecha(boost.activeUntil)}.`;
       else if(boost.available)$('plusBoostStatus').textContent='Tienes 1 Boost disponible. Dura 30 minutos.';
-      else $('plusBoostStatus').textContent=`Siguiente Boost disponible ${plusFecha(boost.cooldownUntil)}.`;
-      $('plusBoostButton').disabled=Boolean(boost.active) || !Boolean(boost.available);
-      $('plusBoostButton').textContent=boost.active?'Boost activo':(boost.available?'Activar Boost':'En cooldown');
+      else if(boost.cooldownUntil)$('plusBoostStatus').textContent=`Siguiente Boost disponible ${plusFecha(boost.cooldownUntil)}.`;
+      else $('plusBoostStatus').textContent='Boost no disponible en este momento.';
+      $('plusBoostButton').disabled=!active || Boolean(boost.active) || !Boolean(boost.available);
+      $('plusBoostButton').textContent=!active?'Requiere V/R+':(boost.active?'Boost activo':(boost.available?'Activar Boost':'No disponible'));
       const manage=$('plusManageButton'),upgrade=$('plusUpgradeButton');
       if(manage)manage.classList.add('hidden');
-      if($('plusBillingTitle'))$('plusBillingTitle').textContent='V/R+ forma parte de tu experiencia';
-      if($('plusBillingCopy'))$('plusBillingCopy').textContent='Explora Rewind, filtros avanzados, Boost y ranking inteligente directamente desde tu cuenta.';
-      if($('plusBillingMeta'))$('plusBillingMeta').textContent='Más herramientas para descubrir y conectar.';
-      if(upgrade){upgrade.disabled=true;upgrade.textContent='Funciones activas';}
+      if($('plusBillingTitle'))$('plusBillingTitle').textContent=active?'V/R+ forma parte de tu experiencia':'Descubre V/R+';
+      if($('plusBillingCopy'))$('plusBillingCopy').textContent=active?'Explora Rewind, filtros avanzados, Boost y ranking inteligente directamente desde tu cuenta.':'Rewind, filtros avanzados, Boost y ranking inteligente para descubrir con más control.';
+      if($('plusBillingMeta'))$('plusBillingMeta').textContent=active?'Más herramientas para descubrir y conectar.':'Consulta las funciones incluidas en V/R+.';
+      if(upgrade){upgrade.disabled=active;upgrade.textContent=active?'Funciones activas':'Más información';}
     }
     async function activarPlusBoost() {
       const res=await api('/api/plus/boost',{method:'POST',body:{}});
@@ -1684,7 +1640,7 @@
       mostrarToast('Boost activado durante 30 minutos.','info');
     }
     async function solicitarPlusInfo() {
-      mostrarToast('Las funciones V/R+ ya están disponibles en tu cuenta.','info');
+      mostrarToast(currentPlus.active?'Las funciones V/R+ ya están disponibles en tu cuenta.':'V/R+ incluye Rewind, filtros avanzados, Boost y ranking inteligente.','info');
     }
     async function abrirPortalBilling(){
       mostrarToast('Las funciones V/R+ se gestionan directamente desde V/R Match.','info');
@@ -1852,7 +1808,7 @@
       $('feedbackModal').classList.remove('hidden'); $('feedbackModal').setAttribute('aria-hidden','false');
     }
     function cerrarFeedback(){ $('feedbackModal').classList.add('hidden'); $('feedbackModal').setAttribute('aria-hidden','true'); }
-    async function enviarFeedbackBeta(){
+    async function enviarFeedback(){
       const message=String($('feedbackMessage').value||'').trim();
       if(message.length<10)return mostrarToast('Cuéntanos un poco más para poder revisarlo.','warn');
       const res=await api('/api/feedback',{method:'POST',body:{kind:$('feedbackKind').value,message,page:location.pathname}});
@@ -1883,8 +1839,9 @@
       const res=await api('/api/admin/production-readiness');
       if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudo comprobar')}</strong></div>`;return;}
       const r=res.readiness||{};
+      const launchModeLabel=r.productionMode?'producción':'preparación';
       const items=[['Modo producción',r.productionMode],['Dominio propio',r.customDomain],['Persistencia de datos',r.persistentStorage],['SMTP',r.smtpConfigured],['Verificación obligatoria',r.emailVerificationRequired],['Administrador',r.adminConfigured],['Funciones V/R+ disponibles',true],['Web Push',r.webPushConfigured]];
-      box.innerHTML=`<div class="production-hero ${r.productionReady?'ready':'pending'}"><span>${r.productionReady?'✓':'⚙'}</span><div><strong>${r.productionReady?'Técnicamente listo para lanzamiento':'Preparación de lanzamiento pendiente'}</strong><small>Versión ${escapeHtml(r.version||'')} · modo ${escapeHtml(r.launchMode||'beta')}</small></div></div><div class="production-grid">${items.map(([label,ok])=>`<div><span class="production-dot ${ok?'ok':'pending'}"></span><strong>${escapeHtml(label)}</strong><small>${ok?'Configurado':'Pendiente'}</small></div>`).join('')}</div><div class="production-pending"><strong>Pendientes antes del lanzamiento</strong><ul>${(r.pending||[]).filter(x=>!/premium|pago|cobro|stripe|checkout|suscrip/i.test(String(x))).map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`;
+      box.innerHTML=`<div class="production-hero ${r.productionReady?'ready':'pending'}"><span>${r.productionReady?'✓':'⚙'}</span><div><strong>${r.productionReady?'Técnicamente listo para lanzamiento':'Preparación de lanzamiento pendiente'}</strong><small>Versión ${escapeHtml(r.version||'')} · modo ${escapeHtml(launchModeLabel)}</small></div></div><div class="production-grid">${items.map(([label,ok])=>`<div><span class="production-dot ${ok?'ok':'pending'}"></span><strong>${escapeHtml(label)}</strong><small>${ok?'Configurado':'Pendiente'}</small></div>`).join('')}</div><div class="production-pending"><strong>Pendientes antes del lanzamiento</strong><ul>${(r.pending||[]).filter(x=>!/premium|pago|cobro|stripe|checkout|suscrip/i.test(String(x))).map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`;
     }
 
     async function cargarAdminSystem(){
@@ -2108,7 +2065,7 @@
       box.innerHTML=`<div class="metrics-summary">${cards.map(([label,val,sub])=>`<article><strong>${Number(val)||0}</strong><span>${escapeHtml(label)}</span><small>${escapeHtml(sub)}</small></article>`).join('')}</div>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Embudo de nuevas cuentas</strong><small>Conversión de las cuentas registradas durante el periodo.</small></div><span>${days===1?'24 h':days+' días'}</span></div><div class="funnel-grid">${funnel.map(([label,val,pct])=>`<div><div><b>${escapeHtml(label)}</b><span>${Number(val)||0} · ${Number(pct)||0}%</span></div><i><em style="width:${Math.max(2,Number(pct)||0)}%"></em></i></div>`).join('')}</div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Actividad diaria</strong><small>Altas, matches y mensajes. Datos agregados.</small></div></div><div class="daily-chart">${daily.map(d=>`<div class="daily-row"><small>${escapeHtml(d.day.slice(5))}</small><div title="Altas: ${d.registered}"><i class="reg" style="width:${Math.max(2,Number(d.registered)*100/maxDaily)}%"></i></div><div title="Matches: ${d.matches}"><i class="match" style="width:${Math.max(2,Number(d.matches)*100/maxDaily)}%"></i></div><div title="Mensajes: ${d.messages}"><i class="msg" style="width:${Math.max(2,Number(d.messages)*100/maxDaily)}%"></i></div></div>`).join('')}</div><div class="chart-legend"><span><i class="reg"></i>Altas</span><span><i class="match"></i>Matches</span><span><i class="msg"></i>Mensajes</span></div></section>
-        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Salud de la beta</strong><small>Diagnóstico técnico de esta instancia. No contiene secretos.</small></div></div><div class="system-grid"><div><b>${sys.onlineUsers||0}</b><span>usuarios online</span></div><div><b>${sys.sockets||0}</b><span>sockets</span></div><div><b>${sys.rssMb||0} MB</b><span>memoria RSS</span></div><div><b>${sys.heapUsedMb||0} MB</b><span>heap usado</span></div><div><b>${bytesLegibles(sys.dbBytes)}</b><span>SQLite</span></div><div><b>${sys.uploadFiles||0}</b><span>archivos · ${bytesLegibles(sys.uploadBytes)}</span></div></div></section>
+        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Salud del sistema</strong><small>Diagnóstico técnico de esta instancia. No contiene secretos.</small></div></div><div class="system-grid"><div><b>${sys.onlineUsers||0}</b><span>usuarios online</span></div><div><b>${sys.sockets||0}</b><span>sockets</span></div><div><b>${sys.rssMb||0} MB</b><span>memoria RSS</span></div><div><b>${sys.heapUsedMb||0} MB</b><span>heap usado</span></div><div><b>${bytesLegibles(sys.dbBytes)}</b><span>SQLite</span></div><div><b>${sys.uploadFiles||0}</b><span>archivos · ${bytesLegibles(sys.uploadBytes)}</span></div></div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Errores recientes del cliente</strong><small>Solo mensaje técnico, pantalla y posición. No se guardan chats ni coordenadas.</small></div></div><div class="error-list">${errors.length?errors.map(e=>`<article><div><strong>${escapeHtml(e.message||'Error')}</strong><small>${escapeHtml(adminFecha(e.created_at))}</small></div><p>${escapeHtml(e.name||e.email||'Usuario')} · ${escapeHtml(e.page||'/')} ${e.source?`· ${escapeHtml(e.source)}:${Number(e.line)||0}`:''}</p></article>`).join(''):'<div class="empty-state compact"><span>✓</span><strong>Sin errores registrados</strong></div>'}</div></section>`;
     }
     const feedbackKindLabels={bug:'Error',idea:'Idea',ux:'Experiencia',other:'Otro'};
@@ -2389,7 +2346,7 @@
         actions.classList.add('is-disabled');
         const filtered = datingProfiles.some(p => !datingPassed.has(p.id) && !perfilEsMatch(p.id));
         empty.querySelector('strong').textContent = filtered ? 'No hay perfiles con estos filtros' : 'No hay más perfiles ahora';
-        empty.querySelector('small').textContent = filtered ? 'Prueba ampliando edad, distancia, ciudad o intereses.' : 'Cuando alguien entre, aparecerá aquí automáticamente. Abre otra pestaña para probar el match.';
+        empty.querySelector('small').textContent = filtered ? 'Prueba ampliando edad, distancia, ciudad o intereses.' : 'Cuando haya nuevos perfiles disponibles, aparecerán aquí automáticamente.';
         return;
       }
       empty.classList.add('hidden');
@@ -3524,7 +3481,8 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
     $('deckAdult').title = 'Solo mayores de 18 años';
     if (mazoInvitacion) $('mazoSeleccionadoLabel').textContent = `Mazo: ${nombreMazo(mazoInvitacion)}`;
     if (verificationResult === 'ok') { history.replaceState({},document.title,location.pathname); setTimeout(()=>mostrarToast('Correo verificado correctamente. Ya puedes entrar.','info'),150); }
-    if (verificationResult === 'invalid') { history.replaceState({},document.title,location.pathname); setTimeout(()=>mostrarToast('El enlace de verificación no es válido o ha caducado.','warn'),150); } { history.replaceState({},document.title,location.pathname); setTimeout(()=>mostrarToast('Cambios de suscripción sincronizados.','info'),220); }
+    if (verificationResult === 'invalid') { history.replaceState({},document.title,location.pathname); setTimeout(()=>mostrarToast('El enlace de verificación no es válido o ha caducado.','warn'),150); }
+    if (billingResult) { history.replaceState({},document.title,location.pathname); setTimeout(()=>mostrarToast('Estado de suscripción actualizado.','info'),220); }
     if (resetToken) { showScreen('pantallaAuth'); setTimeout(abrirResetPassword,100); } else bootstrapAuth();
   </script>
 </body>
