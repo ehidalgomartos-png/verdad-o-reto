@@ -1,79 +1,22 @@
-# V/R Match — Landing viral MVP
+# V/R Match — Landing FIXED
 
-Prototipo estático para validar la idea de lanzamiento por ciudades.
+Esta versión corrige el problema de carga visto en la primera entrega.
 
-## Incluye
+## Importante
 
-- Selector de ciudad.
-- Contador de personas y progreso de desbloqueo.
-- Mosaico "V/R People".
-- Perfiles de DEMOSTRACIÓN (no son usuarios reales).
-- Lista de espera.
-- Consentimiento separado para aparecer públicamente.
-- Código de referido.
-- Botón de compartir / copiar.
-- Diseño responsive.
-- Datos guardados localmente en `localStorage` únicamente para la demo.
+`index.html` es ahora AUTOCONTENIDO:
+- CSS dentro del propio archivo.
+- JavaScript dentro del propio archivo.
+- No necesita `styles.css` ni `app.js` para mostrar correctamente la landing.
+- Los estilos están prefijados con `vr-` para reducir conflictos con el CSS existente de V/R Match.
+- Tiene contenido visible de respaldo aunque fallen funciones opcionales del navegador.
 
-## Cómo probarlo
+## Prueba rápida
 
-1. Abre `index.html` en el navegador.
-2. Cambia de ciudad.
-3. Completa el formulario.
-4. Se genera un código de invitación.
+Abre directamente `index.html` en Chrome.
 
-Para evitar restricciones del navegador con `navigator.share` o portapapeles, puedes servir la carpeta con:
+## Integración
 
-```bash
-npx serve .
-```
+Los archivos `schema.sql`, `waitlist-router.example.js` e `INTEGRACION.md` siguen sirviendo como base para conectar la landing con Node.js + Express + SQLite.
 
-o cualquier servidor local.
-
-## Para conectarlo a V/R Match
-
-El prototipo NO escribe todavía en SQLite ni usa el backend real. El siguiente paso recomendado es crear:
-
-- `POST /api/waitlist`
-- `GET /api/cities`
-- `GET /api/cities/:slug/people`
-- `POST /api/referrals/visit`
-- `GET /api/referrals/:code`
-
-### Tabla sugerida: waitlist_users
-
-- id
-- alias
-- age
-- email
-- city
-- public_profile (boolean)
-- referral_code
-- referred_by
-- created_at
-- verified_at
-
-### Tabla sugerida: city_launches
-
-- id
-- city
-- target_users
-- current_users
-- is_unlocked
-- unlocked_at
-
-## Privacidad
-
-Para la página pública:
-- alias o nombre de pila;
-- edad;
-- ciudad (nunca ubicación precisa);
-- intereses;
-- foto aprobada por el usuario;
-- consentimiento explícito y revocable.
-
-No publicar apellidos, email, teléfono, distancia exacta ni ubicación exacta.
-
-## Nota
-
-Los números y perfiles incluidos en esta demo son ficticios y sirven únicamente para visualizar la experiencia.
+Los perfiles y contadores actuales son únicamente datos de demostración y deben reemplazarse por datos reales antes de publicar.
