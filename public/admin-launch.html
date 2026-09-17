@@ -44,7 +44,7 @@
 <section class="panel">
 <div class="toolbar"><strong id="selectedTitle">Selecciona una ciudad</strong><input id="search" placeholder="Buscar alias, email o código"><button id="searchBtn" class="btn alt">Buscar</button><button id="goalBtn" class="btn alt">Cambiar objetivo</button><button id="unlockBtn" class="btn">Desbloquear ciudad</button><button id="exportBtn" class="btn alt">Exportar CSV</button><button id="mailBtn" class="btn alt">Enviar emails pendientes</button><button id="resetBtn" class="btn danger">♻ Reiniciar ciudad de prueba</button></div>
 <div id="notice"></div>
-<div class="tablewrap"><table><thead><tr><th>Alias</th><th>Edad</th><th>Email</th><th>Estado</th><th>Founder</th><th>Código</th><th>Invitados</th><th>Visitas</th><th>Registro</th></tr></thead><tbody id="users"><tr><td colspan="9" class="empty">Selecciona una ciudad.</td></tr></tbody></table></div>
+<div class="tablewrap"><table><thead><tr><th>Alias</th><th>Edad</th><th>Email</th><th>Estado</th><th>Founder</th><th>Código</th><th>Invitados</th><th>Visitas</th><th>Registro</th><th>Acceso</th></tr></thead><tbody id="users"><tr><td colspan="10" class="empty">Selecciona una ciudad.</td></tr></tbody></table></div>
 </section>
 </main>
 </div>
@@ -72,7 +72,9 @@ async function load(){
 }
 async function loadUsers(){
   const q=encodeURIComponent($('#search').value.trim()),d=await api(`/api/admin/launch/cities/${encodeURIComponent(selected)}/users?limit=300&q=${q}`);
-  $('#users').innerHTML=d.users?.length?d.users.map(u=>`<tr><td>${esc(u.alias)}</td><td>${Number(u.age)||''}</td><td>${esc(u.email)}</td><td>${esc(u.status)}</td><td>${u.founderQualifiedAt?'<span class="founder-badge">★ Founder</span>':'—'}</td><td>${esc(u.referralCode)}</td><td>${fmt(u.successfulInvites)}</td><td>${fmt(u.referralVisits)}</td><td>${u.createdAt?new Date(Number(u.createdAt)).toLocaleString('es-ES'):'—'}</td></tr>`).join(''):`<tr><td colspan="9" class="empty">No hay usuarios.</td></tr>`;
+  const activeCity=(cities.find(x=>x.slug===selected)?.status==='ACTIVE');
+  $('#users').innerHTML=d.users?.length?d.users.map(u=>`<tr><td>${esc(u.alias)}</td><td>${Number(u.age)||''}</td><td>${esc(u.email)}</td><td>${esc(u.status)}</td><td>${u.founderQualifiedAt?'<span class="founder-badge">★ Founder</span>':'—'}</td><td>${esc(u.referralCode)}</td><td>${fmt(u.successfulInvites)}</td><td>${fmt(u.referralVisits)}</td><td>${u.createdAt?new Date(Number(u.createdAt)).toLocaleString('es-ES'):'—'}</td><td>${activeCity&&u.status!=='ACTIVATED'&&u.status!=='BLOCKED'?`<button class="btn alt resend-access" data-id="${esc(u.id)}" style="padding:8px 10px;font-size:10px">Reenviar</button>`:'—'}</td></tr>`).join(''):`<tr><td colspan="10" class="empty">No hay usuarios.</td></tr>`;
+  document.querySelectorAll('.resend-access').forEach(btn=>btn.onclick=async()=>{btn.disabled=true;try{const d=await api(`/api/admin/launch/waitlist/${encodeURIComponent(btn.dataset.id)}/resend`,{method:'POST'});msg(`Acceso reenviado. Emails enviados ahora: ${d.mail?.sent||0}.`);await loadUsers()}catch(e){msg(e.message,true)}finally{btn.disabled=false}});
 }
 
 async function loadAnalytics(){
