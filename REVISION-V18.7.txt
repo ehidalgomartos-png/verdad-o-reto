@@ -1,0 +1,27 @@
+V/R MATCH 18.7.0 — REVISIÓN
+================================
+
+BLOQUE: crecimiento medible antes del lanzamiento real.
+
+NUEVO:
+- Analítica específica de waitlist.
+- Periodos 7/30/90 días y todo el histórico.
+- Rendimiento por ciudad.
+- Activación email → cuenta.
+- Tiempo medio de activación.
+- Eventos de referidos.
+- Top referidores.
+- Progreso personal del referido en /espera.
+- Hito V/R Founder configurable.
+- founder_qualified_at persistente.
+- CSV de waitlist incluye founder_qualified_at.
+- Privacidad actualizada.
+
+NO CAMBIA:
+- Descubrir.
+- Likes.
+- Matches.
+- Chat.
+- Juego.
+- Perfiles.
+- Admin de moderación.

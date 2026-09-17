@@ -1,0 +1,156 @@
+V/R MATCH 18.7.0 — ANALÍTICA DE LANZAMIENTO + REFERIDOS
+=========================================================
+
+REEMPLAZA EN LA RAÍZ:
+
+- server.js
+- package.json
+- sw.js
+- privacy.html
+
+REEMPLAZA EN /public:
+
+- public/admin-launch.html
+- public/waitlist.html
+
+
+QUÉ AÑADE V18.7
+---------------
+
+1. ANALÍTICA DE LANZAMIENTO EN /admin/launch
+
+Nuevo bloque con periodos:
+
+- 7 días
+- 30 días
+- 90 días
+- Todo
+
+Métricas:
+
+- altas de lista;
+- altas atribuidas a referidos;
+- eventos de visita a enlaces;
+- relación visita → alta;
+- accesos enviados al abrir una ciudad;
+- activaciones;
+- tasa email/acceso → cuenta activada;
+- tiempo medio hasta activar;
+- usuarios que alcanzan V/R Founder.
+
+También muestra:
+
+- actividad diaria;
+- rendimiento por ciudad;
+- referidores con más impacto.
+
+
+2. REFERIDOS VISIBLES PARA EL USUARIO
+
+Después de apuntarse, /espera muestra:
+
+- cuántas personas se han apuntado con su enlace;
+- cuántas visitas ha recibido;
+- progreso hacia V/R Founder.
+
+El navegador conserva solamente su propio código de referido en localStorage
+para poder mostrar ese contador al volver a /espera.
+
+No se muestran nombres ni correos de las personas invitadas.
+
+
+3. V/R FOUNDER
+
+Por defecto, el hito se alcanza con:
+
+3 altas confirmadas mediante el enlace personal.
+
+El dato queda guardado en la lista de espera como `founder_qualified_at`
+y continúa vinculado a la cuenta real cuando la persona se activa.
+
+Puedes cambiar el umbral desde Render con:
+
+VR_FOUNDER_REFERRALS=3
+
+Ejemplo:
+
+VR_FOUNDER_REFERRALS=5
+
+No necesitas crear esta variable si quieres mantener 3.
+
+
+4. PRIVACIDAD
+
+privacy.html explica que se contabilizan:
+
+- visitas agregadas a enlaces;
+- altas atribuidas;
+- hitos de referidos.
+
+No se publican correos, teléfonos, coordenadas ni identidad de los invitados.
+
+
+BASE DE DATOS
+-------------
+
+La actualización añade automáticamente:
+
+founder_qualified_at
+
+a `launch_waitlist_users`.
+
+No ejecutes SQL manualmente.
+
+
+IMPORTANTE SOBRE “VISITAS”
+--------------------------
+
+Actualmente “visitas” significa eventos de apertura del enlace, no visitantes
+únicos. Una misma persona puede abrir el enlace más de una vez.
+
+Por eso el indicador visita → alta se muestra como una referencia de campaña,
+no como una medición de usuarios únicos.
+
+
+DESPUÉS DEL DEPLOY
+------------------
+
+1. Abre /healthz
+
+Debe mostrar:
+
+version: 18.7.0
+
+2. Entra en /admin/launch.
+
+3. Comprueba el nuevo bloque “Analítica de lanzamiento”.
+
+4. Haz una prueba de referido:
+   - registra A;
+   - copia el enlace de A;
+   - abre el enlace en incógnito;
+   - registra B;
+   - vuelve al navegador de A o recarga /espera.
+
+A debe mostrar:
+
+1 persona se ha apuntado con tu enlace.
+
+5. En Admin debe aparecer:
+   - A con 1 invitado;
+   - actividad de referido;
+   - el dato en analítica.
+
+Mantén VR_CITY_LAUNCH_ENABLED=false hasta terminar las pruebas.
+
+
+VALIDACIONES REALIZADAS
+-----------------------
+
+- node --check server.js: OK
+- node --check sw.js: OK
+- JavaScript inline admin-launch.html: OK
+- JavaScript inline waitlist.html: OK
+
+El arranque completo se verifica finalmente en Render, donde están
+better-sqlite3, SMTP y las variables reales del servicio.

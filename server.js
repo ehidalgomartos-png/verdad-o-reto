@@ -24,7 +24,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.6.2';
+const APP_VERSION = '18.7.0';
 const LEGAL_VERSION = '2026-09-17';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -47,6 +47,7 @@ const ADMIN_EMAILS = new Set(String(process.env.VR_ADMIN_EMAILS || '').split(','
 const APP_BASE_URL = String(process.env.VR_APP_BASE_URL || '').replace(/\/$/, '');
 const LAUNCH_MODE = String(process.env.VR_LAUNCH_MODE || 'development').toLowerCase() === 'production' ? 'production' : 'development';
 const CITY_LAUNCH_ENABLED = String(process.env.VR_CITY_LAUNCH_ENABLED || 'false').toLowerCase() === 'true';
+const FOUNDER_REFERRALS_TARGET = Math.max(1,Math.min(50,Number(process.env.VR_FOUNDER_REFERRALS || 3) || 3));
 const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || '').trim();
 const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || '').trim();
 const STRIPE_PRICE_PLUS_MONTHLY = String(process.env.STRIPE_PRICE_PLUS_MONTHLY || '').trim();
@@ -384,6 +385,7 @@ CREATE TABLE IF NOT EXISTS launch_waitlist_users (
   app_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   activation_sent_at INTEGER,
   activated_at INTEGER,
+  founder_qualified_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -433,6 +435,7 @@ const launchSeedCities = [
 const launchCityColsBeforeDefaultGoalMigration = db.prepare('PRAGMA table_info(launch_cities)').all();
 const launchDefaultGoalNeedsMigration = !launchCityColsBeforeDefaultGoalMigration.some(c => c.name === 'default_target_users');
 ensureColumn('launch_cities', 'default_target_users', 'INTEGER NOT NULL DEFAULT 500');
+ensureColumn('launch_waitlist_users', 'founder_qualified_at', 'INTEGER');
 
 for (const [slug,name,target] of launchSeedCities) {
   db.prepare(`INSERT OR IGNORE INTO launch_cities(slug,name,target_users,default_target_users,status,created_at,updated_at)
@@ -445,6 +448,14 @@ if (launchDefaultGoalNeedsMigration) {
     db.prepare('UPDATE launch_cities SET default_target_users=? WHERE slug=?').run(target,slug);
   }
 }
+
+// V18.7: conserva el hito de referidos para quienes ya habían alcanzado
+// el umbral antes de esta versión.
+db.prepare(`UPDATE launch_waitlist_users
+  SET founder_qualified_at=COALESCE(founder_qualified_at,updated_at)
+  WHERE (SELECT COUNT(*) FROM launch_waitlist_users x
+         WHERE x.referred_by=launch_waitlist_users.referral_code) >= ?`)
+  .run(FOUNDER_REFERRALS_TARGET);
 
 // Compatibilidad de datos: migra comentarios de instalaciones anteriores sin conservar el nombre histórico en la interfaz ni en el esquema nuevo.
 const legacyFeedbackTable = ['be','ta_feedback'].join('');
@@ -915,6 +926,42 @@ function refreshLaunchCityStatus(slug) {
     db.prepare("UPDATE launch_cities SET status='WAITING',updated_at=? WHERE slug=?").run(now(),slug);
   }
   return launchCityStats(slug);
+}
+
+function launchReferralStats(code) {
+  const referralCode=cleanShortText(code,80);
+  if (!referralCode) return null;
+  const owner=db.prepare(`SELECT id,city_slug,founder_qualified_at FROM launch_waitlist_users
+    WHERE referral_code=? AND status!='BLOCKED'`).get(referralCode);
+  if (!owner) return null;
+  const successfulInvites=Number(db.prepare('SELECT COUNT(*) n FROM launch_waitlist_users WHERE referred_by=? AND status!=?')
+    .get(referralCode,'BLOCKED')?.n||0);
+  const visits=Number(db.prepare("SELECT COUNT(*) n FROM launch_referral_events WHERE referral_code=? AND event_type='VISIT'")
+    .get(referralCode)?.n||0);
+  const signupEvents=Number(db.prepare("SELECT COUNT(*) n FROM launch_referral_events WHERE referral_code=? AND event_type='SIGNUP'")
+    .get(referralCode)?.n||0);
+  const founderQualified=Boolean(owner.founder_qualified_at || successfulInvites>=FOUNDER_REFERRALS_TARGET);
+  return {
+    code:referralCode,
+    successfulInvites,
+    visits,
+    signupEvents,
+    founderTarget:FOUNDER_REFERRALS_TARGET,
+    founderQualified,
+    remaining:Math.max(0,FOUNDER_REFERRALS_TARGET-successfulInvites),
+    city:launchCityStats(owner.city_slug)
+  };
+}
+function refreshLaunchFounderQualification(referralCode, ts=now()) {
+  const stats=launchReferralStats(referralCode);
+  if (!stats) return null;
+  if (stats.successfulInvites>=FOUNDER_REFERRALS_TARGET) {
+    db.prepare(`UPDATE launch_waitlist_users
+      SET founder_qualified_at=COALESCE(founder_qualified_at,?),updated_at=?
+      WHERE referral_code=?`).run(ts,ts,stats.code);
+    return {...stats,founderQualified:true,remaining:0};
+  }
+  return stats;
 }
 function issueLaunchActivation(waitlistUserId, days = 7) {
   const raw = crypto.randomBytes(32).toString('base64url');
@@ -1949,6 +1996,13 @@ app.post('/api/launch/referrals/visit', rateLimit({limit:120,windowMs:60*60*1000
   res.json({ok:true});
 });
 
+app.get('/api/launch/referrals/:code', rateLimit({limit:120,windowMs:60*60*1000,key:req=>req.ip}), (req,res) => {
+  const stats=launchReferralStats(req.params.code);
+  if (!stats) return res.status(404).json({ok:false,error:'Código de invitación no encontrado.'});
+  // Solo métricas agregadas: nunca devuelve email, identidad del propietario ni datos de invitados.
+  res.json({ok:true,referral:stats});
+});
+
 app.post('/api/launch/waitlist', rateLimit({limit:12,windowMs:60*60*1000,key:req=>req.ip}), async (req,res) => {
   try {
     const alias=cleanName(req.body?.alias);
@@ -1972,7 +2026,8 @@ app.post('/api/launch/waitlist', rateLimit({limit:12,windowMs:60*60*1000,key:req
     if (existingWait) {
       const stats=launchCityStats(existingWait.city_slug);
       return res.json({ok:true,alreadyRegistered:true,referralCode:existingWait.referral_code,
-        referralUrl:`${baseUrl(req)}/espera?ref=${encodeURIComponent(existingWait.referral_code)}`,city:stats,status:existingWait.status});
+        referralUrl:`${baseUrl(req)}/espera?ref=${encodeURIComponent(existingWait.referral_code)}`,
+        referral:launchReferralStats(existingWait.referral_code),city:stats,status:existingWait.status});
     }
 
     const existingUser=db.prepare('SELECT id,status FROM users WHERE email=?').get(email);
@@ -1993,13 +2048,14 @@ app.post('/api/launch/waitlist', rateLimit({limit:12,windowMs:60*60*1000,key:req
     if (referredBy && db.prepare('SELECT 1 FROM launch_waitlist_users WHERE referral_code=?').get(referredBy)) {
       db.prepare('INSERT INTO launch_referral_events(id,referral_code,event_type,created_at) VALUES(?,?,?,?)')
         .run(safeId('lref'),referredBy,'SIGNUP',ts);
+      refreshLaunchFounderQualification(referredBy,ts);
     }
 
     const referralUrl=`${baseUrl(req)}/espera?ref=${encodeURIComponent(referralCode)}`;
     queueLaunchEmail(id,email,`Ya estás esperando V/R Match en ${city.name} 🔥`,'WAITLIST_WELCOME',{alias,city:city.name,referralUrl});
     refreshLaunchCityStatus(citySlug);
     processLaunchMailQueue(5).catch(e=>console.warn('Launch mail:',e.message));
-    res.status(201).json({ok:true,referralCode,referralUrl,city:launchCityStats(citySlug),immediateActivation:false});
+    res.status(201).json({ok:true,referralCode,referralUrl,referral:launchReferralStats(referralCode),city:launchCityStats(citySlug),immediateActivation:false});
   } catch(e) {
     console.error('Waitlist:',e);
     res.status(500).json({ok:false,error:'No se pudo completar el registro en la lista.'});
@@ -2077,8 +2133,10 @@ app.post('/api/launch/activate', rateLimit({limit:12,windowMs:60*60*1000,key:req
       throw e;
     }
     const fresh=db.prepare('SELECT id,email,email_verified,onboarding_completed FROM users WHERE id=?').get(user.id);
+    const launchRecord=db.prepare('SELECT founder_qualified_at FROM launch_waitlist_users WHERE id=?').get(row.waitlistId);
     res.json({ok:true,token,created,user:{id:fresh.id,email:fresh.email,emailVerified:Boolean(fresh.email_verified),admin:isAdmin(fresh)},
-      profile:getProfile(fresh.id),plus:getPlusState(fresh.id),onboardingCompleted:Boolean(fresh.onboarding_completed),nextUrl:'/?launch=activated'});
+      profile:getProfile(fresh.id),plus:getPlusState(fresh.id),onboardingCompleted:Boolean(fresh.onboarding_completed),
+      founderQualified:Boolean(launchRecord?.founder_qualified_at),nextUrl:'/?launch=activated'});
   } catch(e) {
     console.error('Launch activation:',e);
     res.status(500).json({ok:false,error:'No se pudo activar el acceso.'});
@@ -2091,14 +2149,130 @@ app.get('/api/admin/launch/summary', requireAuth, requireAdmin, (req,res) => {
   const s=db.prepare(`SELECT COUNT(*) total,
     SUM(CASE WHEN date(created_at/1000,'unixepoch')=date('now') THEN 1 ELSE 0 END) today,
     SUM(CASE WHEN referred_by IS NOT NULL AND referred_by!='' THEN 1 ELSE 0 END) referred,
-    SUM(CASE WHEN status='ACTIVATED' THEN 1 ELSE 0 END) activated
+    SUM(CASE WHEN status='ACTIVATED' THEN 1 ELSE 0 END) activated,
+    SUM(CASE WHEN activation_sent_at IS NOT NULL THEN 1 ELSE 0 END) invited,
+    SUM(CASE WHEN founder_qualified_at IS NOT NULL THEN 1 ELSE 0 END) founders
     FROM launch_waitlist_users WHERE status!='BLOCKED'`).get();
   const m=db.prepare(`SELECT
     SUM(CASE WHEN status='PENDING' THEN 1 ELSE 0 END) pending,
     SUM(CASE WHEN status='ERROR' THEN 1 ELSE 0 END) errors
     FROM launch_mail_queue`).get();
-  res.json({ok:true,total:Number(s.total||0),today:Number(s.today||0),referred:Number(s.referred||0),activated:Number(s.activated||0),
-    pendingMail:Number(m.pending||0),mailErrors:Number(m.errors||0),cityLaunchEnabled:CITY_LAUNCH_ENABLED});
+  const visits=Number(db.prepare("SELECT COUNT(*) n FROM launch_referral_events WHERE event_type='VISIT'").get()?.n||0);
+  const referralSignups=Number(db.prepare("SELECT COUNT(*) n FROM launch_referral_events WHERE event_type='SIGNUP'").get()?.n||0);
+  const invited=Number(s.invited||0),activated=Number(s.activated||0);
+  res.json({ok:true,total:Number(s.total||0),today:Number(s.today||0),referred:Number(s.referred||0),activated,
+    invited,activationRate:invited?Math.round(activated*100/invited):0,founders:Number(s.founders||0),
+    referralVisits:visits,referralSignups,
+    pendingMail:Number(m.pending||0),mailErrors:Number(m.errors||0),cityLaunchEnabled:CITY_LAUNCH_ENABLED,
+    founderTarget:FOUNDER_REFERRALS_TARGET});
+});
+
+app.get('/api/admin/launch/analytics', requireAuth, requireAdmin, (req,res) => {
+  const requested=String(req.query.days||'30');
+  const days=['7','30','90','all'].includes(requested)?requested:'30';
+  const since=days==='all'?0:now()-Number(days)*86400000;
+  const where=since?' AND w.created_at>=?':'';
+  const params=since?[since]:[];
+
+  const wait=db.prepare(`SELECT
+      COUNT(*) total,
+      SUM(CASE WHEN w.referred_by IS NOT NULL AND w.referred_by!='' THEN 1 ELSE 0 END) referred,
+      SUM(CASE WHEN w.activation_sent_at IS NOT NULL THEN 1 ELSE 0 END) invited,
+      SUM(CASE WHEN w.status='ACTIVATED' THEN 1 ELSE 0 END) activated,
+      SUM(CASE WHEN w.founder_qualified_at IS NOT NULL THEN 1 ELSE 0 END) founders,
+      AVG(CASE WHEN w.activated_at IS NOT NULL AND w.activation_sent_at IS NOT NULL
+          THEN (w.activated_at-w.activation_sent_at)/3600000.0 END) avgActivationHours
+    FROM launch_waitlist_users w
+    WHERE w.status!='BLOCKED'${where}`).get(...params);
+
+  const eventWhere=since?' AND created_at>=?':'';
+  const visits=Number(db.prepare(`SELECT COUNT(*) n FROM launch_referral_events WHERE event_type='VISIT'${eventWhere}`).get(...params)?.n||0);
+  const referralSignups=Number(db.prepare(`SELECT COUNT(*) n FROM launch_referral_events WHERE event_type='SIGNUP'${eventWhere}`).get(...params)?.n||0);
+
+  const cityParams=since?[since]:[];
+  const cities=db.prepare(`SELECT
+      c.slug,c.name,c.status,c.target_users goal,
+      COUNT(w.id) signups,
+      SUM(CASE WHEN w.referred_by IS NOT NULL AND w.referred_by!='' THEN 1 ELSE 0 END) referred,
+      SUM(CASE WHEN w.activation_sent_at IS NOT NULL THEN 1 ELSE 0 END) invited,
+      SUM(CASE WHEN w.status='ACTIVATED' THEN 1 ELSE 0 END) activated,
+      SUM(CASE WHEN w.founder_qualified_at IS NOT NULL THEN 1 ELSE 0 END) founders
+    FROM launch_cities c
+    LEFT JOIN launch_waitlist_users w ON w.city_slug=c.slug AND w.status!='BLOCKED'${since?' AND w.created_at>=?':''}
+    GROUP BY c.slug
+    ORDER BY signups DESC,c.name ASC`).all(...cityParams).map(row=>{
+      const signups=Number(row.signups||0),invited=Number(row.invited||0),activated=Number(row.activated||0);
+      return {...row,signups,referred:Number(row.referred||0),invited,activated,founders:Number(row.founders||0),
+        activationRate:invited?Math.round(activated*100/invited):0};
+    });
+
+  // Visitas/altas por ciudad se atribuyen a la ciudad del propietario del código.
+  const eventByCity=db.prepare(`SELECT w.city_slug slug,
+      SUM(CASE WHEN e.event_type='VISIT' THEN 1 ELSE 0 END) visits,
+      SUM(CASE WHEN e.event_type='SIGNUP' THEN 1 ELSE 0 END) referralSignups
+    FROM launch_referral_events e
+    JOIN launch_waitlist_users w ON w.referral_code=e.referral_code
+    WHERE 1=1${since?' AND e.created_at>=?':''}
+    GROUP BY w.city_slug`).all(...params);
+  const cityEventMap=new Map(eventByCity.map(x=>[x.slug,x]));
+  for(const c of cities){
+    const ev=cityEventMap.get(c.slug)||{};
+    c.referralVisits=Number(ev.visits||0);
+    c.referralSignups=Number(ev.referralSignups||0);
+    c.referralEventRate=c.referralVisits?Math.round(c.referralSignups*100/c.referralVisits):0;
+  }
+
+  const topReferrers=db.prepare(`SELECT
+      w.alias,w.city_slug city,w.referral_code referralCode,w.founder_qualified_at founderQualifiedAt,
+      (SELECT COUNT(*) FROM launch_waitlist_users x
+        WHERE x.referred_by=w.referral_code AND x.status!='BLOCKED'${since?' AND x.created_at>=?':''}) successfulInvites,
+      (SELECT COUNT(*) FROM launch_referral_events e
+        WHERE e.referral_code=w.referral_code AND e.event_type='VISIT'${since?' AND e.created_at>=?':''}) visits
+    FROM launch_waitlist_users w
+    WHERE w.status!='BLOCKED'
+    ORDER BY successfulInvites DESC,visits DESC,w.created_at ASC
+    LIMIT 20`).all(...(since?[since,since]:[])).map(r=>({
+      ...r,
+      successfulInvites:Number(r.successfulInvites||0),
+      visits:Number(r.visits||0),
+      founderQualified:Boolean(r.founderQualifiedAt || Number(r.successfulInvites||0)>=FOUNDER_REFERRALS_TARGET)
+    }));
+
+  const daily=db.prepare(`SELECT day,
+      SUM(waitlist) waitlist,
+      SUM(referred) referred,
+      SUM(activated) activated,
+      SUM(visits) visits
+    FROM (
+      SELECT date(created_at/1000,'unixepoch') day,COUNT(*) waitlist,
+        SUM(CASE WHEN referred_by IS NOT NULL AND referred_by!='' THEN 1 ELSE 0 END) referred,
+        SUM(CASE WHEN status='ACTIVATED' THEN 1 ELSE 0 END) activated,0 visits
+      FROM launch_waitlist_users
+      WHERE status!='BLOCKED'${since?' AND created_at>=?':''}
+      GROUP BY day
+      UNION ALL
+      SELECT date(created_at/1000,'unixepoch') day,0 waitlist,0 referred,0 activated,
+        SUM(CASE WHEN event_type='VISIT' THEN 1 ELSE 0 END) visits
+      FROM launch_referral_events
+      WHERE 1=1${since?' AND created_at>=?':''}
+      GROUP BY day
+    )
+    GROUP BY day ORDER BY day ASC`).all(...(since?[since,since]:[])).map(d=>({
+      day:d.day,waitlist:Number(d.waitlist||0),referred:Number(d.referred||0),
+      activated:Number(d.activated||0),visits:Number(d.visits||0)
+    }));
+
+  const total=Number(wait.total||0),invited=Number(wait.invited||0),activated=Number(wait.activated||0);
+  res.json({ok:true,days,founderTarget:FOUNDER_REFERRALS_TARGET,
+    summary:{
+      total,referred:Number(wait.referred||0),invited,activated,
+      activationRate:invited?Math.round(activated*100/invited):0,
+      founders:Number(wait.founders||0),
+      avgActivationHours:wait.avgActivationHours==null?null:Math.round(Number(wait.avgActivationHours)*10)/10,
+      referralVisits:visits,referralSignups,
+      referralEventRate:visits?Math.round(referralSignups*100/visits):0
+    },
+    cities,topReferrers,daily});
 });
 
 app.get('/api/admin/launch/cities', requireAuth, requireAdmin, (req,res) => res.json({ok:true,cities:launchCitiesStats()}));
@@ -2129,7 +2303,8 @@ app.get('/api/admin/launch/cities/:slug/users', requireAuth, requireAdmin, (req,
   const like=`%${q}%`;
   const rows=db.prepare(`
     SELECT w.id,w.alias,w.age,w.email,w.city_slug city,w.public_profile publicProfile,w.referral_code referralCode,w.referred_by referredBy,
-      w.status,w.app_user_id appUserId,w.activation_sent_at activationSentAt,w.activated_at activatedAt,w.created_at createdAt,
+      w.status,w.app_user_id appUserId,w.activation_sent_at activationSentAt,w.activated_at activatedAt,
+      w.founder_qualified_at founderQualifiedAt,w.created_at createdAt,
       (SELECT COUNT(*) FROM launch_waitlist_users x WHERE x.referred_by=w.referral_code) successfulInvites,
       (SELECT COUNT(*) FROM launch_referral_events e WHERE e.referral_code=w.referral_code AND e.event_type='VISIT') referralVisits
     FROM launch_waitlist_users w
@@ -2225,9 +2400,9 @@ app.post('/api/admin/launch/mail/send', requireAuth, requireAdmin, rateLimit({li
 
 app.get('/api/admin/launch/cities/:slug/export.csv', requireAuth, requireAdmin, (req,res) => {
   const slug=normalizeLaunchCity(req.params.slug);
-  const rows=db.prepare(`SELECT id,alias,age,email,city_slug,public_profile,referral_code,referred_by,status,app_user_id,activation_sent_at,activated_at,created_at
+  const rows=db.prepare(`SELECT id,alias,age,email,city_slug,public_profile,referral_code,referred_by,status,app_user_id,activation_sent_at,activated_at,founder_qualified_at,created_at
     FROM launch_waitlist_users WHERE city_slug=? ORDER BY created_at ASC`).all(slug);
-  const headers=['id','alias','age','email','city_slug','public_profile','referral_code','referred_by','status','app_user_id','activation_sent_at','activated_at','created_at'];
+  const headers=['id','alias','age','email','city_slug','public_profile','referral_code','referred_by','status','app_user_id','activation_sent_at','activated_at','founder_qualified_at','created_at'];
   const esc=v=>`"${String(v??'').replaceAll('"','""')}"`;
   const csv=[headers.join(','),...rows.map(r=>headers.map(h=>esc(r[h])).join(','))].join('\n');
   res.type('text/csv; charset=utf-8');
@@ -3206,5 +3381,5 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.6.2 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.7 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
   console.log('Resiliencia: mantenimiento + backup manual protegidos');console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad: sesiones + bloqueados + exportación de datos');});
