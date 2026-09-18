@@ -85,3 +85,42 @@ CREATE TABLE IF NOT EXISTS community_city_memberships (
 );
 CREATE INDEX IF NOT EXISTS idx_community_membership_city
   ON community_city_memberships(city_slug, joined_at DESC);
+
+
+-- V18.13.0 — analítica propia de crecimiento
+CREATE TABLE IF NOT EXISTS growth_events (
+  id TEXT PRIMARY KEY,
+  event_name TEXT NOT NULL,
+  session_id TEXT NOT NULL DEFAULT '',
+  user_id TEXT,
+  source TEXT NOT NULL DEFAULT 'direct',
+  medium TEXT NOT NULL DEFAULT 'none',
+  campaign TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL DEFAULT '',
+  term TEXT NOT NULL DEFAULT '',
+  referrer TEXT NOT NULL DEFAULT '',
+  landing_path TEXT NOT NULL DEFAULT '',
+  page TEXT NOT NULL DEFAULT '',
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_growth_events_name_created ON growth_events(event_name,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_growth_events_session_created ON growth_events(session_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_growth_events_user_created ON growth_events(user_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_growth_events_source_created ON growth_events(source,created_at DESC);
+CREATE TABLE IF NOT EXISTS growth_acquisition (
+  user_id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT 'direct',
+  medium TEXT NOT NULL DEFAULT 'none',
+  campaign TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL DEFAULT '',
+  term TEXT NOT NULL DEFAULT '',
+  referrer TEXT NOT NULL DEFAULT '',
+  landing_path TEXT NOT NULL DEFAULT '',
+  attributed_at INTEGER NOT NULL,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_growth_acquisition_source ON growth_acquisition(source,attributed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_growth_acquisition_campaign ON growth_acquisition(campaign,attributed_at DESC);

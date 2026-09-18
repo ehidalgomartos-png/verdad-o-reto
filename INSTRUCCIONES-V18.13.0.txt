@@ -1,0 +1,13 @@
+V/R MATCH 18.13.0 — INSTALACIÓN
+
+1. Haz copia de seguridad de la base de datos y uploads.
+2. Sustituye el código por esta versión sin borrar data/ ni uploads/.
+3. Reinicia el servicio. Las nuevas tablas growth_events y growth_acquisition se crean automáticamente.
+4. Comprueba https://vrmatch.es/healthz → version 18.13.0.
+5. Entra como administrador > Métricas.
+6. Prueba una URL UTM en incógnito, crea una cuenta y confirma que aparece en el canal/campaña correspondiente.
+
+URL DE PRUEBA
+https://vrmatch.es/?register=1&city=Valencia&utm_source=tiktok&utm_medium=organic_social&utm_campaign=PRUEBA&utm_content=REEL-001
+
+No borres data/ ni uploads/.

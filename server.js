@@ -30,7 +30,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.12.0';
+const APP_VERSION = '18.13.0';
 const LEGAL_VERSION = '2026-09-18';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -342,6 +342,40 @@ CREATE TABLE IF NOT EXISTS client_errors (
 );
 CREATE INDEX IF NOT EXISTS idx_client_errors_created ON client_errors(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_client_errors_user ON client_errors(user_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS growth_events (
+  id TEXT PRIMARY KEY,
+  event_name TEXT NOT NULL,
+  session_id TEXT NOT NULL DEFAULT '',
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  source TEXT NOT NULL DEFAULT 'direct',
+  medium TEXT NOT NULL DEFAULT 'none',
+  campaign TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL DEFAULT '',
+  term TEXT NOT NULL DEFAULT '',
+  referrer TEXT NOT NULL DEFAULT '',
+  landing_path TEXT NOT NULL DEFAULT '',
+  page TEXT NOT NULL DEFAULT '',
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_growth_events_name_created ON growth_events(event_name,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_growth_events_session_created ON growth_events(session_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_growth_events_user_created ON growth_events(user_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_growth_events_source_created ON growth_events(source,created_at DESC);
+CREATE TABLE IF NOT EXISTS growth_acquisition (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  session_id TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT 'direct',
+  medium TEXT NOT NULL DEFAULT 'none',
+  campaign TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL DEFAULT '',
+  term TEXT NOT NULL DEFAULT '',
+  referrer TEXT NOT NULL DEFAULT '',
+  landing_path TEXT NOT NULL DEFAULT '',
+  attributed_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_growth_acquisition_source ON growth_acquisition(source,attributed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_growth_acquisition_campaign ON growth_acquisition(campaign,attributed_at DESC);
 CREATE TABLE IF NOT EXISTS game_sessions (
   id TEXT PRIMARY KEY,
   match_id TEXT REFERENCES matches(id) ON DELETE SET NULL,
@@ -1178,6 +1212,77 @@ function refreshLaunchFounderQualification(referralCode, ts=now()) {
 function normalizeMemberReferralCode(value) {
   return cleanShortText(value,40).toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,24);
 }
+const GROWTH_PUBLIC_EVENTS = new Set(['page_view','registration_started','landing_cta']);
+function cleanGrowthValue(value,max=120) {
+  return cleanShortText(value,max).replace(/[\r\n\t]+/g,' ').trim();
+}
+function growthSourceFromReferrer(referrer='') {
+  try {
+    const host=new URL(String(referrer||'')).hostname.toLowerCase().replace(/^www\./,'');
+    if(!host)return {source:'direct',medium:'none'};
+    if(host.includes('google.'))return {source:'google',medium:'organic'};
+    if(host.includes('bing.'))return {source:'bing',medium:'organic'};
+    if(host.includes('tiktok.'))return {source:'tiktok',medium:'referral'};
+    if(host.includes('instagram.'))return {source:'instagram',medium:'referral'};
+    if(host.includes('facebook.')||host==='fb.com')return {source:'facebook',medium:'referral'};
+    if(host.includes('youtube.')||host==='youtu.be')return {source:'youtube',medium:'referral'};
+    if(host.includes('x.com')||host.includes('twitter.'))return {source:'x',medium:'referral'};
+    return {source:host.slice(0,80),medium:'referral'};
+  } catch { return {source:'direct',medium:'none'}; }
+}
+function normalizeGrowthAcquisition(raw={}) {
+  let referrer=cleanGrowthValue(raw?.referrer,240);
+  try { const u=new URL(referrer); referrer=`${u.protocol}//${u.host}`; } catch { referrer=''; }
+  const derived=growthSourceFromReferrer(referrer);
+  let source=cleanGrowthValue(raw?.source,80).toLowerCase();
+  let medium=cleanGrowthValue(raw?.medium,80).toLowerCase();
+  if(!source)source=derived.source;
+  if(!medium)medium=source==='direct'?'none':derived.medium;
+  return {
+    sessionId:cleanGrowthValue(raw?.sessionId,80),
+    source:source||'direct',medium:medium||'none',
+    campaign:cleanGrowthValue(raw?.campaign,120),content:cleanGrowthValue(raw?.content,120),term:cleanGrowthValue(raw?.term,120),
+    referrer,landingPath:cleanGrowthValue(raw?.landingPath,180).split('?')[0]||'/'
+  };
+}
+function safeGrowthMetadata(raw={}) {
+  const out={};
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return out;
+  for(const [k,v] of Object.entries(raw).slice(0,8)){
+    const key=cleanGrowthValue(k,40).replace(/[^a-zA-Z0-9_-]/g,'');
+    if(!key)continue;
+    if(typeof v==='number'&&Number.isFinite(v))out[key]=v;
+    else if(typeof v==='boolean')out[key]=v;
+    else if(typeof v==='string')out[key]=cleanGrowthValue(v,100);
+  }
+  return out;
+}
+function recordGrowthEvent(eventName,{sessionId='',userId=null,acquisition={},page='',metadata={}}={}) {
+  const event=cleanGrowthValue(eventName,50).toLowerCase();
+  if(!event)return null;
+  const a=normalizeGrowthAcquisition({...acquisition,sessionId:sessionId||acquisition?.sessionId});
+  const ts=now(), id=safeId('growth');
+  db.prepare(`INSERT INTO growth_events(id,event_name,session_id,user_id,source,medium,campaign,content,term,referrer,landing_path,page,metadata_json,created_at)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,event,a.sessionId,userId||null,a.source,a.medium,a.campaign,a.content,a.term,a.referrer,a.landingPath,cleanGrowthValue(page,180).split('?')[0],JSON.stringify(safeGrowthMetadata(metadata)),ts);
+  return {id,createdAt:ts};
+}
+function saveGrowthAcquisition(userId,raw={}) {
+  if(!userId)return null;
+  const a=normalizeGrowthAcquisition(raw),ts=now();
+  db.prepare(`INSERT OR IGNORE INTO growth_acquisition(user_id,session_id,source,medium,campaign,content,term,referrer,landing_path,attributed_at)
+    VALUES(?,?,?,?,?,?,?,?,?,?)`).run(userId,a.sessionId,a.source,a.medium,a.campaign,a.content,a.term,a.referrer,a.landingPath,ts);
+  return db.prepare('SELECT * FROM growth_acquisition WHERE user_id=?').get(userId)||null;
+}
+function growthAcquisitionForUser(userId){return db.prepare('SELECT session_id,source,medium,campaign,content,term,referrer,landing_path,attributed_at FROM growth_acquisition WHERE user_id=?').get(userId)||null;}
+function recordFirstUserGrowthEvent(userId,eventName,metadata={}) {
+  if(!userId)return false;
+  const exists=db.prepare('SELECT 1 FROM growth_events WHERE user_id=? AND event_name=? LIMIT 1').get(userId,eventName);
+  if(exists)return false;
+  const a=growthAcquisitionForUser(userId)||{};
+  recordGrowthEvent(eventName,{userId,sessionId:a.session_id||'',acquisition:{sessionId:a.session_id||'',source:a.source,medium:a.medium,campaign:a.campaign,content:a.content,term:a.term,referrer:a.referrer,landingPath:a.landing_path},page:'/',metadata});
+  return true;
+}
+
 function ensureMemberReferral(userId) {
   if (!userId) return null;
   let row=db.prepare('SELECT user_id,referral_code,created_at FROM user_referrals WHERE user_id=?').get(userId);
@@ -1897,6 +2002,7 @@ app.post('/api/auth/register', rateLimit({limit:8,windowMs:60*60*1000,key:req=>r
     const confirmAdult = req.body?.confirmAdult === true;
     const acceptTerms = req.body?.acceptTerms === true;
     const referralCode = normalizeMemberReferralCode(req.body?.referralCode);
+    const acquisition = normalizeGrowthAcquisition(req.body?.acquisition || {});
     if (!confirmAdult) return res.status(400).json({ok:false,error:'Debes confirmar que tienes 18 años o más.'});
     if (!acceptTerms) return res.status(400).json({ok:false,error:'Debes aceptar las condiciones de uso y la política de privacidad.'});
     if (!validEmail(email)) return res.status(400).json({ ok:false, error:'Introduce un correo válido.' });
@@ -1908,6 +2014,8 @@ app.post('/api/auth/register', rateLimit({limit:8,windowMs:60*60*1000,key:req=>r
     db.prepare('INSERT INTO users(id,email,password_hash,created_at,last_seen_at,email_verified,onboarding_completed) VALUES(?,?,?,?,?,0,0)').run(id,email,passwordHash,ts,ts);
     ensureMemberReferral(id);
     if (referralCode) attributeMemberReferral(id,referralCode);
+    saveGrowthAcquisition(id,acquisition);
+    recordGrowthEvent('registration_completed',{sessionId:acquisition.sessionId,userId:id,acquisition,page:acquisition.landingPath||'/'});
     db.prepare('INSERT INTO legal_acceptances(id,user_id,legal_version,adult_confirmed,terms_accepted,accepted_at) VALUES(?,?,?,?,?,?)')
       .run(safeId('legal'),id,LEGAL_VERSION,1,1,ts);
     const user = {id,email};
@@ -2054,6 +2162,7 @@ app.put('/api/profile', requireAuth, (req,res) => {
     if (name.length < 2) return res.status(400).json({ok:false,error:'Escribe un nombre válido.'});
     if (!Number.isInteger(age) || age < 18 || age > 99) return res.status(400).json({ok:false,error:'V/R Match es solo para mayores de 18 años.'});
     const existing = getProfile(userId);
+    const firstProfileSave = !existing;
     const photosInput = Array.isArray(req.body?.fotos) ? req.body.fotos : (existing?.fotos || []);
     const photos = savePhotos(userId, photosInput);
     const hasAvatarField = Object.prototype.hasOwnProperty.call(req.body || {}, 'avatar');
@@ -2095,6 +2204,7 @@ app.put('/api/profile', requireAuth, (req,res) => {
       .run({userId,...values,interests:JSON.stringify(values.interests),photos:JSON.stringify(values.photos),updatedAt:now()});
     cleanupUnusedUploads(userId,[...photos,avatar].filter(x=>String(x).startsWith('/uploads/')));
     const profile = getProfile(userId);
+    if(firstProfileSave) recordFirstUserGrowthEvent(userId,'profile_completed',{city:profile?.ciudad||''});
     broadcastDiscovery();
     res.json({ok:true,profile});
   } catch (e) {
@@ -2176,6 +2286,8 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
     const notifications=db.prepare('SELECT id,source_user,type,title,body,data_json,created_at,read_at FROM notifications WHERE user_id=? ORDER BY created_at ASC').all(userId).map(n=>({...n,data:safeJsonObject(n.data_json),data_json:undefined}));
     const referralStats=memberReferralStats(userId);
     const referralAttribution=db.prepare('SELECT referral_code,attributed_at FROM user_referral_attributions WHERE invitee_user_id=?').get(userId)||null;
+    const growthAcquisition=growthAcquisitionForUser(userId);
+    const growthEvents=db.prepare('SELECT event_name,source,medium,campaign,content,term,landing_path,page,metadata_json,created_at FROM growth_events WHERE user_id=? ORDER BY created_at ASC').all(userId).map(e=>({...e,metadata:safeJsonObject(e.metadata_json),metadata_json:undefined}));
     const gameSessions=db.prepare(`SELECT id,match_id,user1,user2,deck,started_at,core_completed_at,ended_at,status,finish_reason,total_turns,sync_rounds,coincidences,guess_hits,reactions,personalized_sync,extended,duration_seconds
       FROM game_sessions WHERE user1=? OR user2=? ORDER BY started_at ASC`).all(userId,userId).map(g=>({...g,partner_id:g.user1===userId?g.user2:g.user1,user1:undefined,user2:undefined}));
     const matches=db.prepare('SELECT * FROM matches WHERE user1=? OR user2=? ORDER BY created_at ASC').all(userId,userId).map(m=>{
@@ -2190,6 +2302,7 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
       profile: profile ? {...profile,storedLocation:profileRow&&hasStoredLocation(profileRow)?{lat:Number(profileRow.location_lat),lng:Number(profileRow.location_lng),updatedAt:profileRow.location_updated_at}:null}:null,
       plus:getPlusState(userId),notificationPreferences:notificationPreferences(userId),legalAcceptances:legal,
       referrals:{...referralStats,referredBy:referralAttribution?{referralCode:referralAttribution.referral_code,attributedAt:referralAttribution.attributed_at}:null},
+      acquisition:growthAcquisition,growthEvents,
       communityCity:communityCityForUser(userId),
       likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,notifications,gameSessions,matches
     };
@@ -2215,6 +2328,7 @@ app.post('/api/account/delete', requireAuth, rateLimit({limit:3,windowMs:24*60*6
     if(!STRIPE_SECRET_KEY)return res.status(503).json({ok:false,error:'Tu cuenta tiene una suscripción vinculada y el servidor no puede cancelarla ahora. Contacta con soporte antes de borrar la cuenta.'});
     try{const canceled=await cancelStripeSubscription(billing.subscription_id);syncStripeSubscription(canceled);}catch(e){console.error('Cancelación antes de borrar cuenta:',cleanShortText(e.message,220));return res.status(502).json({ok:false,error:'No pudimos cancelar la suscripción. La cuenta no se borró para evitar un cobro posterior.'});}
   }
+  db.prepare('DELETE FROM growth_events WHERE user_id=?').run(req.user.id);
   const referralRow=db.prepare('SELECT referral_code FROM user_referrals WHERE user_id=?').get(req.user.id);
   if(referralRow?.referral_code){
     db.prepare('DELETE FROM user_referral_events WHERE referral_code=? OR user_id=?').run(referralRow.referral_code,req.user.id);
@@ -2327,11 +2441,23 @@ app.get('/api/community/me', requireAuth, rateLimit({limit:120,windowMs:60*60*10
 app.put('/api/community/me', requireAuth, rateLimit({limit:30,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
   const cityName=cleanCommunityCityName(req.body?.city);
   if(!cityName)return res.status(400).json({ok:false,error:'Escribe una ciudad o municipio válido.'});
+  const previousCity=communityCityForUser(req.user.id);
   const city=setCommunityCityForUser(req.user.id,cityName);
   if(!city)return res.status(400).json({ok:false,error:'No se pudo guardar la ciudad.'});
+  if(!previousCity) recordFirstUserGrowthEvent(req.user.id,'city_selected',{city:city.name});
   if(getProfile(req.user.id)) broadcastDiscovery();
   const total=Number(db.prepare(`SELECT COUNT(*) n FROM community_city_memberships m JOIN users u ON u.id=m.user_id WHERE u.status='active'`).get()?.n||0);
   res.json({ok:true,city,total});
+});
+
+app.post('/api/growth/event', rateLimit({limit:240,windowMs:60*60*1000,key:req=>req.ip}), (req,res) => {
+  const eventName=cleanGrowthValue(req.body?.event,50).toLowerCase();
+  if(!GROWTH_PUBLIC_EVENTS.has(eventName))return res.status(400).json({ok:false,error:'Evento no válido.'});
+  const token=bearer(req), authUser=token?userFromToken(token):null;
+  const acquisition=normalizeGrowthAcquisition(req.body?.acquisition||{});
+  if(!acquisition.sessionId)return res.status(400).json({ok:false,error:'Sesión analítica requerida.'});
+  recordGrowthEvent(eventName,{sessionId:acquisition.sessionId,userId:authUser?.id||null,acquisition,page:req.body?.page||'/',metadata:req.body?.metadata||{}});
+  res.json({ok:true});
 });
 
 app.post('/api/referrals/visit', rateLimit({limit:120,windowMs:60*60*1000,key:req=>req.ip}), (req,res) => {
@@ -2355,6 +2481,8 @@ app.post('/api/referrals/share', requireAuth, rateLimit({limit:120,windowMs:60*6
   const source=['invite','game_result'].includes(String(req.body?.source||''))?String(req.body.source):'invite';
   db.prepare('INSERT INTO user_referral_events(id,referral_code,event_type,user_id,created_at) VALUES(?,?,?,?,?)')
     .run(safeId('uref'),row.referral_code,source==='game_result'?'SHARE_GAME':'SHARE_INVITE',req.user.id,now());
+  const a=growthAcquisitionForUser(req.user.id)||{};
+  recordGrowthEvent(source==='game_result'?'share_game_result':'share_invite',{userId:req.user.id,sessionId:a.session_id||'',acquisition:{sessionId:a.session_id||'',source:a.source,medium:a.medium,campaign:a.campaign,content:a.content,term:a.term,referrer:a.referrer,landingPath:a.landing_path},metadata:{source}});
   res.json({ok:true,referral:memberReferralStats(req.user.id)});
 });
 
@@ -2923,10 +3051,12 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, (req,res) => {
 });
 
 app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
-  const days = [1,7,30].includes(Number(req.query.days)) ? Number(req.query.days) : 7;
+  const days = [1,7,30,90].includes(Number(req.query.days)) ? Number(req.query.days) : 7;
   const until = now();
   const since = until - days*24*60*60*1000;
   const metric = {
+    visits: db.prepare("SELECT COUNT(DISTINCT session_id) n FROM growth_events WHERE event_name='page_view' AND created_at>=? AND session_id<>''").get(since).n,
+    registrationStarted: db.prepare("SELECT COUNT(DISTINCT session_id) n FROM growth_events WHERE event_name='registration_started' AND created_at>=? AND session_id<>''").get(since).n,
     registered: db.prepare('SELECT COUNT(*) n FROM users WHERE created_at>=?').get(since).n,
     activeUsers: db.prepare("SELECT COUNT(*) n FROM users WHERE status='active' AND last_seen_at>=?").get(since).n,
     likes: db.prepare('SELECT COUNT(*) n FROM likes WHERE created_at>=?').get(since).n,
@@ -2943,40 +3073,72 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
     verifiedTotal: db.prepare('SELECT COUNT(*) n FROM users WHERE email_verified=1').get().n,
     activePlus: db.prepare("SELECT COUNT(*) n FROM plus_memberships WHERE status='active' AND (expires_at IS NULL OR expires_at>?)").get(until).n
   };
+  const cohortBase='u.created_at>=?';
   const funnel = {
-    registered: metric.registered,
-    profile: db.prepare('SELECT COUNT(*) n FROM users u WHERE u.created_at>=? AND EXISTS(SELECT 1 FROM profiles p WHERE p.user_id=u.id)').get(since).n,
-    matched: db.prepare('SELECT COUNT(*) n FROM users u WHERE u.created_at>=? AND EXISTS(SELECT 1 FROM matches m WHERE m.user1=u.id OR m.user2=u.id)').get(since).n,
-    messaged: db.prepare('SELECT COUNT(*) n FROM users u WHERE u.created_at>=? AND EXISTS(SELECT 1 FROM messages m WHERE m.from_user=u.id)').get(since).n,
-    played: db.prepare('SELECT COUNT(*) n FROM users u WHERE u.created_at>=? AND EXISTS(SELECT 1 FROM game_sessions g WHERE g.user1=u.id OR g.user2=u.id)').get(since).n
+    visits:Number(metric.visits||0),
+    registrationStarted:Number(metric.registrationStarted||0),
+    registered:Number(metric.registered||0),
+    city: db.prepare(`SELECT COUNT(*) n FROM users u WHERE ${cohortBase} AND EXISTS(SELECT 1 FROM community_city_memberships c WHERE c.user_id=u.id)`).get(since).n,
+    profile: db.prepare(`SELECT COUNT(*) n FROM users u WHERE ${cohortBase} AND EXISTS(SELECT 1 FROM profiles p WHERE p.user_id=u.id)`).get(since).n,
+    liked: db.prepare(`SELECT COUNT(*) n FROM users u WHERE ${cohortBase} AND EXISTS(SELECT 1 FROM likes l WHERE l.from_user=u.id)`).get(since).n,
+    matched: db.prepare(`SELECT COUNT(*) n FROM users u WHERE ${cohortBase} AND EXISTS(SELECT 1 FROM matches m WHERE m.user1=u.id OR m.user2=u.id)`).get(since).n,
+    messaged: db.prepare(`SELECT COUNT(*) n FROM users u WHERE ${cohortBase} AND EXISTS(SELECT 1 FROM messages m WHERE m.from_user=u.id)`).get(since).n,
+    played: db.prepare(`SELECT COUNT(*) n FROM users u WHERE ${cohortBase} AND EXISTS(SELECT 1 FROM game_sessions g WHERE g.user1=u.id OR g.user2=u.id)`).get(since).n,
+    shared: db.prepare(`SELECT COUNT(DISTINCT e.user_id) n FROM user_referral_events e JOIN users u ON u.id=e.user_id WHERE u.created_at>=? AND e.event_type LIKE 'SHARE_%'`).get(since).n
   };
   function grouped(table,col){
     const rows=db.prepare(`SELECT date(${col}/1000,'unixepoch') day,COUNT(*) n FROM ${table} WHERE ${col}>=? GROUP BY day`).all(since);
     return new Map(rows.map(r=>[r.day,Number(r.n)||0]));
   }
   const registrations=grouped('users','created_at'), matches=grouped('matches','created_at'), messages=grouped('messages','created_at'), games=grouped('game_sessions','started_at');
+  const visitsRows=db.prepare(`SELECT date(created_at/1000,'unixepoch') day,COUNT(DISTINCT session_id) n FROM growth_events WHERE event_name='page_view' AND created_at>=? AND session_id<>'' GROUP BY day`).all(since);
+  const visitsByDay=new Map(visitsRows.map(r=>[r.day,Number(r.n)||0]));
   const daily=[];
   const first = new Date(since); first.setUTCHours(0,0,0,0);
   const last = new Date(until); last.setUTCHours(0,0,0,0);
   for(let t=first.getTime();t<=last.getTime();t+=24*60*60*1000){
     const day=new Date(t).toISOString().slice(0,10);
-    daily.push({day,registered:registrations.get(day)||0,matches:matches.get(day)||0,messages:messages.get(day)||0,games:games.get(day)||0});
+    daily.push({day,visits:visitsByDay.get(day)||0,registered:registrations.get(day)||0,matches:matches.get(day)||0,messages:messages.get(day)||0,games:games.get(day)||0});
   }
+  const visitChannels=db.prepare(`SELECT source,medium,COUNT(DISTINCT session_id) visits
+    FROM growth_events WHERE event_name='page_view' AND created_at>=? AND session_id<>'' GROUP BY source,medium`).all(since);
+  const signupChannels=db.prepare(`SELECT COALESCE(NULLIF(a.source,''),'direct') source,COALESCE(NULLIF(a.medium,''),'none') medium,COUNT(*) signups
+    FROM users u LEFT JOIN growth_acquisition a ON a.user_id=u.id WHERE u.created_at>=? GROUP BY source,medium`).all(since);
+  const channelMap=new Map();
+  for(const r of visitChannels){const key=`${r.source}|${r.medium}`;channelMap.set(key,{source:r.source||'direct',medium:r.medium||'none',visits:Number(r.visits)||0,signups:0});}
+  for(const r of signupChannels){const key=`${r.source}|${r.medium}`;const row=channelMap.get(key)||{source:r.source||'direct',medium:r.medium||'none',visits:0,signups:0};row.signups=Number(r.signups)||0;channelMap.set(key,row);}
+  const channels=[...channelMap.values()].map(r=>({...r,conversion:r.visits?Math.round(r.signups*1000/r.visits)/10:null})).sort((a,b)=>b.signups-a.signups||b.visits-a.visits).slice(0,20);
+  const campaigns=db.prepare(`SELECT COALESCE(NULLIF(a.source,''),'direct') source,COALESCE(NULLIF(a.medium,''),'none') medium,
+      COALESCE(NULLIF(a.campaign,''),'(sin campaña)') campaign,COALESCE(NULLIF(a.content,''),'') content,COUNT(*) signups
+    FROM users u LEFT JOIN growth_acquisition a ON a.user_id=u.id WHERE u.created_at>=?
+    GROUP BY source,medium,campaign,content ORDER BY signups DESC LIMIT 40`).all(since).map(r=>({...r,signups:Number(r.signups)||0}));
+  const campaignVisits=db.prepare(`SELECT source,medium,COALESCE(NULLIF(campaign,''),'(sin campaña)') campaign,COALESCE(NULLIF(content,''),'') content,COUNT(DISTINCT session_id) visits
+    FROM growth_events WHERE event_name='page_view' AND created_at>=? AND session_id<>'' GROUP BY source,medium,campaign,content`).all(since);
+  const cvMap=new Map(campaignVisits.map(r=>[`${r.source}|${r.medium}|${r.campaign}|${r.content}`,Number(r.visits)||0]));
+  const campaignPerformance=campaigns.map(r=>{const visits=cvMap.get(`${r.source}|${r.medium}|${r.campaign}|${r.content}`)||0;return {...r,visits,conversion:visits?Math.round(r.signups*1000/visits)/10:null};}).sort((a,b)=>b.signups-a.signups||b.visits-a.visits).slice(0,25);
+  const cities=db.prepare(`SELECT c.name city,COUNT(*) signups FROM users u JOIN community_city_memberships m ON m.user_id=u.id JOIN community_cities c ON c.slug=m.city_slug WHERE u.created_at>=? GROUP BY c.slug,c.name ORDER BY signups DESC LIMIT 15`).all(since).map(r=>({city:r.city,signups:Number(r.signups)||0}));
   const uploads=folderStatsSafe(UPLOAD_DIR), mem=process.memoryUsage();
   const system={
-    uptimeSeconds:Math.round(process.uptime()),
-    rssMb:Math.round(mem.rss/1024/1024),
-    heapUsedMb:Math.round(mem.heapUsed/1024/1024),
-    onlineUsers:onlineUsers.size,
-    sockets:Number(io.engine?.clientsCount||0),
-    dbBytes:fileSizeSafe(DB_PATH),
-    uploadFiles:uploads.files,
-    uploadBytes:uploads.bytes
+    uptimeSeconds:Math.round(process.uptime()),rssMb:Math.round(mem.rss/1024/1024),heapUsedMb:Math.round(mem.heapUsed/1024/1024),
+    onlineUsers:onlineUsers.size,sockets:Number(io.engine?.clientsCount||0),dbBytes:fileSizeSafe(DB_PATH),uploadFiles:uploads.files,uploadBytes:uploads.bytes
   };
   const recentErrors=db.prepare(`SELECT ce.id,ce.message,ce.source,ce.line,ce.column_no,ce.page,ce.app_version,ce.created_at,u.email,p.name
     FROM client_errors ce LEFT JOIN users u ON u.id=ce.user_id LEFT JOIN profiles p ON p.user_id=ce.user_id
     ORDER BY ce.created_at DESC LIMIT 20`).all();
-  res.json({ok:true,days,metric,funnel,daily,system,recentErrors});
+  res.json({ok:true,days,metric,funnel,daily,channels,campaigns:campaignPerformance,cities,system,recentErrors});
+});
+
+app.get('/api/admin/growth/export.csv', requireAuth, requireAdmin, (req,res) => {
+  const days=[1,7,30,90].includes(Number(req.query.days))?Number(req.query.days):30, since=now()-days*86400000;
+  const rows=db.prepare(`SELECT u.created_at registered_at,u.email,COALESCE(p.name,'') name,COALESCE(c.name,p.city,'') city,
+    COALESCE(a.source,'direct') source,COALESCE(a.medium,'none') medium,COALESCE(a.campaign,'') campaign,COALESCE(a.content,'') content,COALESCE(a.term,'') term,COALESCE(a.landing_path,'') landing_path
+    FROM users u LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN growth_acquisition a ON a.user_id=u.id
+    LEFT JOIN community_city_memberships cm ON cm.user_id=u.id LEFT JOIN community_cities c ON c.slug=cm.city_slug
+    WHERE u.created_at>=? ORDER BY u.created_at DESC`).all(since);
+  const headers=['registered_at','email','name','city','source','medium','campaign','content','term','landing_path'];
+  const esc=v=>`"${String(v??'').replaceAll('"','""')}"`;
+  const csv=[headers.join(','),...rows.map(r=>headers.map(h=>esc(r[h])).join(','))].join('\n');
+  res.type('text/csv; charset=utf-8');res.setHeader('Content-Disposition',`attachment; filename="vrmatch-growth-${days}d.csv"`);res.send('\ufeff'+csv);
 });
 
 app.get('/api/admin/feedback', requireAuth, requireAdmin, (req,res) => {
@@ -3445,6 +3607,7 @@ function gameHistoryStart(room, matchId=null) {
     id,matchId||null,user1,user2,validDeck(room.mazo),ts,ts,'active',0,0,0,0,0,0,0,0
   );
   room.historyId=id;room.matchId=matchId||null;room.startedAt=ts;room.historyFinalized=false;
+  recordFirstUserGrowthEvent(user1,'first_game'); recordFirstUserGrowthEvent(user2,'first_game');
   return id;
 }
 function gameHistoryPersist(room) {
@@ -3831,6 +3994,7 @@ io.on('connection', socket => {
     if(name.length<2||!Number.isInteger(age)||age<18||age>99)return done({ok:false,error:'Completa un perfil válido +18.'});
     try{
       const current=getProfile(userId);
+      const firstProfileSave=!current;
       const photos=savePhotos(userId,Array.isArray(data.fotos)?data.fotos:(current?.fotos||[]));
       const hasAvatarField=Object.prototype.hasOwnProperty.call(data,'avatar');
       const safeCurrentAvatar=cleanAvatar(userId,current?.avatar||'');
@@ -3842,7 +4006,7 @@ io.on('connection', socket => {
       db.prepare(`INSERT INTO profiles(user_id,name,age,gender,city,bio,interests_json,avatar,photos_json,age_min,age_max,looking_for,city_pref,interest_pref,radius_km,updated_at)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET name=excluded.name,age=excluded.age,gender=excluded.gender,city=excluded.city,bio=excluded.bio,interests_json=excluded.interests_json,avatar=excluded.avatar,photos_json=excluded.photos_json,age_min=excluded.age_min,age_max=excluded.age_max,looking_for=excluded.looking_for,city_pref=excluded.city_pref,interest_pref=excluded.interest_pref,radius_km=excluded.radius_km,updated_at=excluded.updated_at`)
       .run(userId,name,age,cleanGender(data.gender),cleanShortText(data.ciudad,40),cleanShortText(data.bio,180),JSON.stringify(cleanInterests(data.intereses)),avatar,JSON.stringify(photos),ageMin,ageMax,cleanLooking(pref.lookingFor),cleanShortText(pref.city,40),cleanShortText(pref.interest,30),radiusKm,now());
-      const np=getProfile(userId); socket.nombre=np.nombre;socket.avatar=np.avatar;socket.edad=np.edad; done({ok:true,profile:np}); broadcastDiscovery();
+      const np=getProfile(userId); if(firstProfileSave)recordFirstUserGrowthEvent(userId,'profile_completed',{city:np?.ciudad||''}); socket.nombre=np.nombre;socket.avatar=np.avatar;socket.edad=np.edad; done({ok:true,profile:np}); broadcastDiscovery();
     }catch(e){console.error(e);done({ok:false,error:'No se pudo guardar el perfil.'});}
   });
 
@@ -3874,7 +4038,8 @@ io.on('connection', socket => {
     const done=typeof ack==='function'?ack:()=>{}; if(!allowAction(`like:${userId}`,90,60000))return done({ok:false,error:'Vas demasiado rápido. Espera un momento.'}); const target=String(data.oponenteID||'');
     if(!target||target===userId||!getProfile(target))return done({ok:false,error:'Ese perfil ya no está disponible.'});
     if(blockedEitherWay(userId,target))return done({ok:false,error:'Ese perfil no está disponible.'});
-    db.prepare('INSERT OR IGNORE INTO likes(from_user,to_user,created_at) VALUES(?,?,?)').run(userId,target,now());
+    const likeInsert=db.prepare('INSERT OR IGNORE INTO likes(from_user,to_user,created_at) VALUES(?,?,?)').run(userId,target,now());
+    if(likeInsert.changes)recordFirstUserGrowthEvent(userId,'first_like');
     const reciprocal=Boolean(db.prepare('SELECT 1 FROM likes WHERE from_user=? AND to_user=?').get(target,userId));
     let match=null;
     if(reciprocal){
@@ -3882,6 +4047,7 @@ io.on('connection', socket => {
       const [u1,u2]=pair(userId,target); const id=matchIdFor(userId,target); const ts=now();
       db.prepare('INSERT INTO matches(id,user1,user2,created_at,active) VALUES(?,?,?,?,1) ON CONFLICT(user1,user2) DO UPDATE SET active=1').run(id,u1,u2,ts);
       match=getActiveMatch(userId,target); const me=publicProfile(getProfile(userId)),other=publicProfile(getProfile(target));
+      if(!existingActiveMatch){recordFirstUserGrowthEvent(userId,'first_match');recordFirstUserGrowthEvent(target,'first_match');}
       emitToUser(userId,'dating_match',{...other,matchId:match.id}); emitToUser(target,'dating_match',{...me,matchId:match.id}); emitMatches(userId);emitMatches(target);
       const myNotification=createNotification(userId,'match','¡Nuevo match!',`Tú y ${other?.nombre||'alguien'} os gustáis.`,{partnerId:target,matchId:match.id},target);
       const targetNotification=createNotification(target,'match','¡Nuevo match!',`Tú y ${me?.nombre||'alguien'} os gustáis.`,{partnerId:userId,matchId:match.id},userId);
@@ -3908,6 +4074,7 @@ io.on('connection', socket => {
     const duplicate=db.prepare('SELECT 1 FROM messages WHERE match_id=? AND from_user=? AND text=? AND created_at>? LIMIT 1').get(match.id,userId,text,now()-15000); if(duplicate)return done({ok:false,error:'Ese mensaje ya se envió hace un momento.'});
     const message={id:safeId('msg'),from:userId,to:target,text,ts:now()};
     db.prepare('INSERT INTO messages(id,match_id,from_user,text,created_at) VALUES(?,?,?,?,?)').run(message.id,match.id,userId,text,message.ts);
+    recordFirstUserGrowthEvent(userId,'first_message');
     emitToUser(userId,'dating_chat_message',message);emitToUser(target,'dating_chat_message',message);emitMatches(userId);emitMatches(target);
     const senderName=getProfile(userId)?.nombre||'Tu match';
     createNotification(target,'message','Nuevo mensaje',`${senderName} te ha escrito.`,{partnerId:userId,matchId:match.id,messageId:message.id},userId);

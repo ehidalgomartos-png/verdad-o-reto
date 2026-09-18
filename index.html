@@ -414,7 +414,7 @@
       </div>
 
       <div id="adminPaneMetrics" class="admin-pane hidden">
-        <div class="admin-history-head"><div><strong>Métricas internas de producto</strong><small>Sin píxeles de terceros ni contenido privado de chats.</small></div><div class="metrics-toolbar"><select id="adminMetricsDays" class="profile-select" aria-label="Periodo de métricas" onchange="cargarAdminMetrics()"><option value="1">24 horas</option><option value="7" selected>7 días</option><option value="30">30 días</option></select><button class="btn btn-secondary" type="button" onclick="cargarAdminMetrics()">↻ Actualizar</button></div></div>
+        <div class="admin-history-head"><div><strong>Métricas internas de producto</strong><small>Sin píxeles de terceros ni contenido privado de chats.</small></div><div class="metrics-toolbar"><select id="adminMetricsDays" class="profile-select" aria-label="Periodo de métricas" onchange="cargarAdminMetrics()"><option value="1">24 horas</option><option value="7" selected>7 días</option><option value="30">30 días</option><option value="90">90 días</option></select><button class="btn btn-secondary" type="button" onclick="cargarAdminMetrics()">↻ Actualizar</button><button class="btn btn-secondary" type="button" onclick="exportarGrowthCsv()">↓ CSV</button></div></div>
         <div id="adminMetrics" class="admin-metrics"><div class="empty-state"><span>📈</span><strong>Cargando métricas…</strong></div></div>
       </div>
 
@@ -1544,6 +1544,46 @@
     const incomingCityIntent = String(params.get('city') || '').trim().slice(0,60);
     if(incomingCityIntent) localStorage.setItem('vr_pending_city', incomingCityIntent);
 
+    function growthSessionId(){
+      let id=sessionStorage.getItem('vr_growth_session')||'';
+      if(!id){id=(crypto.randomUUID?crypto.randomUUID():`s_${Date.now()}_${Math.random().toString(36).slice(2)}`);sessionStorage.setItem('vr_growth_session',id);}
+      return id.slice(0,80);
+    }
+    function inferGrowthSource(referrer){
+      try{
+        const host=new URL(referrer).hostname.toLowerCase().replace(/^www\./,'');
+        if(!host||host===location.hostname)return {source:'direct',medium:'none'};
+        if(host.includes('google.'))return {source:'google',medium:'organic'};
+        if(host.includes('bing.'))return {source:'bing',medium:'organic'};
+        if(host.includes('tiktok.'))return {source:'tiktok',medium:'referral'};
+        if(host.includes('instagram.'))return {source:'instagram',medium:'referral'};
+        if(host.includes('facebook.')||host==='fb.com')return {source:'facebook',medium:'referral'};
+        if(host.includes('youtube.')||host==='youtu.be')return {source:'youtube',medium:'referral'};
+        return {source:host.slice(0,80),medium:'referral'};
+      }catch{return {source:'direct',medium:'none'};}
+    }
+    function growthAcquisition(){
+      const key='vr_growth_acquisition';
+      const stored=sessionStorage.getItem(key);
+      if(stored){try{return JSON.parse(stored);}catch{sessionStorage.removeItem(key);}}
+      const q=new URLSearchParams(location.search),ref=document.referrer||'',fallback=inferGrowthSource(ref);
+      let source=(q.get('utm_source')||'').trim().slice(0,80).toLowerCase();
+      let medium=(q.get('utm_medium')||'').trim().slice(0,80).toLowerCase();
+      if(!source&&q.has('gclid')){source='google';medium='cpc';}
+      else if(!source&&q.has('fbclid')){source='meta';medium='paid_social';}
+      else if(!source&&q.has('ttclid')){source='tiktok';medium='paid_social';}
+      if(!source)source=fallback.source;if(!medium)medium=source==='direct'?'none':fallback.medium;
+      const data={sessionId:growthSessionId(),source,medium,campaign:(q.get('utm_campaign')||'').slice(0,120),content:(q.get('utm_content')||'').slice(0,120),term:(q.get('utm_term')||'').slice(0,120),referrer:ref.slice(0,240),landingPath:location.pathname.slice(0,180)};
+      sessionStorage.setItem(key,JSON.stringify(data));return data;
+    }
+    const growthAcq=growthAcquisition();
+    function trackGrowth(event,metadata={}){
+      const payload={event,acquisition:growthAcq,page:location.pathname,metadata};
+      const headers={'Content-Type':'application/json'};if(authToken)headers.Authorization=`Bearer ${authToken}`;
+      return fetch('/api/growth/event',{method:'POST',headers,body:JSON.stringify(payload),keepalive:true}).catch(()=>null);
+    }
+    if(!authToken && !sessionStorage.getItem('vr_growth_pageview')){sessionStorage.setItem('vr_growth_pageview','1');trackGrowth('page_view');}
+
     const $ = (id) => document.getElementById(id);
     const screens = ['pantallaAuth','pantallaCiudad','pantallaPerfil','pantallaDescubrir','pantallaPlus','pantallaMatches','pantallaChat','pantallaAdmin','pantallaMazos','pantallaMenu','pantallaLobby','pantallaJuego'];
 
@@ -1954,7 +1994,7 @@
       $('authPassword').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
       $('registerLegalBox').classList.toggle('hidden', authMode !== 'register');
       $('forgotPasswordButton').classList.toggle('hidden', authMode === 'register');
-      if(authMode === 'register') ocultarVerificacionPendiente();
+      if(authMode === 'register') { ocultarVerificacionPendiente(); if(!sessionStorage.getItem('vr_growth_reg_started')){sessionStorage.setItem('vr_growth_reg_started','1');trackGrowth('registration_started');} }
     }
 
     function mostrarVerificacionPendiente(email, envioRealizado=true) {
@@ -2582,19 +2622,32 @@
     function porcentaje(a,b){return b?Math.round((Number(a)||0)*100/Number(b)):0;}
     async function cargarAdminMetrics(){
       if(!currentUserAdmin)return;
-      const box=$('adminMetrics'); box.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Calculando métricas…</strong></div>';
+      const box=$('adminMetrics'); box.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Calculando crecimiento…</strong></div>';
       const days=Number($('adminMetricsDays').value||7);
       const res=await api(`/api/admin/metrics?days=${encodeURIComponent(days)}`);
       if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudieron cargar.')}</strong></div>`;return;}
-      const m=res.metric||{},f=res.funnel||{},sys=res.system||{},daily=res.daily||[],errors=res.recentErrors||[];
-      const cards=[['Altas',m.registered,'cuentas nuevas'],['Activos',m.activeUsers,`últimos ${days===1?'24 h':days+' días'}`],['Likes',m.likes,'acciones'],['Matches',m.matches,'creados'],['Mensajes',m.messages,'enviados'],['Partidas',m.gamesStarted,'iniciadas'],['Finalizadas',m.gamesCompleted,'partidas completas'],['Visitas ref.',m.referralVisits||0,'por invitación'],['Altas ref.',m.referralSignups||0,'atribuidas'],['Compartidos',m.referralShares||0,'invitaciones/resultados'],['Denuncias',m.reports,'creadas'],['Feedback',m.feedback,'comentarios'],['Errores cliente',m.clientErrors,'registrados']];
-      const funnel=[['Registro',f.registered,100],['Perfil',f.profile,porcentaje(f.profile,f.registered)],['Match',f.matched,porcentaje(f.matched,f.registered)],['Mensaje',f.messaged,porcentaje(f.messaged,f.registered)],['Jugó',f.played,porcentaje(f.played,f.registered)]];
-      const maxDaily=Math.max(1,...daily.map(d=>Math.max(Number(d.registered)||0,Number(d.matches)||0,Number(d.messages)||0,Number(d.games)||0)));
-      box.innerHTML=`<div class="metrics-summary">${cards.map(([label,val,sub])=>`<article><strong>${Number(val)||0}</strong><span>${escapeHtml(label)}</span><small>${escapeHtml(sub)}</small></article>`).join('')}</div>
-        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Embudo de nuevas cuentas</strong><small>Conversión de las cuentas registradas durante el periodo.</small></div><span>${days===1?'24 h':days+' días'}</span></div><div class="funnel-grid">${funnel.map(([label,val,pct])=>`<div><div><b>${escapeHtml(label)}</b><span>${Number(val)||0} · ${Number(pct)||0}%</span></div><i><em style="width:${Math.max(2,Number(pct)||0)}%"></em></i></div>`).join('')}</div></section>
-        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Actividad diaria</strong><small>Altas, matches, mensajes y partidas. Datos agregados.</small></div></div><div class="daily-chart">${daily.map(d=>`<div class="daily-row"><small>${escapeHtml(d.day.slice(5))}</small><div title="Altas: ${d.registered}"><i class="reg" style="width:${Math.max(2,Number(d.registered)*100/maxDaily)}%"></i></div><div title="Matches: ${d.matches}"><i class="match" style="width:${Math.max(2,Number(d.matches)*100/maxDaily)}%"></i></div><div title="Mensajes: ${d.messages}"><i class="msg" style="width:${Math.max(2,Number(d.messages)*100/maxDaily)}%"></i></div><div title="Partidas: ${d.games}"><i class="game" style="width:${Math.max(2,Number(d.games)*100/maxDaily)}%"></i></div></div>`).join('')}</div><div class="chart-legend"><span><i class="reg"></i>Altas</span><span><i class="match"></i>Matches</span><span><i class="msg"></i>Mensajes</span><span><i class="game"></i>Partidas</span></div></section>
+      const m=res.metric||{},f=res.funnel||{},sys=res.system||{},daily=res.daily||[],errors=res.recentErrors||[],channels=res.channels||[],campaigns=res.campaigns||[],cities=res.cities||[];
+      const visitConv=porcentaje(m.registered,m.visits),startConv=porcentaje(m.registered,m.registrationStarted);
+      const cards=[['Visitas',m.visits||0,'sesiones de entrada'],['Altas',m.registered,'cuentas nuevas'],['Conversión',`${visitConv}%`,'visita → alta'],['Inicio registro',m.registrationStarted||0,`${startConv}% terminan`],['Activos',m.activeUsers,`últimos ${days===1?'24 h':days+' días'}`],['Likes',m.likes,'acciones'],['Matches',m.matches,'creados'],['Mensajes',m.messages,'enviados'],['Partidas',m.gamesStarted,'iniciadas'],['Finalizadas',m.gamesCompleted,'partidas completas'],['Altas ref.',m.referralSignups||0,'atribuidas'],['Compartidos',m.referralShares||0,'invitaciones/resultados']];
+      const base=Math.max(1,Number(f.registered)||0);
+      const funnel=[['Visitas',f.visits||0,100],['Inician registro',f.registrationStarted||0,porcentaje(f.registrationStarted,f.visits)],['Registro',f.registered||0,porcentaje(f.registered,f.visits)],['Ciudad',f.city||0,porcentaje(f.city,base)],['Perfil',f.profile||0,porcentaje(f.profile,base)],['Primer like',f.liked||0,porcentaje(f.liked,base)],['Match',f.matched||0,porcentaje(f.matched,base)],['Mensaje',f.messaged||0,porcentaje(f.messaged,base)],['Partida',f.played||0,porcentaje(f.played,base)],['Comparte',f.shared||0,porcentaje(f.shared,base)]];
+      const maxDaily=Math.max(1,...daily.map(d=>Math.max(Number(d.visits)||0,Number(d.registered)||0,Number(d.matches)||0,Number(d.games)||0)));
+      const channelRows=channels.length?channels.map(r=>`<tr><td><b>${escapeHtml(r.source||'direct')}</b><small>${escapeHtml(r.medium||'none')}</small></td><td>${Number(r.visits)||0}</td><td>${Number(r.signups)||0}</td><td>${r.conversion==null?'—':`${Number(r.conversion).toFixed(1)}%`}</td></tr>`).join(''):'<tr><td colspan="4">Aún no hay datos de adquisición.</td></tr>';
+      const campaignRows=campaigns.length?campaigns.map(r=>`<tr><td><b>${escapeHtml(r.campaign||'(sin campaña)')}</b><small>${escapeHtml(r.source||'direct')} · ${escapeHtml(r.medium||'none')}</small></td><td>${escapeHtml(r.content||'—')}</td><td>${Number(r.visits)||0}</td><td>${Number(r.signups)||0}</td><td>${r.conversion==null?'—':`${Number(r.conversion).toFixed(1)}%`}</td></tr>`).join(''):'<tr><td colspan="5">Añade UTM a tus campañas para ver aquí qué Reel o anuncio convierte.</td></tr>';
+      const maxCity=Math.max(1,...cities.map(c=>Number(c.signups)||0));
+      box.innerHTML=`<div class="metrics-summary">${cards.map(([label,val,sub])=>`<article><strong>${typeof val==='string'?escapeHtml(val):Number(val)||0}</strong><span>${escapeHtml(label)}</span><small>${escapeHtml(sub)}</small></article>`).join('')}</div>
+        <section class="metrics-section growth-highlight"><div class="metrics-section-head"><div><strong>Embudo de crecimiento</strong><small>Visita → registro → activación → interacción → viralidad.</small></div><span>${days===1?'24 h':days+' días'}</span></div><div class="funnel-grid">${funnel.map(([label,val,pct])=>`<div><div><b>${escapeHtml(label)}</b><span>${Number(val)||0} · ${Number(pct)||0}%</span></div><i><em style="width:${Math.max(2,Math.min(100,Number(pct)||0))}%"></em></i></div>`).join('')}</div></section>
+        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Canales que traen usuarios</strong><small>Sesiones y registros atribuidos por fuente/medio.</small></div></div><div class="growth-table-wrap"><table class="growth-table"><thead><tr><th>Canal</th><th>Visitas</th><th>Altas</th><th>Conversión</th></tr></thead><tbody>${channelRows}</tbody></table></div></section>
+        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Campañas y contenidos</strong><small>Usa utm_campaign y utm_content. Ej.: campaña LANZAMIENTO_VALENCIA · contenido REEL-023.</small></div></div><div class="growth-table-wrap"><table class="growth-table"><thead><tr><th>Campaña</th><th>Contenido</th><th>Visitas</th><th>Altas</th><th>Conv.</th></tr></thead><tbody>${campaignRows}</tbody></table></div><div class="utm-example"><b>Ejemplo:</b><code>/?register=1&city=Valencia&utm_source=tiktok&utm_medium=organic_social&utm_campaign=LANZAMIENTO_VALENCIA&utm_content=REEL-023</code></div></section>
+        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Altas por ciudad</strong><small>Nuevas cuentas del periodo según la ciudad elegida.</small></div></div><div class="city-growth-admin">${cities.length?cities.map(c=>`<div><span>${escapeHtml(c.city||'Sin ciudad')}</span><i><em style="width:${Math.max(3,(Number(c.signups)||0)*100/maxCity)}%"></em></i><b>${Number(c.signups)||0}</b></div>`).join(''):'<div class="empty-state compact"><span>📍</span><strong>Aún no hay ciudades en este periodo.</strong></div>'}</div></section>
+        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Actividad diaria</strong><small>Visitas, altas, matches y partidas. Datos agregados.</small></div></div><div class="daily-chart">${daily.map(d=>`<div class="daily-row"><small>${escapeHtml(d.day.slice(5))}</small><div title="Visitas: ${d.visits}"><i class="visit" style="width:${Math.max(2,Number(d.visits)*100/maxDaily)}%"></i></div><div title="Altas: ${d.registered}"><i class="reg" style="width:${Math.max(2,Number(d.registered)*100/maxDaily)}%"></i></div><div title="Matches: ${d.matches}"><i class="match" style="width:${Math.max(2,Number(d.matches)*100/maxDaily)}%"></i></div><div title="Partidas: ${d.games}"><i class="game" style="width:${Math.max(2,Number(d.games)*100/maxDaily)}%"></i></div></div>`).join('')}</div><div class="chart-legend"><span><i class="visit"></i>Visitas</span><span><i class="reg"></i>Altas</span><span><i class="match"></i>Matches</span><span><i class="game"></i>Partidas</span></div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Salud del sistema</strong><small>Diagnóstico técnico de esta instancia. No contiene secretos.</small></div></div><div class="system-grid"><div><b>${sys.onlineUsers||0}</b><span>usuarios online</span></div><div><b>${sys.sockets||0}</b><span>sockets</span></div><div><b>${sys.rssMb||0} MB</b><span>memoria RSS</span></div><div><b>${sys.heapUsedMb||0} MB</b><span>heap usado</span></div><div><b>${bytesLegibles(sys.dbBytes)}</b><span>SQLite</span></div><div><b>${sys.uploadFiles||0}</b><span>archivos · ${bytesLegibles(sys.uploadBytes)}</span></div></div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Errores recientes del cliente</strong><small>Solo mensaje técnico, pantalla y posición. No se guardan chats ni coordenadas.</small></div></div><div class="error-list">${errors.length?errors.map(e=>`<article><div><strong>${escapeHtml(e.message||'Error')}</strong><small>${escapeHtml(adminFecha(e.created_at))}</small></div><p>${escapeHtml(e.name||e.email||'Usuario')} · ${escapeHtml(e.page||'/')} ${e.source?`· ${escapeHtml(e.source)}:${Number(e.line)||0}`:''}</p></article>`).join(''):'<div class="empty-state compact"><span>✓</span><strong>Sin errores registrados</strong></div>'}</div></section>`;
+    }
+    function exportarGrowthCsv(){
+      if(!currentUserAdmin||!authToken)return;
+      const days=Number($('adminMetricsDays').value||30);
+      fetch(`/api/admin/growth/export.csv?days=${encodeURIComponent(days)}`,{headers:{Authorization:`Bearer ${authToken}`}}).then(async r=>{if(!r.ok)throw new Error('No se pudo exportar.');const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`vrmatch-growth-${days}d.csv`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}).catch(e=>mostrarToast(e.message||'No se pudo exportar.','error'));
     }
     const feedbackKindLabels={bug:'Error',idea:'Idea',ux:'Experiencia',other:'Otro'};
     async function cargarAdminFeedback(){
@@ -4375,7 +4428,7 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
       if (!email || !password) return mostrarToast('Completa correo y contraseña.','warn');
       const endpoint=authMode==='register'?'/api/auth/register':'/api/auth/login';
       const body={email,password};
-      if(authMode==='register'){body.confirmAdult=$('confirmAdult').checked;body.acceptTerms=$('acceptTerms').checked;body.referralCode=localStorage.getItem('vr_member_ref')||'';if(!body.confirmAdult)return mostrarToast('Confirma que tienes 18 años o más.','warn');if(!body.acceptTerms)return mostrarToast('Acepta las Condiciones y la Privacidad.','warn');}
+      if(authMode==='register'){body.confirmAdult=$('confirmAdult').checked;body.acceptTerms=$('acceptTerms').checked;body.referralCode=localStorage.getItem('vr_member_ref')||'';body.acquisition=growthAcq;if(!body.confirmAdult)return mostrarToast('Confirma que tienes 18 años o más.','warn');if(!body.acceptTerms)return mostrarToast('Acepta las Condiciones y la Privacidad.','warn');}
       const res=await api(endpoint,{method:'POST',body});
       if (!res.ok) {
         if(res.verificationRequired){
