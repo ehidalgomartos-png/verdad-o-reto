@@ -30,7 +30,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.11.0';
+const APP_VERSION = '18.12.0';
 const LEGAL_VERSION = '2026-09-18';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -66,6 +66,7 @@ const STRIPE_MODE = STRIPE_SECRET_KEY.startsWith('sk_live_') ? 'live' : (STRIPE_
 // Los secretos de pago viven en Environment. El panel admin solo cambia el modo comercial persistido en SQLite.
 // Las funciones V/R+ actuales forman parte de la experiencia disponible para todos.
 const SMTP_CONFIGURED = Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_FROM);
+const MATCH_EMAIL_ENABLED = String(process.env.VR_MATCH_EMAIL_ENABLED || 'true').toLowerCase() !== 'false';
 const VAPID_PUBLIC_KEY = String(process.env.VAPID_PUBLIC_KEY || '').trim();
 const VAPID_PRIVATE_KEY = String(process.env.VAPID_PRIVATE_KEY || '').trim();
 const VAPID_SUBJECT = String(process.env.VAPID_SUBJECT || 'mailto:admin@vrmatch.local').trim();
@@ -913,6 +914,77 @@ async function sendEmail({to,subject,text,html}) {
   }
   await mailTransport.sendMail({ from:process.env.SMTP_FROM, to, subject, text, html });
   return { sent:true };
+}
+
+function escapeEmailHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+function emailInitials(value) {
+  const words=String(value||'').trim().split(/\s+/).filter(Boolean).slice(0,2);
+  const initials=words.map(word=>Array.from(word)[0]||'').join('').toUpperCase();
+  return escapeEmailHtml(initials || 'VR');
+}
+function vrEmailShell({preheader='',eyebrow='',title='',bodyHtml='',ctaLabel='',ctaUrl='',footerHtml=''}) {
+  const safePreheader=escapeEmailHtml(preheader);
+  const safeEyebrow=escapeEmailHtml(eyebrow);
+  const safeTitle=escapeEmailHtml(title);
+  const safeCtaLabel=escapeEmailHtml(ctaLabel);
+  const safeCtaUrl=escapeEmailHtml(ctaUrl);
+  return `<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"><title>V/R Match</title></head>
+<body style="margin:0;padding:0;background:#08080c;color:#f8f7fb;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${safePreheader}</div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#08080c;">
+    <tr><td align="center" style="padding:34px 14px 44px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;">
+        <tr><td style="padding:0 4px 22px;">
+          <div style="font-size:21px;font-weight:900;letter-spacing:.12em;color:#ffffff;"><span style="color:#ff4f96;">V/R</span> MATCH</div>
+          <div style="margin-top:5px;font-size:10px;font-weight:700;letter-spacing:.18em;color:#777386;">HAZ MATCH. ROMPE EL HIELO.</div>
+        </td></tr>
+        <tr><td style="height:4px;background:linear-gradient(90deg,#ff1f78,#c735ff,#6e57ff);border-radius:999px 999px 0 0;font-size:0;line-height:0;">&nbsp;</td></tr>
+        <tr><td style="background:#12121a;border:1px solid #292936;border-top:0;border-radius:0 0 26px 26px;padding:38px 34px 34px;box-shadow:0 18px 50px rgba(0,0,0,.25);">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.18em;color:#ff65a4;">${safeEyebrow}</div>
+          <h1 style="margin:10px 0 14px;font-size:30px;line-height:1.12;letter-spacing:-.03em;color:#ffffff;">${safeTitle}</h1>
+          <div style="font-size:16px;line-height:1.7;color:#b9b6c5;">${bodyHtml}</div>
+          ${safeCtaUrl && safeCtaLabel ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:28px;"><tr><td style="border-radius:14px;background:#ec1767;"><a href="${safeCtaUrl}" style="display:inline-block;padding:15px 24px;font-size:15px;font-weight:900;color:#ffffff;text-decoration:none;border-radius:14px;">${safeCtaLabel} &nbsp;→</a></td></tr></table>` : ''}
+          <div style="margin-top:30px;padding-top:22px;border-top:1px solid #292936;font-size:12px;line-height:1.6;color:#777386;">${footerHtml}</div>
+        </td></tr>
+        <tr><td style="padding:18px 10px 0;text-align:center;font-size:11px;line-height:1.6;color:#5f5b6c;">V/R Match · Hidalgo Entertainment<br>Conecta de verdad. Rompe el hielo jugando.</td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+async function sendNewMatchEmail(recipientUserId, actorProfile, notificationId='') {
+  if (!MATCH_EMAIL_ENABLED) return {sent:false,reason:'disabled_globally'};
+  if (!notificationAllowed(recipientUserId,'match')) return {sent:false,reason:'disabled'};
+  const recipient=db.prepare("SELECT u.email,p.name FROM users u LEFT JOIN profiles p ON p.user_id=u.id WHERE u.id=? AND u.status='active'").get(recipientUserId);
+  if (!recipient?.email) return {sent:false,reason:'missing_recipient'};
+  const actorName=cleanName(actorProfile?.nombre||'Tu nuevo match') || 'Tu nuevo match';
+  const recipientName=cleanName(recipient?.name||'');
+  const appUrl=APP_BASE_URL || `http://localhost:${PORT}`;
+  const matchUrl=`${appUrl}/?${notificationId ? `notification=${encodeURIComponent(notificationId)}` : 'open=matches'}`;
+  const safeActor=escapeEmailHtml(actorName);
+  const safeRecipient=escapeEmailHtml(recipientName);
+  const initials=emailInitials(actorName);
+  const greeting=safeRecipient ? `<p style="margin:0 0 16px;">Hola <strong style="color:#ffffff;">${safeRecipient}</strong>,</p>` : '';
+  const bodyHtml=`${greeting}
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:18px 0 20px;"><tr>
+      <td style="width:58px;height:58px;border-radius:18px;background:#2a1832;border:1px solid #5d2a65;text-align:center;vertical-align:middle;font-size:19px;font-weight:900;color:#ff6dac;">${initials}</td>
+      <td style="padding-left:15px;vertical-align:middle;"><div style="font-size:12px;font-weight:800;letter-spacing:.12em;color:#8f899d;">NUEVO MATCH</div><div style="margin-top:4px;font-size:20px;font-weight:900;color:#ffffff;">${safeActor}</div></td>
+    </tr></table>
+    <p style="margin:0;"><strong style="color:#ffffff;">El interés es mutuo.</strong> Ya podéis empezar a hablar o romper el hielo con una partida dentro de V/R Match.</p>`;
+  const html=vrEmailShell({
+    preheader:`${actorName} ha hecho match contigo en V/R Match.`,
+    eyebrow:'TENÉIS MATCH 💗',
+    title:`${actorName} ha hecho match contigo`,
+    bodyHtml,
+    ctaLabel:'Ver mi match',
+    ctaUrl:matchUrl,
+    footerHtml:`Este es un aviso de servicio porque tienes activadas las notificaciones de <strong style="color:#a9a5b4;">Nuevo match</strong>. Puedes cambiar esta preferencia desde el centro de notificaciones de V/R Match.<br><br>Por seguridad, entra siempre desde <strong style="color:#a9a5b4;">vrmatch.es</strong>. Nunca te pediremos tu contraseña por email.`
+  });
+  const text=`${recipientName ? `Hola ${recipientName},\n\n` : ''}${actorName} ha hecho match contigo en V/R Match.\n\nEl interés es mutuo. Ya podéis hablar y romper el hielo jugando.\n\nVer mi match: ${matchUrl}\n\nPuedes desactivar los avisos de Nuevo match desde el centro de notificaciones de V/R Match.`;
+  return sendEmail({to:recipient.email,subject:`💗 ${actorName} ha hecho match contigo | V/R Match`,text,html});
 }
 async function sendVerificationEmail(req, user) {
   const token = issueAuthToken(user.id,'verify',EMAIL_VERIFY_HOURS*3600000);
@@ -3806,12 +3878,18 @@ io.on('connection', socket => {
     const reciprocal=Boolean(db.prepare('SELECT 1 FROM likes WHERE from_user=? AND to_user=?').get(target,userId));
     let match=null;
     if(reciprocal){
+      const existingActiveMatch=getActiveMatch(userId,target);
       const [u1,u2]=pair(userId,target); const id=matchIdFor(userId,target); const ts=now();
       db.prepare('INSERT INTO matches(id,user1,user2,created_at,active) VALUES(?,?,?,?,1) ON CONFLICT(user1,user2) DO UPDATE SET active=1').run(id,u1,u2,ts);
       match=getActiveMatch(userId,target); const me=publicProfile(getProfile(userId)),other=publicProfile(getProfile(target));
       emitToUser(userId,'dating_match',{...other,matchId:match.id}); emitToUser(target,'dating_match',{...me,matchId:match.id}); emitMatches(userId);emitMatches(target);
-      createNotification(userId,'match','¡Nuevo match!',`Tú y ${other?.nombre||'alguien'} os gustáis.`,{partnerId:target,matchId:match.id},target);
-      createNotification(target,'match','¡Nuevo match!',`Tú y ${me?.nombre||'alguien'} os gustáis.`,{partnerId:userId,matchId:match.id},userId);
+      const myNotification=createNotification(userId,'match','¡Nuevo match!',`Tú y ${other?.nombre||'alguien'} os gustáis.`,{partnerId:target,matchId:match.id},target);
+      const targetNotification=createNotification(target,'match','¡Nuevo match!',`Tú y ${me?.nombre||'alguien'} os gustáis.`,{partnerId:userId,matchId:match.id},userId);
+      // La persona que completa el match ya está dentro de la app. El correo se envía
+      // a la otra persona, que fue quien había mostrado interés previamente.
+      if(!existingActiveMatch && targetNotification){
+        setImmediate(()=>sendNewMatchEmail(target,me,targetNotification.id).catch(e=>console.warn('Email nuevo match:',e.message)));
+      }
     }
     done({ok:true,match:Boolean(match)}); socket.emit('dating_profiles',discoverFor(userId)); broadcastDiscovery();
   });
@@ -4001,6 +4079,6 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v${APP_VERSION} escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v${APP_VERSION} escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | email de match: ${MATCH_EMAIL_ENABLED?'activo':'inactivo'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
   console.log(`Resiliencia: reconexión de partidas ${Math.round(GAME_RECONNECT_GRACE_MS/1000)}s + mantenimiento + backup manual`);
   console.log(`Activación de ciudades: tokens hash-only · ${LAUNCH_ACTIVATION_DAYS} días · reenvío protegido`);console.log(`Socket origin: ${(allowedOrigins.length||appBaseOrigin)?'restringido':'ABIERTO (solo desarrollo)'}`);console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad: sesiones + bloqueados + exportación de datos');});

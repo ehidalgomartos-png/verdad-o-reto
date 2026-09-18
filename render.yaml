@@ -26,6 +26,8 @@ services:
         sync: false
       - key: SMTP_SECURE
         sync: false
+      - key: VR_MATCH_EMAIL_ENABLED
+        value: "true"
       - key: VAPID_PUBLIC_KEY
         sync: false
       - key: VAPID_PRIVATE_KEY
