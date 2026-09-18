@@ -380,6 +380,7 @@
       <div class="admin-tabs" role="tablist">
         <button id="adminTabReports" class="active" type="button" onclick="cambiarAdminTab('reports')">⚑ Denuncias</button>
         <button id="adminTabUsers" type="button" onclick="cambiarAdminTab('users')">👤 Usuarios</button>
+        <button id="adminTabSecurity" type="button" onclick="cambiarAdminTab('security')">🛡 Seguridad</button>
         <button id="adminTabHistory" type="button" onclick="cambiarAdminTab('history')">🕘 Historial</button>
         <button id="adminTabMetrics" type="button" onclick="cambiarAdminTab('metrics')">📈 Métricas</button>
         <button id="adminTabFeedback" type="button" onclick="cambiarAdminTab('feedback')">💬 Feedback</button>
@@ -407,6 +408,8 @@
         </div>
         <div id="adminUserList" class="admin-user-list"><div class="empty-state"><span>👤</span><strong>Busca o revisa usuarios</strong></div></div>
       </div>
+
+      <div id="adminPaneSecurity" class="admin-pane hidden"><div class="admin-toolbar admin-security-toolbar"><label>Verificaciones<select id="adminVerificationStatus" class="profile-select" onchange="cargarAdminSecurity()"><option value="pending">Pendientes</option><option value="all">Todas</option><option value="approved">Aprobadas</option><option value="rejected">Rechazadas</option></select></label><button class="btn btn-secondary" type="button" onclick="cargarAdminSecurity()">↻ Actualizar</button></div><div class="security-admin-grid"><section><div class="admin-history-head"><div><strong>Verificación manual</strong><small>La selfie privada se borra al tomar una decisión. Aprobar confirma una revisión visual; no sustituye una verificación documental de identidad.</small></div></div><div id="adminVerificationList" class="admin-verification-list"><div class="empty-state"><span>🛡️</span><strong>Sin cargar</strong></div></div></section><section><div class="admin-history-head"><div><strong>Señales de riesgo</strong><small>Priorización interna basada en denuncias, bloqueos y límites anti-spam. Es una ayuda para revisar, no una decisión automática.</small></div></div><div id="adminRiskList" class="admin-risk-list"><div class="empty-state"><span>✓</span><strong>Sin cargar</strong></div></div></section></div></div>
 
       <div id="adminPaneHistory" class="admin-pane hidden">
         <div class="admin-history-head"><div><strong>Historial de moderación</strong><small>Cada acción administrativa queda registrada.</small></div><button class="btn btn-secondary" type="button" onclick="cargarAdminHistory()">↻ Actualizar</button></div>
@@ -721,6 +724,7 @@
       <span class="eyebrow">CUENTA</span><h3>Privacidad y seguridad</h3>
       <div class="account-email-card"><div><small>CORREO</small><strong id="settingsEmail">—</strong></div><span id="emailVerifiedBadge" class="security-badge">Pendiente</span></div>
       <button id="resendVerificationButton" class="mini-link account-resend" type="button" onclick="reenviarVerificacion()">Reenviar verificación</button>
+      <div class="settings-section profile-verification-section"><strong>Verificación de perfil</strong><div id="profileVerificationState" class="profile-verification-state"><span>🛡️</span><div><b>Comprobando estado…</b><small>La verificación es opcional.</small></div></div><p class="account-legal-copy">Envía una selfie actual con el rostro visible. Solo la revisa moderación, no se publica y se elimina automáticamente al aprobar o rechazar la solicitud.</p><input id="verificationSelfieInput" class="hidden" type="file" accept="image/jpeg,image/png,image/webp" capture="user" onchange="prepararSelfieVerificacion(event)"><img id="verificationSelfiePreview" class="verification-selfie-preview hidden" alt="Vista previa privada de la selfie"><div class="verification-actions"><button id="verificationChooseButton" class="btn btn-secondary" type="button" onclick="$('verificationSelfieInput').click()">📷 Elegir selfie</button><button id="verificationSendButton" class="btn btn-primary hidden" type="button" onclick="enviarSelfieVerificacion()">Enviar a revisión</button></div></div>
       <div class="settings-section referral-account-section"><strong>Invita a tus amigos</strong><p class="account-legal-copy">Tu enlace personal cuenta las altas que traes a VRMatch. Llega a 3 para desbloquear la insignia de Fundador.</p><button class="btn btn-secondary" type="button" onclick="cerrarCuenta();abrirInvitaAmigos()">🔥 Ver mi enlace de invitación</button></div>
       <div class="settings-section"><strong>Privacidad</strong><label class="setting-switch"><span><b>Mostrarme en Descubrir</b><small>Desactívalo para pausar temporalmente tu perfil.</small></span><input id="privacyDiscoverable" type="checkbox" checked></label><label class="setting-switch"><span><b>Mostrar estado online</b><small>Oculta el indicador de conexión a otros usuarios.</small></span><input id="privacyShowOnline" type="checkbox" checked></label><label class="setting-switch"><span><b>Permitir invitaciones a jugar</b><small>Tus matches podrán proponerte una partida.</small></span><input id="privacyGameInvites" type="checkbox" checked></label><button class="btn btn-secondary" type="button" onclick="guardarPrivacidad()">Guardar privacidad</button></div>
       <div id="pwaInstallSection" class="settings-section"><strong>Aplicación</strong><div class="pwa-install-card"><div class="pwa-install-icon">V/R</div><div><b>Instalar V/R Match</b><small id="pwaInstallStatus">Añade V/R Match a tu pantalla de inicio y ábrelo como una app.</small></div></div><button id="pwaInstallButton" class="btn btn-secondary" type="button" onclick="instalarPWA()">⇩ Instalar aplicación</button></div>
@@ -946,6 +950,8 @@
     let referralState = null;
     let communityCityState = null;
     let citySelectorReturn = 'profile';
+    let verificationSelfieData = '';
+    let profileVerificationState = null;
 
     const baseDeDatos = {
       rompehielos: {
@@ -2315,6 +2321,7 @@
       $('resendVerificationButton').classList.toggle('hidden',currentUserEmailVerified);
       $('privacyDiscoverable').checked=currentPrivacy.discoverable!==false; $('privacyShowOnline').checked=currentPrivacy.showOnline!==false; $('privacyGameInvites').checked=currentPrivacy.allowGameInvites!==false;
       $('adminPanelButton').classList.toggle('hidden',!currentUserAdmin); $('accountModal').classList.remove('hidden'); $('accountModal').setAttribute('aria-hidden','false');
+      cargarEstadoVerificacion().catch(()=>{});
     }
     function cerrarCuenta() { $('accountModal').classList.add('hidden'); $('accountModal').setAttribute('aria-hidden','true'); }
     let accountControlTab='sessions';
@@ -2387,6 +2394,20 @@
       if(!res.ok)return mostrarToast(res.error||'No se pudo enviar el comentario.','error');
       cerrarFeedback(); mostrarToast(res.message||'Comentario enviado. Gracias.','info');
     }
+    function renderEstadoVerificacion(state={}){
+      profileVerificationState=state||{};const box=$('profileVerificationState'),choose=$('verificationChooseButton'),send=$('verificationSendButton'),preview=$('verificationSelfiePreview');if(!box)return;
+      const req=state.request||null;let icon='🛡️',title='Verificación opcional',copy='Añade una señal de confianza a tu perfil.';
+      if(state.verified){icon='✓';title='Perfil verificado';copy=state.verifiedAt?`Aprobado ${fechaCuenta(state.verifiedAt)}.`:'Tu perfil muestra la insignia de verificación.';}
+      else if(req?.status==='pending'){icon='⏳';title='Revisión pendiente';copy=`Solicitud enviada ${fechaCuenta(req.createdAt)}. Te avisaremos cuando se revise.`;}
+      else if(req?.status==='rejected'){icon='↻';title='Necesitamos otra selfie';copy=req.note||'Puedes enviar una nueva selfie con buena luz y el rostro visible.';}
+      box.classList.toggle('verified',Boolean(state.verified));box.classList.toggle('pending',req?.status==='pending');box.innerHTML=`<span>${icon}</span><div><b>${escapeHtml(title)}</b><small>${escapeHtml(copy)}</small></div>`;
+      const locked=Boolean(state.verified||req?.status==='pending');choose.classList.toggle('hidden',locked);if(locked){send.classList.add('hidden');preview.classList.add('hidden');verificationSelfieData='';}
+    }
+    async function cargarEstadoVerificacion(){const res=await api('/api/profile/verification');if(res.ok)renderEstadoVerificacion(res);}
+    function comprimirSelfieVerificacion(file){return new Promise((resolve,reject)=>{if(!file||!/^image\/(jpeg|png|webp)$/i.test(file.type||''))return reject(new Error('Selecciona una imagen JPG, PNG o WebP.'));const reader=new FileReader();reader.onerror=()=>reject(new Error('No se pudo leer la imagen.'));reader.onload=()=>{const img=new Image();img.onerror=()=>reject(new Error('La imagen no es válida.'));img.onload=()=>{const max=1200,scale=Math.min(1,max/Math.max(img.width,img.height)),w=Math.max(1,Math.round(img.width*scale)),hh=Math.max(1,Math.round(img.height*scale)),canvas=document.createElement('canvas');canvas.width=w;canvas.height=hh;canvas.getContext('2d').drawImage(img,0,0,w,hh);resolve(canvas.toDataURL('image/jpeg',.82));};img.src=reader.result;};reader.readAsDataURL(file);});}
+    async function prepararSelfieVerificacion(event){const file=event?.target?.files?.[0];if(!file)return;try{verificationSelfieData=await comprimirSelfieVerificacion(file);$('verificationSelfiePreview').src=verificationSelfieData;$('verificationSelfiePreview').classList.remove('hidden');$('verificationSendButton').classList.remove('hidden');}catch(e){verificationSelfieData='';mostrarToast(e.message||'No se pudo preparar la selfie.','error');}finally{if(event?.target)event.target.value='';}}
+    async function enviarSelfieVerificacion(){if(!verificationSelfieData)return mostrarToast('Elige primero una selfie.','warn');const btn=$('verificationSendButton'),old=btn.textContent;btn.disabled=true;btn.textContent='Enviando…';const res=await api('/api/profile/verification/request',{method:'POST',body:{image:verificationSelfieData}});btn.disabled=false;btn.textContent=old;if(!res.ok)return mostrarToast(res.error||'No se pudo enviar.','error');verificationSelfieData='';renderEstadoVerificacion(res);mostrarToast(res.message||'Solicitud enviada a revisión.','info');}
+
     async function reenviarVerificacion() { const res=await api('/api/auth/resend-verification',{method:'POST',body:{email:currentUserEmail}}); mostrarToast(res.message||'Solicitud enviada.','info'); }
     async function guardarPrivacidad() { const body={discoverable:$('privacyDiscoverable').checked,showOnline:$('privacyShowOnline').checked,allowGameInvites:$('privacyGameInvites').checked}; const res=await api('/api/account/privacy',{method:'PUT',body}); if(!res.ok)return mostrarToast(res.error||'No se pudo guardar.','error'); currentPrivacy=res.privacy||body; mostrarToast('Privacidad actualizada.','info'); if(socket.connected) registrarDating(); }
     async function cambiarPasswordCuenta() { const currentPassword=$('currentPassword').value,newPassword=$('newPassword').value; if(newPassword.length<8)return mostrarToast('La nueva contraseña debe tener al menos 8 caracteres.','warn'); const res=await api('/api/account/change-password',{method:'POST',body:{currentPassword,newPassword}}); if(!res.ok)return mostrarToast(res.error||'No se pudo cambiar la contraseña.','error'); $('currentPassword').value='';$('newPassword').value='';mostrarToast('Contraseña actualizada. Las otras sesiones se cerraron.','info'); }
@@ -2475,9 +2496,10 @@
       [...$('adminStats').querySelectorAll('strong')].forEach((el,i)=>el.textContent=String(vals[i]??'—'));
     }
     async function cambiarAdminTab(tab='reports') {
-      adminCurrentTab=['reports','users','history','metrics','feedback','monetization','production','system'].includes(tab)?tab:'reports';
+      adminCurrentTab=['reports','users','security','history','metrics','feedback','monetization','production','system'].includes(tab)?tab:'reports';
       $('adminPaneReports').classList.toggle('hidden',adminCurrentTab!=='reports');
       $('adminPaneUsers').classList.toggle('hidden',adminCurrentTab!=='users');
+      $('adminPaneSecurity').classList.toggle('hidden',adminCurrentTab!=='security');
       $('adminPaneHistory').classList.toggle('hidden',adminCurrentTab!=='history');
       $('adminPaneMetrics').classList.toggle('hidden',adminCurrentTab!=='metrics');
       $('adminPaneFeedback').classList.toggle('hidden',adminCurrentTab!=='feedback');
@@ -2486,6 +2508,7 @@
       $('adminPaneSystem').classList.toggle('hidden',adminCurrentTab!=='system');
       $('adminTabReports').classList.toggle('active',adminCurrentTab==='reports');
       $('adminTabUsers').classList.toggle('active',adminCurrentTab==='users');
+      $('adminTabSecurity').classList.toggle('active',adminCurrentTab==='security');
       $('adminTabHistory').classList.toggle('active',adminCurrentTab==='history');
       $('adminTabMetrics').classList.toggle('active',adminCurrentTab==='metrics');
       $('adminTabFeedback').classList.toggle('active',adminCurrentTab==='feedback');
@@ -2494,6 +2517,7 @@
       $('adminTabSystem').classList.toggle('active',adminCurrentTab==='system');
       if(adminCurrentTab==='reports')await cargarAdminReports();
       if(adminCurrentTab==='users')await cargarAdminUsers();
+      if(adminCurrentTab==='security')await cargarAdminSecurity();
       if(adminCurrentTab==='history')await cargarAdminHistory();
       if(adminCurrentTab==='metrics')await cargarAdminMetrics();
       if(adminCurrentTab==='feedback')await cargarAdminFeedback();
@@ -2502,8 +2526,13 @@
       if(adminCurrentTab==='system')await cargarAdminSystem();
     }
     const adminReasonLabels={harassment:'Acoso',fake:'Perfil falso',spam:'Spam / estafa',sexual:'Contenido sexual no consentido',underage:'Posible menor de edad',other:'Otro'};
-    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',suspend:'Cuenta suspendida',reactivate:'Cuenta reactivada',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado',feedback_resolve:'Feedback resuelto',feedback_dismiss:'Feedback descartado',feedback_reopen:'Feedback reabierto',system_cleanup_expired:'Limpieza de sesiones/tokens',system_cleanup_telemetry:'Depuración de telemetría',system_cleanup_orphan_uploads:'Limpieza de fotos huérfanas',system_optimize:'Optimización SQLite',system_backup_download:'Backup manual descargado',monetization_paid_enabled:'Premium de pago activado',monetization_launch_free_enabled:'Premium gratis activado',launch_city_unlocked:'Ciudad desbloqueada',launch_city_test_reset:'Ciudad de prueba reiniciada'};
+    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',suspend:'Cuenta suspendida',reactivate:'Cuenta reactivada',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado',feedback_resolve:'Feedback resuelto',feedback_dismiss:'Feedback descartado',feedback_reopen:'Feedback reabierto',verify_profile:'Perfil verificado',reject_verification:'Verificación rechazada',revoke_verification:'Verificación retirada',system_cleanup_expired:'Limpieza de sesiones/tokens',system_cleanup_telemetry:'Depuración de telemetría',system_cleanup_orphan_uploads:'Limpieza de fotos huérfanas',system_optimize:'Optimización SQLite',system_backup_download:'Backup manual descargado',monetization_paid_enabled:'Premium de pago activado',monetization_launch_free_enabled:'Premium gratis activado',launch_city_unlocked:'Ciudad desbloqueada',launch_city_test_reset:'Ciudad de prueba reiniciada'};
     function adminFecha(ts){return ts?new Date(Number(ts)).toLocaleString('es-ES'):'—';}
+    function riesgoLabel(level){return level==='high'?'ALTO':level==='medium'?'MEDIO':level==='low'?'BAJO':'SIN SEÑALES';}
+    async function cargarAdminSecurity(){if(!currentUserAdmin)return;const vbox=$('adminVerificationList'),rbox=$('adminRiskList');vbox.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Cargando verificaciones…</strong></div>';rbox.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Calculando señales…</strong></div>';const res=await api(`/api/admin/security?status=${encodeURIComponent($('adminVerificationStatus').value)}`);if(!res.ok){vbox.innerHTML=rbox.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudo cargar.')}</strong></div>`;return;}const rows=res.verifications||[],risk=res.risk||[];vbox.innerHTML=rows.length?rows.map(v=>`<article class="verification-admin-card"><div class="verification-admin-head"><div><strong>${escapeHtml(v.name||v.email||'Usuario')}</strong><small>${escapeHtml(v.email||'')} · ${escapeHtml(v.city||'Sin ciudad')}</small></div><span class="verification-status ${escapeHtml(v.status)}">${escapeHtml(v.status)}</span></div><div id="verificationProof_${escapeHtml(v.id)}" class="verification-proof-box hidden"></div><div class="verification-admin-actions">${v.status==='pending'?`<button class="btn btn-secondary" type="button" onclick="verPruebaVerificacion('${escapeHtml(v.id)}')">👁 Ver selfie</button><button class="btn btn-secondary" type="button" onclick="verAdminUsuario('${escapeHtml(v.user_id)}')">Ver fotos</button><button class="btn btn-primary" type="button" onclick="accionVerificacion('${escapeHtml(v.id)}','approve')">✓ Aprobar</button><button class="btn btn-secondary danger-soft" type="button" onclick="accionVerificacion('${escapeHtml(v.id)}','reject')">Rechazar</button>`:`<button class="btn btn-secondary" type="button" onclick="verAdminUsuario('${escapeHtml(v.user_id)}')">Ver cuenta</button>`}</div><small class="verification-date">Solicitud: ${escapeHtml(adminFecha(v.created_at))}${v.reviewed_at?` · Revisada: ${escapeHtml(adminFecha(v.reviewed_at))}`:''}</small></article>`).join(''):'<div class="empty-state"><span>✓</span><strong>No hay solicitudes con este estado</strong></div>';rbox.innerHTML=risk.length?risk.map(u=>`<button class="risk-admin-card ${escapeHtml(u.risk?.level||'none')}" type="button" onclick="verAdminUsuario('${escapeHtml(u.id)}')"><span class="risk-score">${Number(u.risk?.score)||0}</span><span><b>${escapeHtml(u.name||u.email||'Usuario')}</b><small>${escapeHtml(u.city||'Sin ciudad')} · ${u.profile_verified?'✓ perfil verificado':'sin verificación'}</small><small>${Number(u.risk?.openReports)||0} abiertas · ${Number(u.risk?.blocksReceived)||0} bloqueos recibidos · ${Number(u.risk?.signals)||0} señales</small></span><i>${escapeHtml(riesgoLabel(u.risk?.level))}</i></button>`).join(''):'<div class="empty-state"><span>✓</span><strong>No hay señales de riesgo registradas</strong><small>La ausencia de señales no equivale a una garantía de seguridad.</small></div>';}
+    async function verPruebaVerificacion(id){const box=$(`verificationProof_${id}`);if(!box)return;if(box.dataset.loaded==='1'){box.classList.toggle('hidden');return;}box.classList.remove('hidden');box.innerHTML='<span class="spinner"></span>';const res=await api(`/api/admin/verifications/${encodeURIComponent(id)}/proof`);if(!res.ok){box.innerHTML=`<small>${escapeHtml(res.error||'No disponible')}</small>`;return;}box.innerHTML=`<img src="${res.image}" alt="Selfie privada de verificación"><small>Prueba privada. No descargar ni reutilizar fuera de esta revisión.</small>`;box.dataset.loaded='1';}
+    async function accionVerificacion(id,action){const approve=action==='approve';if(!confirm(approve?'¿Aprobar esta verificación de perfil?':'¿Rechazar esta solicitud y permitir una nueva selfie?'))return;const note=approve?'':String(prompt('Motivo breve para que el usuario pueda corregir la selfie (opcional):','')||'').slice(0,500);const res=await api(`/api/admin/verifications/${encodeURIComponent(id)}/action`,{method:'POST',body:{action,note}});if(!res.ok)return mostrarToast(res.error||'No se pudo guardar.','error');mostrarToast(approve?'Perfil verificado.':'Solicitud rechazada.','info');await cargarAdminStats();await cargarAdminSecurity();}
+
     async function cargarAdminReports() {
       if(!currentUserAdmin)return;
       const status=$('adminReportStatus').value;
@@ -2567,7 +2596,7 @@
         const card=document.createElement('article');card.className='admin-user-card';
         const avatar=document.createElement('div');avatar.className='admin-user-avatar';pintarAvatar(avatar,u.avatar||'',u.name||u.email||'U');
         const copy=document.createElement('div');copy.className='admin-user-copy';
-        copy.innerHTML=`<div class="admin-user-title"><strong>${escapeHtml(u.name||'Sin perfil')}</strong><span class="${u.status==='suspended'?'suspended':'active'}">${escapeHtml(u.status)}</span>${u.plus_active?'<span class="plus-admin-chip">V/R+</span>':''}</div><small>${escapeHtml(u.email||'')}</small><p>${escapeHtml(u.city||'Sin ciudad')} · ${u.age?`${Number(u.age)} años · `:''}${u.reports_received||0} denuncias recibidas</p><div class="admin-user-metrics"><span>💬 ${u.messages_sent||0}</span><span>💕 ${u.active_matches||0}</span><span>⚑ ${u.reports_sent||0}</span></div>`;
+        copy.innerHTML=`<div class="admin-user-title"><strong>${escapeHtml(u.name||'Sin perfil')}</strong><span class="${u.status==='suspended'?'suspended':'active'}">${escapeHtml(u.status)}</span>${u.profile_verified?'<span class="profile-admin-verified">✓ verificado</span>':''}${u.plus_active?'<span class="plus-admin-chip">V/R+</span>':''}</div><small>${escapeHtml(u.email||'')}</small><p>${escapeHtml(u.city||'Sin ciudad')} · ${u.age?`${Number(u.age)} años · `:''}${u.reports_received||0} denuncias recibidas</p><div class="admin-user-metrics"><span>💬 ${u.messages_sent||0}</span><span>💕 ${u.active_matches||0}</span><span>⚑ ${u.reports_sent||0}</span>${Number(u.risk?.score)>0?`<span class="risk-mini ${escapeHtml(u.risk?.level||'low')}">🛡 ${Number(u.risk.score)}</span>`:''}</div>`;
         const btn=document.createElement('button');btn.className='btn btn-secondary';btn.type='button';btn.textContent='Revisar';btn.onclick=()=>verAdminUsuario(u.id);
         card.append(avatar,copy,btn);list.appendChild(card);
       });
@@ -2587,7 +2616,7 @@
       const photos=Array.isArray(u.photos)?u.photos:[];
       $('adminUserDetail').innerHTML=`<div class="admin-user-detail-head"><div><span class="security-badge ${u.status==='active'?'verified':''}">${escapeHtml(u.status||'')}</span><h3>${escapeHtml(u.name||'Sin perfil')}${u.age?`, ${Number(u.age)}`:''}</h3><p>${escapeHtml(u.email||'')}</p></div><small>Última actividad<br><b>${escapeHtml(adminFecha(u.last_seen_at))}</b></small></div>
         <div class="admin-user-detail-grid"><div><strong>${s.reportsReceived||0}</strong><span>denuncias recibidas</span></div><div><strong>${s.messagesSent||0}</strong><span>mensajes</span></div><div><strong>${s.activeMatches||0}</strong><span>matches activos</span></div><div><strong>${s.blocksMade||0}</strong><span>bloqueos hechos</span></div></div>
-        <div class="admin-user-profile-preview"><b>${escapeHtml(u.city||'Sin ciudad')}</b><span>${u.email_verified?'Correo verificado':'Correo pendiente'} · ${u.discoverable===0?'Perfil oculto':'Visible en Descubrir'} · ${u.locationEnabled?'Ubicación configurada':'Sin ubicación'} · ${u.plus_status==='active' && (!u.plus_expires_at || Number(u.plus_expires_at)>Date.now())?'V/R+ activo':'V/R Free'}</span><p>${escapeHtml(u.bio||'Sin biografía')}</p><small>${(u.interests||[]).map(x=>escapeHtml(x)).join(' · ')||'Sin intereses'}</small></div>
+        <div class="admin-user-profile-preview"><b>${escapeHtml(u.city||'Sin ciudad')}</b><span>${u.email_verified?'Correo verificado':'Correo pendiente'} · ${u.profile_verified?'✓ Perfil verificado':'Perfil sin verificar'} · ${u.discoverable===0?'Perfil oculto':'Visible en Descubrir'} · ${u.locationEnabled?'Ubicación configurada':'Sin ubicación'} · ${u.plus_status==='active' && (!u.plus_expires_at || Number(u.plus_expires_at)>Date.now())?'V/R+ activo':'V/R Free'}</span><p>${escapeHtml(u.bio||'Sin biografía')}</p><small>${(u.interests||[]).map(x=>escapeHtml(x)).join(' · ')||'Sin intereses'}</small></div><div class="admin-risk-summary ${escapeHtml(s.risk?.level||'none')}"><b>Señal de riesgo: ${Number(s.risk?.score)||0}/100 · ${escapeHtml(riesgoLabel(s.risk?.level))}</b><small>${Number(s.risk?.openReports)||0} denuncias abiertas · ${Number(s.blocksReceived)||0} bloqueos recibidos · ${Number(s.risk?.signals)||0} señales anti-spam en 30 días. Sirve para priorizar revisión, no para sancionar automáticamente.</small></div>
         ${photos.length?`<div class="admin-photo-strip">${photos.slice(0,4).map(src=>`<img src="${escapeHtml(src)}" alt="">`).join('')}</div>`:''}
         <div class="admin-user-mini-history"><strong>Últimas denuncias</strong>${reports.length?reports.slice(0,5).map(r=>`<div><span>${escapeHtml(adminReasonLabels[r.reason]||r.reason)} · ${escapeHtml(r.status)}</span><small>${escapeHtml(adminFecha(r.created_at))}</small></div>`).join(''):'<small>No tiene denuncias recibidas.</small>'}</div>
         <div class="admin-user-mini-history"><strong>Últimas acciones</strong>${actions.length?actions.slice(0,5).map(a=>`<div><span>${escapeHtml(adminActionLabels[a.action]||a.action)}</span><small>${escapeHtml(adminFecha(a.created_at))}</small></div>`).join(''):'<small>Sin acciones previas.</small>'}</div>`;
@@ -2596,6 +2625,7 @@
         ?[['reactivate','Reactivar cuenta','success']]
         :[['suspend','Suspender cuenta','danger']];
       defs.push([u.discoverable===0?'show_profile':'hide_profile',u.discoverable===0?'Mostrar perfil':'Ocultar perfil','']);
+      if(u.profile_verified)defs.push(['revoke_verification','Retirar verificación','danger-soft']);
       defs.push(['clear_photos','Eliminar fotos','danger-soft'],['clear_bio','Limpiar biografía','danger-soft']);
       const plusActive=u.plus_status==='active' && (!u.plus_expires_at || Number(u.plus_expires_at)>Date.now());
       defs.push([plusActive?'revoke_plus':'grant_plus_30d',plusActive?'Revocar V/R+':'Conceder V/R+ 30 días',plusActive?'danger-soft':'success']);
@@ -2828,6 +2858,7 @@
         preferences: { ageMin:Number($('prefAgeMin').value)||18, ageMax:Number($('prefAgeMax').value)||99, lookingFor:$('lookingForUsuario').value, city:$('prefCity').value, interest:$('prefInterest').value, radiusKm:Number($('prefRadiusKm').value)||50 }
       }, (res) => {
         if (res && !res.ok) mostrarToast(res.error || 'No se pudo entrar a Descubrir.', 'error');
+        else if(res?.verificationRevoked){profileVerificationState=null;mostrarToast('Al cambiar tus fotos se ha retirado la verificación. Puedes solicitarla de nuevo desde Cuenta.','info');}
       });
     }
 
@@ -2952,7 +2983,7 @@
       $('datingBio').textContent = p.bio || 'Prefiero que me conozcas jugando.';
       const premiumMeta=$('datingPremiumMeta'); premiumMeta.innerHTML='';
       if(p.boosted){const x=document.createElement('span');x.className='boosted';x.textContent='⚡ Destacado';premiumMeta.appendChild(x);}
-      if(p.verified){const x=document.createElement('span');x.textContent='✓ Correo confirmado';premiumMeta.appendChild(x);}
+      if(p.profileVerified){const x=document.createElement('span');x.className='profile-verified-chip';x.textContent='✓ Perfil verificado';premiumMeta.appendChild(x);}else if(p.verified){const x=document.createElement('span');x.textContent='✓ Correo confirmado';premiumMeta.appendChild(x);}
       if(Number(p.sharedInterests)>0){const x=document.createElement('span');x.textContent=`✨ ${Number(p.sharedInterests)} en común`;premiumMeta.appendChild(x);}
       const interestBox = $('datingInterests');
       interestBox.innerHTML = '';

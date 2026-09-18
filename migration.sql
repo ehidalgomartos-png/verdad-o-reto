@@ -159,3 +159,33 @@ CREATE TABLE IF NOT EXISTS retention_email_log (
 CREATE INDEX IF NOT EXISTS idx_retention_email_user_kind ON retention_email_log(user_id,kind,sent_at DESC);
 CREATE INDEX IF NOT EXISTS idx_retention_email_context ON retention_email_log(kind,context_key,sent_at DESC);
 -- La columna notification_preferences.retention_email se añade automáticamente al arrancar.
+
+
+-- V18.15.0 — verificación manual y señales anti-abuso
+-- En la aplicación real, profiles.profile_verified y profiles.profile_verified_at
+-- se añaden automáticamente con ensureColumn al arrancar.
+CREATE TABLE IF NOT EXISTS profile_verification_requests (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  proof_filename TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  note TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  reviewed_at INTEGER,
+  reviewed_by TEXT,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_profile_verification_user ON profile_verification_requests(user_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_profile_verification_status ON profile_verification_requests(status,created_at ASC);
+CREATE TABLE IF NOT EXISTS security_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  kind TEXT NOT NULL,
+  severity INTEGER NOT NULL DEFAULT 1,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_security_events_user ON security_events(user_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_security_events_kind ON security_events(kind,created_at DESC);

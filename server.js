@@ -30,7 +30,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.14.0';
+const APP_VERSION = '18.15.0';
 const LEGAL_VERSION = '2026-09-18';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -40,6 +40,7 @@ const PUBLIC_DIR = path.join(ROOT, 'public');
 const STORAGE_DIR = process.env.VR_STORAGE_DIR || ROOT;
 const DATA_DIR = path.join(STORAGE_DIR, 'data');
 const UPLOAD_DIR = path.join(STORAGE_DIR, 'uploads');
+const VERIFICATION_DIR = path.join(STORAGE_DIR, 'verification');
 const DB_PATH = process.env.VR_DB_PATH || path.join(DATA_DIR, 'vrmatch.db');
 const SESSION_DAYS = 30;
 const VALID_MAZOS = new Set(['rompehielos', 'parejas', 'seccionXX']);
@@ -89,6 +90,7 @@ const mailTransport = SMTP_CONFIGURED ? nodemailer.createTransport({
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+fs.mkdirSync(VERIFICATION_DIR, { recursive: true });
 
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
@@ -193,6 +195,8 @@ ensureColumn('profiles', 'radius_km', 'INTEGER NOT NULL DEFAULT 50');
 ensureColumn('profiles', 'location_lat', 'REAL');
 ensureColumn('profiles', 'location_lng', 'REAL');
 ensureColumn('profiles', 'location_updated_at', 'INTEGER');
+ensureColumn('profiles', 'profile_verified', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('profiles', 'profile_verified_at', 'INTEGER');
 ensureColumn('reports', 'updated_at', 'INTEGER');
 ensureColumn('reports', 'moderator_note', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('reports', 'match_id', 'TEXT');
@@ -419,6 +423,32 @@ CREATE INDEX IF NOT EXISTS idx_game_sessions_match_started ON game_sessions(matc
 CREATE INDEX IF NOT EXISTS idx_game_sessions_status_started ON game_sessions(status,started_at DESC);
 `);
 ensureColumn('notification_preferences', 'retention_email', 'INTEGER NOT NULL DEFAULT 1');
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS profile_verification_requests (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  proof_filename TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  note TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  reviewed_at INTEGER,
+  reviewed_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_profile_verification_user ON profile_verification_requests(user_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_profile_verification_status ON profile_verification_requests(status,created_at ASC);
+CREATE TABLE IF NOT EXISTS security_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  severity INTEGER NOT NULL DEFAULT 1,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_security_events_user ON security_events(user_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_security_events_kind ON security_events(kind,created_at DESC);
+`);
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS launch_cities (
@@ -1651,6 +1681,48 @@ function cleanAvatar(userId, value) {
   return ownedUploadPath(userId, avatar);
 }
 
+function verificationMime(filename='') {
+  const ext=path.extname(String(filename)).toLowerCase();
+  if(ext==='.png')return 'image/png';
+  if(ext==='.webp')return 'image/webp';
+  return 'image/jpeg';
+}
+function removeVerificationProof(filename='') {
+  const base=path.basename(String(filename||''));
+  if(!base || !base.startsWith('verify_'))return;
+  try{const full=path.join(VERIFICATION_DIR,base);if(fs.existsSync(full))fs.unlinkSync(full);}catch(e){console.warn('No se pudo borrar prueba de verificación:',e.message);}
+}
+function deleteVerificationFilesForUser(userId) {
+  try{for(const filename of fs.readdirSync(VERIFICATION_DIR)){if(filename.startsWith(`verify_${userId}_`))fs.unlinkSync(path.join(VERIFICATION_DIR,filename));}}catch(e){console.warn('No se pudieron limpiar pruebas de verificación:',e.message);}
+}
+function saveVerificationImage(userId,value) {
+  const str=String(value||'');
+  const m=str.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/i);
+  if(!m)return '';
+  const buffer=Buffer.from(m[2],'base64');
+  if(!buffer.length || buffer.length>2.2*1024*1024)return '';
+  const filename=`verify_${userId}_${Date.now()}_${crypto.randomBytes(5).toString('hex')}.${mimeExt(m[1].toLowerCase())}`;
+  fs.writeFileSync(path.join(VERIFICATION_DIR,filename),buffer,{mode:0o600});
+  return filename;
+}
+function verificationState(userId) {
+  const profile=db.prepare('SELECT profile_verified,profile_verified_at FROM profiles WHERE user_id=?').get(userId);
+  const request=db.prepare(`SELECT id,status,note,created_at,updated_at,reviewed_at FROM profile_verification_requests WHERE user_id=? ORDER BY created_at DESC LIMIT 1`).get(userId)||null;
+  return {verified:Boolean(profile?.profile_verified),verifiedAt:profile?.profile_verified_at||null,request:request?{id:request.id,status:request.status,note:request.status==='rejected'?cleanShortText(request.note,240):'',createdAt:request.created_at,updatedAt:request.updated_at,reviewedAt:request.reviewed_at||null}:null};
+}
+function logSecurityEvent(userId,kind,severity=1,metadata={}) {
+  const uid=userId && db.prepare('SELECT 1 FROM users WHERE id=?').get(userId)?userId:null;
+  try{db.prepare('INSERT INTO security_events(id,user_id,kind,severity,metadata_json,created_at) VALUES(?,?,?,?,?,?)').run(safeId('sec'),uid,cleanShortText(kind,60),Math.max(1,Math.min(5,Number(severity)||1)),JSON.stringify(metadata&&typeof metadata==='object'?metadata:{}),now());}catch(e){console.warn('Security event:',e.message);}
+}
+function securityRiskForUser(userId) {
+  const reports=db.prepare(`SELECT COUNT(*) total,SUM(CASE WHEN status='open' THEN 1 ELSE 0 END) open FROM reports WHERE reported=?`).get(userId)||{};
+  const blocks=db.prepare('SELECT COUNT(*) n FROM blocks WHERE blocked=?').get(userId)?.n||0;
+  const signals=db.prepare('SELECT COALESCE(SUM(severity),0) severity,COUNT(*) n FROM security_events WHERE user_id=? AND created_at>?').get(userId,now()-30*24*60*60*1000)||{};
+  const verified=Boolean(db.prepare('SELECT profile_verified FROM profiles WHERE user_id=?').get(userId)?.profile_verified);
+  const score=Math.min(100,Number(reports.open||0)*20+Math.max(0,Number(reports.total||0)-Number(reports.open||0))*5+Math.min(10,Number(blocks))*3+Math.min(30,Number(signals.severity||0)*4));
+  return {score,level:score>=45?'high':score>=20?'medium':score>0?'low':'none',reports:Number(reports.total||0),openReports:Number(reports.open||0),blocksReceived:Number(blocks||0),signals:Number(signals.n||0),profileVerified:verified};
+}
+
 function cleanRadius(value, fallback = 50) {
   const allowed = [5, 15, 30, 50, 100, 200];
   const n = Number(value);
@@ -1859,7 +1931,7 @@ function billingPublicState(userId){
   };
 }
 
-const NOTIFICATION_TYPES = new Set(['match','message','game_invite','game_turn']);
+const NOTIFICATION_TYPES = new Set(['match','message','game_invite','game_turn','system']);
 function notificationPreferences(userId) {
   const row = db.prepare('SELECT * FROM notification_preferences WHERE user_id=?').get(userId);
   return {
@@ -1877,6 +1949,7 @@ function notificationAllowed(userId, type) {
   if (type === 'message') return p.newMessage;
   if (type === 'game_invite') return p.gameInvite;
   if (type === 'game_turn') return p.gameTurn;
+  if (type === 'system') return true;
   return false;
 }
 function notificationFromRow(row) {
@@ -1967,6 +2040,8 @@ function profileFromRow(row) {
     intereses: safeJsonArray(row.interests_json),
     avatar: row.avatar || '',
     fotos: safeJsonArray(row.photos_json),
+    profileVerified: row.profile_verified === 1,
+    profileVerifiedAt: row.profile_verified_at || null,
     preferences: {
       ageMin: row.age_min,
       ageMax: row.age_max,
@@ -1994,7 +2069,7 @@ function publicProfile(profile) {
   if (!profile) return null;
   // Minimiza datos compartidos entre usuarios: preferencias, privacidad y
   // metadatos internos de ubicación permanecen solo en el servidor/cuenta propia.
-  const { preferences, privacy, location, ...safe } = profile;
+  const { preferences, privacy, location, profileVerifiedAt, ...safe } = profile;
   return safe;
 }
 function profileAccepts(profile, candidate) {
@@ -2140,7 +2215,7 @@ function reactivateUser(userId) {
 }
 function clearProfilePhotos(userId) {
   deleteUserUploads(userId);
-  db.prepare("UPDATE profiles SET avatar='',photos_json='[]',updated_at=? WHERE user_id=?").run(now(),userId);
+  db.prepare("UPDATE profiles SET avatar='',photos_json='[]',profile_verified=0,profile_verified_at=NULL,updated_at=? WHERE user_id=?").run(now(),userId);
 }
 function cleanupSessions() { db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now()); db.prepare('DELETE FROM auth_tokens WHERE expires_at <= ? OR used_at IS NOT NULL').run(now()); }
 cleanupSessions();
@@ -2423,6 +2498,26 @@ app.delete('/api/account/blocked/:userId', requireAuth, rateLimit({limit:30,wind
   res.json({ok:true});
 });
 
+app.get('/api/profile/verification', requireAuth, (req,res) => {
+  res.json({ok:true,...verificationState(req.user.id)});
+});
+
+app.post('/api/profile/verification/request', requireAuth, rateLimit({limit:3,windowMs:24*60*60*1000,key:req=>req.user.id}), (req,res) => {
+  const user=db.prepare("SELECT email_verified,status FROM users WHERE id=?").get(req.user.id);
+  if(!user || user.status!=='active')return res.status(403).json({ok:false,error:'Cuenta no disponible.'});
+  if(!user.email_verified)return res.status(403).json({ok:false,error:'Verifica primero tu correo.'});
+  const profile=getProfile(req.user.id);
+  if(!profile || !profile.nombre || !Array.isArray(profile.fotos) || profile.fotos.length<1)return res.status(400).json({ok:false,error:'Completa tu perfil y añade al menos una foto pública antes de solicitar la verificación.'});
+  if(profile.profileVerified)return res.status(409).json({ok:false,error:'Tu perfil ya está verificado.'});
+  const pending=db.prepare("SELECT id FROM profile_verification_requests WHERE user_id=? AND status='pending' ORDER BY created_at DESC LIMIT 1").get(req.user.id);
+  if(pending)return res.status(409).json({ok:false,error:'Ya tienes una solicitud pendiente de revisión.'});
+  const filename=saveVerificationImage(req.user.id,req.body?.image);
+  if(!filename)return res.status(400).json({ok:false,error:'La selfie no es válida o supera 2,2 MB. Prueba con otra imagen.'});
+  const id=safeId('ver'),ts=now();
+  db.prepare('INSERT INTO profile_verification_requests(id,user_id,proof_filename,status,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(id,req.user.id,filename,'pending',ts,ts);
+  res.json({ok:true,...verificationState(req.user.id),message:'Solicitud enviada. La selfie es privada y solo se usa para esta revisión.'});
+});
+
 app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60*1000,key:req=>req.user.id}), (req,res) => {
   try {
     const userId=req.user.id;
@@ -2437,6 +2532,8 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
     const feedback=db.prepare('SELECT id,kind,message,page,created_at,status,admin_note,updated_at FROM feedback WHERE user_id=? ORDER BY created_at ASC').all(userId);
     const notifications=db.prepare('SELECT id,source_user,type,title,body,data_json,created_at,read_at FROM notifications WHERE user_id=? ORDER BY created_at ASC').all(userId).map(n=>({...n,data:safeJsonObject(n.data_json),data_json:undefined}));
     const retentionEmails=db.prepare('SELECT kind,context_key,sent_at,status FROM retention_email_log WHERE user_id=? ORDER BY sent_at ASC').all(userId);
+    const verification=verificationState(userId);
+    const securityEvents=db.prepare('SELECT kind,severity,metadata_json,created_at FROM security_events WHERE user_id=? ORDER BY created_at ASC').all(userId).map(e=>({...e,metadata:safeJsonObject(e.metadata_json),metadata_json:undefined}));
     const referralStats=memberReferralStats(userId);
     const referralAttribution=db.prepare('SELECT referral_code,attributed_at FROM user_referral_attributions WHERE invitee_user_id=?').get(userId)||null;
     const growthAcquisition=growthAcquisitionForUser(userId);
@@ -2456,7 +2553,7 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
       plus:getPlusState(userId),notificationPreferences:notificationPreferences(userId),legalAcceptances:legal,
       referrals:{...referralStats,referredBy:referralAttribution?{referralCode:referralAttribution.referral_code,attributedAt:referralAttribution.attributed_at}:null},
       acquisition:growthAcquisition,growthEvents,
-      communityCity:communityCityForUser(userId),
+      communityCity:communityCityForUser(userId),verification,securityEvents,
       likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,notifications,retentionEmails,gameSessions,matches
     };
     res.setHeader('Content-Type','application/json; charset=utf-8');
@@ -2487,7 +2584,7 @@ app.post('/api/account/delete', requireAuth, rateLimit({limit:3,windowMs:24*60*6
     db.prepare('DELETE FROM user_referral_events WHERE referral_code=? OR user_id=?').run(referralRow.referral_code,req.user.id);
     db.prepare("UPDATE user_referral_attributions SET referrer_user_id=NULL,referral_code='DELETED' WHERE referrer_user_id=?").run(req.user.id);
   } else db.prepare('DELETE FROM user_referral_events WHERE user_id=?').run(req.user.id);
-  disconnectUserSockets(req.user.id,'account_deleted',{}); deleteUserUploads(req.user.id); db.prepare('DELETE FROM users WHERE id=?').run(req.user.id); onlineUsers.delete(req.user.id); broadcastDiscovery();
+  disconnectUserSockets(req.user.id,'account_deleted',{}); deleteUserUploads(req.user.id); deleteVerificationFilesForUser(req.user.id); db.prepare('DELETE FROM users WHERE id=?').run(req.user.id); onlineUsers.delete(req.user.id); broadcastDiscovery();
   res.json({ok:true});
 });
 
@@ -3321,6 +3418,52 @@ app.post('/api/admin/feedback/:id/action', requireAuth, requireAdmin, (req,res) 
   res.json({ok:true,status});
 });
 
+app.get('/api/admin/security', requireAuth, requireAdmin, (req,res) => {
+  const requested=String(req.query.status||'pending');
+  const status=['pending','approved','rejected','all'].includes(requested)?requested:'pending';
+  const where=status==='all'?'':'WHERE v.status=?';
+  const params=status==='all'?[]:[status];
+  const verifications=db.prepare(`SELECT v.id,v.user_id,v.status,v.note,v.created_at,v.updated_at,v.reviewed_at,u.email,u.status user_status,p.name,p.city,p.avatar,p.profile_verified
+    FROM profile_verification_requests v JOIN users u ON u.id=v.user_id LEFT JOIN profiles p ON p.user_id=v.user_id
+    ${where} ORDER BY CASE WHEN v.status='pending' THEN 0 ELSE 1 END,v.created_at ASC LIMIT 200`).all(...params);
+  const candidates=db.prepare(`SELECT u.id,u.email,u.status,u.created_at,u.last_seen_at,p.name,p.city,p.avatar,p.profile_verified
+    FROM users u LEFT JOIN profiles p ON p.user_id=u.id WHERE u.status='active' ORDER BY u.last_seen_at DESC LIMIT 800`).all();
+  const risk=candidates.map(row=>({...row,risk:securityRiskForUser(row.id)})).filter(row=>row.risk.score>0).sort((a,b)=>b.risk.score-a.risk.score).slice(0,80);
+  res.json({ok:true,verifications,risk});
+});
+
+app.get('/api/admin/verifications/:id/proof', requireAuth, requireAdmin, rateLimit({limit:120,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  const row=db.prepare('SELECT proof_filename,status FROM profile_verification_requests WHERE id=?').get(String(req.params.id||''));
+  if(!row)return res.status(404).json({ok:false,error:'Solicitud no encontrada.'});
+  if(!row.proof_filename)return res.status(404).json({ok:false,error:'La prueba ya fue eliminada tras la revisión.'});
+  const base=path.basename(row.proof_filename),full=path.join(VERIFICATION_DIR,base);
+  if(!base.startsWith('verify_')||!fs.existsSync(full))return res.status(404).json({ok:false,error:'La prueba ya no está disponible.'});
+  const buffer=fs.readFileSync(full);
+  res.setHeader('Cache-Control','no-store');
+  res.json({ok:true,image:`data:${verificationMime(base)};base64,${buffer.toString('base64')}`});
+});
+
+app.post('/api/admin/verifications/:id/action', requireAuth, requireAdmin, rateLimit({limit:120,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  const row=db.prepare('SELECT * FROM profile_verification_requests WHERE id=?').get(String(req.params.id||''));
+  if(!row)return res.status(404).json({ok:false,error:'Solicitud no encontrada.'});
+  if(row.status!=='pending')return res.status(409).json({ok:false,error:'Esta solicitud ya fue revisada.'});
+  const action=String(req.body?.action||'');
+  if(!['approve','reject'].includes(action))return res.status(400).json({ok:false,error:'Acción no válida.'});
+  const note=cleanShortText(req.body?.note,500),ts=now(),status=action==='approve'?'approved':'rejected';
+  const tx=db.transaction(()=>{
+    db.prepare('UPDATE profile_verification_requests SET status=?,note=?,updated_at=?,reviewed_at=?,reviewed_by=? WHERE id=?').run(status,note,ts,ts,req.user.id,row.id);
+    if(action==='approve')db.prepare('UPDATE profiles SET profile_verified=1,profile_verified_at=?,updated_at=? WHERE user_id=?').run(ts,ts,row.user_id);
+    else db.prepare('UPDATE profiles SET profile_verified=0,profile_verified_at=NULL,updated_at=? WHERE user_id=?').run(ts,row.user_id);
+    logModerationAction(req.user.id,row.user_id,action==='approve'?'verify_profile':'reject_verification',note,null);
+  });
+  tx();
+  removeVerificationProof(row.proof_filename);
+  db.prepare("UPDATE profile_verification_requests SET proof_filename='' WHERE id=?").run(row.id);
+  createNotification(row.user_id,'system',action==='approve'?'Perfil verificado':'Revisión de perfil',action==='approve'?'Tu perfil ya muestra la insignia de verificación.':'Tu solicitud de verificación necesita una nueva selfie.',{verification:true});
+  emitToUser(row.user_id,'dating_profiles',discoverFor(row.user_id));broadcastDiscovery();emitMatches(row.user_id);
+  res.json({ok:true,status,...verificationState(row.user_id)});
+});
+
 app.get('/api/admin/reports', requireAuth, requireAdmin, (req,res) => {
   const requestedStatus = String(req.query.status || 'open');
   const status = ['open','resolved','dismissed','all'].includes(requestedStatus) ? requestedStatus : 'open';
@@ -3380,7 +3523,7 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req,res) => {
     const like = `%${q}%`; params.push(like,like,like);
   }
   const sql = `SELECT u.id,u.email,u.status,u.created_at,u.last_seen_at,u.email_verified,
-    p.name,p.age,p.city,p.avatar,p.discoverable,
+    p.name,p.age,p.city,p.avatar,p.discoverable,p.profile_verified,p.profile_verified_at,
     (SELECT COUNT(*) FROM reports r WHERE r.reported=u.id) reports_received,
     (SELECT COUNT(*) FROM reports r WHERE r.reporter=u.id) reports_sent,
     (SELECT COUNT(*) FROM messages m WHERE m.from_user=u.id) messages_sent,
@@ -3390,13 +3533,14 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req,res) => {
     FROM users u LEFT JOIN profiles p ON p.user_id=u.id
     ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
     ORDER BY u.last_seen_at DESC LIMIT 120`;
-  res.json({ok:true,users:db.prepare(sql).all(now(),...params)});
+  const users=db.prepare(sql).all(now(),...params).map(row=>({...row,risk:securityRiskForUser(row.id)}));
+  res.json({ok:true,users});
 });
 
 app.get('/api/admin/users/:id', requireAuth, requireAdmin, (req,res) => {
   const id = String(req.params.id||'');
   const user = db.prepare(`SELECT u.id,u.email,u.status,u.created_at,u.last_seen_at,u.email_verified,
-      p.name,p.age,p.gender,p.city,p.bio,p.interests_json,p.avatar,p.photos_json,p.discoverable,p.show_online,p.allow_game_invites,p.location_updated_at,
+      p.name,p.age,p.gender,p.city,p.bio,p.interests_json,p.avatar,p.photos_json,p.discoverable,p.show_online,p.allow_game_invites,p.location_updated_at,p.profile_verified,p.profile_verified_at,
       pm.status plus_status,pm.expires_at plus_expires_at
       FROM users u LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN plus_memberships pm ON pm.user_id=u.id WHERE u.id=?`).get(id);
   if (!user) return res.status(404).json({ok:false,error:'Usuario no encontrado.'});
@@ -3405,7 +3549,9 @@ app.get('/api/admin/users/:id', requireAuth, requireAdmin, (req,res) => {
     reportsSent: db.prepare('SELECT COUNT(*) n FROM reports WHERE reporter=?').get(id).n,
     messagesSent: db.prepare('SELECT COUNT(*) n FROM messages WHERE from_user=?').get(id).n,
     activeMatches: db.prepare('SELECT COUNT(*) n FROM matches WHERE active=1 AND (user1=? OR user2=?)').get(id,id).n,
-    blocksMade: db.prepare('SELECT COUNT(*) n FROM blocks WHERE blocker=?').get(id).n
+    blocksMade: db.prepare('SELECT COUNT(*) n FROM blocks WHERE blocker=?').get(id).n,
+    blocksReceived: db.prepare('SELECT COUNT(*) n FROM blocks WHERE blocked=?').get(id).n,
+    risk: securityRiskForUser(id)
   };
   const reports = db.prepare(`SELECT r.id,r.reason,r.details,r.status,r.created_at,r.updated_at,r.moderator_note,
       ru.email reporter_email,rp.name reporter_name
@@ -3433,13 +3579,14 @@ app.post('/api/admin/users/:id/action', requireAuth, requireAdmin, (req,res) => 
   const action = String(req.body?.action||'');
   const note = cleanShortText(req.body?.note,500);
   if (target === req.user.id && action === 'suspend') return res.status(400).json({ok:false,error:'No puedes suspender tu propia cuenta administradora.'});
-  if (!['suspend','reactivate','hide_profile','show_profile','clear_photos','clear_bio','grant_plus_30d','revoke_plus'].includes(action)) return res.status(400).json({ok:false,error:'Acción no válida.'});
+  if (!['suspend','reactivate','hide_profile','show_profile','clear_photos','clear_bio','grant_plus_30d','revoke_plus','revoke_verification'].includes(action)) return res.status(400).json({ok:false,error:'Acción no válida.'});
   if (action === 'suspend') suspendUser(target);
   if (action === 'reactivate') reactivateUser(target);
   if (action === 'hide_profile') db.prepare('UPDATE profiles SET discoverable=0,updated_at=? WHERE user_id=?').run(now(),target);
   if (action === 'show_profile') db.prepare('UPDATE profiles SET discoverable=1,updated_at=? WHERE user_id=?').run(now(),target);
   if (action === 'clear_photos') clearProfilePhotos(target);
   if (action === 'clear_bio') db.prepare("UPDATE profiles SET bio='',updated_at=? WHERE user_id=?").run(now(),target);
+  if (action === 'revoke_verification') db.prepare('UPDATE profiles SET profile_verified=0,profile_verified_at=NULL,updated_at=? WHERE user_id=?').run(now(),target);
   if (action === 'grant_plus_30d') grantPlus(target,30,'admin');
   if (action === 'revoke_plus') revokePlus(target);
   logModerationAction(req.user.id,target,action,note,null);
@@ -4153,6 +4300,7 @@ io.on('connection', socket => {
       const current=getProfile(userId);
       const firstProfileSave=!current;
       const photos=savePhotos(userId,Array.isArray(data.fotos)?data.fotos:(current?.fotos||[]));
+      const photosChanged=Boolean(current?.profileVerified && JSON.stringify(photos)!==JSON.stringify(Array.isArray(current?.fotos)?current.fotos:[]));
       const hasAvatarField=Object.prototype.hasOwnProperty.call(data,'avatar');
       const safeCurrentAvatar=cleanAvatar(userId,current?.avatar||'');
       const avatarInput=hasAvatarField?data.avatar:(photos[0]||safeCurrentAvatar||'');
@@ -4163,7 +4311,8 @@ io.on('connection', socket => {
       db.prepare(`INSERT INTO profiles(user_id,name,age,gender,city,bio,interests_json,avatar,photos_json,age_min,age_max,looking_for,city_pref,interest_pref,radius_km,updated_at)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET name=excluded.name,age=excluded.age,gender=excluded.gender,city=excluded.city,bio=excluded.bio,interests_json=excluded.interests_json,avatar=excluded.avatar,photos_json=excluded.photos_json,age_min=excluded.age_min,age_max=excluded.age_max,looking_for=excluded.looking_for,city_pref=excluded.city_pref,interest_pref=excluded.interest_pref,radius_km=excluded.radius_km,updated_at=excluded.updated_at`)
       .run(userId,name,age,cleanGender(data.gender),cleanShortText(data.ciudad,40),cleanShortText(data.bio,180),JSON.stringify(cleanInterests(data.intereses)),avatar,JSON.stringify(photos),ageMin,ageMax,cleanLooking(pref.lookingFor),cleanShortText(pref.city,40),cleanShortText(pref.interest,30),radiusKm,now());
-      const np=getProfile(userId); if(firstProfileSave)recordFirstUserGrowthEvent(userId,'profile_completed',{city:np?.ciudad||''}); socket.nombre=np.nombre;socket.avatar=np.avatar;socket.edad=np.edad; done({ok:true,profile:np}); broadcastDiscovery();
+      if(photosChanged){db.prepare('UPDATE profiles SET profile_verified=0,profile_verified_at=NULL,updated_at=? WHERE user_id=?').run(now(),userId);logSecurityEvent(userId,'verification_revoked_photo_change',1);}
+      const np=getProfile(userId); if(firstProfileSave)recordFirstUserGrowthEvent(userId,'profile_completed',{city:np?.ciudad||''}); socket.nombre=np.nombre;socket.avatar=np.avatar;socket.edad=np.edad; done({ok:true,profile:np,verificationRevoked:photosChanged}); broadcastDiscovery();
     }catch(e){console.error(e);done({ok:false,error:'No se pudo guardar el perfil.'});}
   });
 
@@ -4192,8 +4341,12 @@ io.on('connection', socket => {
   });
 
   socket.on('dating_like',(data={},ack)=>{
-    const done=typeof ack==='function'?ack:()=>{}; if(!allowAction(`like:${userId}`,90,60000))return done({ok:false,error:'Vas demasiado rápido. Espera un momento.'}); const target=String(data.oponenteID||'');
+    const done=typeof ack==='function'?ack:()=>{}; if(!allowAction(`like:${userId}`,90,60000)){logSecurityEvent(userId,'like_burst',2);return done({ok:false,error:'Vas demasiado rápido. Espera un momento.'});} const target=String(data.oponenteID||'');
     if(!target||target===userId||!getProfile(target))return done({ok:false,error:'Ese perfil ya no está disponible.'});
+    const verifiedProfile=Boolean(db.prepare('SELECT profile_verified FROM profiles WHERE user_id=?').get(userId)?.profile_verified);
+    const dailyLikeLimit=verifiedProfile?400:250;
+    const likes24h=Number(db.prepare('SELECT COUNT(*) n FROM likes WHERE from_user=? AND created_at>?').get(userId,now()-24*60*60*1000)?.n||0);
+    if(likes24h>=dailyLikeLimit){logSecurityEvent(userId,'like_daily_limit',2,{limit:dailyLikeLimit});return done({ok:false,error:'Has alcanzado el límite de seguridad de likes de hoy. Vuelve a intentarlo más tarde.'});}
     if(blockedEitherWay(userId,target))return done({ok:false,error:'Ese perfil no está disponible.'});
     const likeInsert=db.prepare('INSERT OR IGNORE INTO likes(from_user,to_user,created_at) VALUES(?,?,?)').run(userId,target,now());
     if(likeInsert.changes)recordFirstUserGrowthEvent(userId,'first_like');
@@ -4229,6 +4382,10 @@ io.on('connection', socket => {
     if(!match||blockedEitherWay(userId,target))return done({ok:false,error:'Ese match ya no está disponible.'});
     const text=cleanShortText(data.texto,500); if(!text)return done({ok:false,error:'Escribe un mensaje antes de enviarlo.'});
     const duplicate=db.prepare('SELECT 1 FROM messages WHERE match_id=? AND from_user=? AND text=? AND created_at>? LIMIT 1').get(match.id,userId,text,now()-15000); if(duplicate)return done({ok:false,error:'Ese mensaje ya se envió hace un momento.'});
+    const repeatedAcrossMatches=Number(db.prepare('SELECT COUNT(DISTINCT match_id) n FROM messages WHERE from_user=? AND LOWER(text)=LOWER(?) AND created_at>?').get(userId,text,now()-30*60*1000)?.n||0);
+    if(repeatedAcrossMatches>=6){logSecurityEvent(userId,'repeated_message_across_matches',3,{matches:repeatedAcrossMatches});return done({ok:false,error:'Ese mismo mensaje se ha enviado demasiadas veces. Personalízalo antes de continuar.'});}
+    const account=db.prepare('SELECT created_at FROM users WHERE id=?').get(userId);
+    if(account && now()-Number(account.created_at||0)<24*60*60*1000 && /(https?:\/\/|www\.|\b\d{9,}\b|@[a-z0-9_.-]{2,})/i.test(text)) logSecurityEvent(userId,'early_external_contact',1);
     const message={id:safeId('msg'),from:userId,to:target,text,ts:now()};
     db.prepare('INSERT INTO messages(id,match_id,from_user,text,created_at) VALUES(?,?,?,?,?)').run(message.id,match.id,userId,text,message.ts);
     recordFirstUserGrowthEvent(userId,'first_message');
@@ -4413,4 +4570,4 @@ io.on('connection', socket => {
 
 server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v${APP_VERSION} escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | email de match: ${MATCH_EMAIL_ENABLED?'activo':'inactivo'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
   console.log(`Resiliencia: reconexión de partidas ${Math.round(GAME_RECONNECT_GRACE_MS/1000)}s + mantenimiento + backup manual`);
-  console.log(`Activación de ciudades: tokens hash-only · ${LAUNCH_ACTIVATION_DAYS} días · reenvío protegido`);console.log(`Socket origin: ${(allowedOrigins.length||appBaseOrigin)?'restringido':'ABIERTO (solo desarrollo)'}`);console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad: sesiones + bloqueados + exportación de datos');});
+  console.log(`Activación de ciudades: tokens hash-only · ${LAUNCH_ACTIVATION_DAYS} días · reenvío protegido`);console.log(`Socket origin: ${(allowedOrigins.length||appBaseOrigin)?'restringido':'ABIERTO (solo desarrollo)'}`);console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad: sesiones + bloqueados + exportación + selfie de verificación privada');});

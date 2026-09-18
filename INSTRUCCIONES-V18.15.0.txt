@@ -1,0 +1,24 @@
+V/R MATCH 18.15.0 — SEGURIDAD Y VERIFICACIÓN
+
+SUBIDA
+1. Haz backup de SQLite y uploads.
+2. Sustituye el código por esta versión.
+3. NO borres data/, uploads/ ni el Persistent Disk.
+4. Reinicia Render.
+5. Comprueba https://vrmatch.es/healthz → 18.15.0.
+
+IMPORTANTE
+- La app creará automáticamente /verification dentro de VR_STORAGE_DIR.
+- Esa carpeta NO se publica en /uploads.
+- Las selfies pendientes se eliminan automáticamente al aprobar/rechazar.
+- No hace falta añadir ninguna variable de entorno nueva.
+
+PRUEBA RÁPIDA
+- Cuenta real de prueba con correo verificado + una foto pública.
+- Cuenta → Verificación de perfil → enviar selfie.
+- Admin → Seguridad → abrir prueba → aprobar.
+- Comprueba la insignia ✓ Perfil verificado en Descubrir.
+
+ANTI-SPAM
+- Los límites añadidos están pensados para automatizaciones/uso masivo y no deberían afectar a un uso normal.
+- El score interno de riesgo es orientativo; no aplica sanciones automáticas.
