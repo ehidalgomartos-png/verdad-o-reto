@@ -1,0 +1,42 @@
+V/R MATCH — AUDITORÍA FINAL SEO + CONVERSIÓN
+Fecha: 18/09/2026
+
+RESULTADO ESTÁTICO
+- 31 páginas revisadas: descubrir.html + 6 ciudades + 24 guías.
+- 31 titles únicos.
+- 31 meta descriptions únicas.
+- 31 canonicals únicos y coherentes con su URL.
+- 1 H1 por página.
+- Meta robots index,follow en las landings.
+- Open Graph + Twitter cards presentes.
+- Datos estructurados JSON-LD válidos y FAQ visible en página.
+- Breadcrumbs visibles y estructurados.
+- Todas las imágenes SEO tienen alt.
+- 0 recursos SEO locales ausentes.
+- 0 enlaces internos relativos rotos entre las landings.
+- Sitemap: 31 URLs, 31 únicas.
+- robots.txt permite rastreo general y bloquea /api/.
+- CTAs hacia /espera presentes en todas las páginas.
+- Diseño responsive con rejillas 3/2/1 columnas y hero adaptable.
+
+CORRECCIÓN DE COPY Y CONVERSIÓN EN DESCUBRIR.HTML
+- Eliminado del contenido visible el bloque técnico “SEO SIN ATAJOS”.
+- Sustituido por una explicación orientada al usuario: “CONOCE V/R MATCH”.
+- Añadido CTA directo a /espera.
+- Eliminadas expresiones visibles sobre canónicas, metadatos, datos estructurados y variaciones de palabras clave.
+- Reescritas las introducciones de Ciudades y Guías con lenguaje de producto y utilidad para el visitante.
+
+CORRECCIÓN REALIZADA EN ESTA REVISIÓN
+- landings.js ya NO interpreta READY como ciudad abierta.
+- ACTIVE: muestra que V/R Match está disponible y cambia CTA a la app.
+- READY: muestra "objetivo alcanzado · apertura pendiente" y mantiene el flujo de espera.
+- WAITING: muestra lista de espera activa.
+
+OPORTUNIDADES POSTERIORES (NO BLOQUEAN EL LANZAMIENTO)
+- Crear imágenes sociales específicas para las páginas principales/ciudades en lugar de reutilizar una sola OG image.
+- Medir clics en CTA con analítica antes de cambiar copies en masa.
+- En Search Console, enviar sitemap-landings.xml y revisar cobertura/indexación después de que Google rastree las URLs.
+- Ampliar contenido únicamente donde Search Console muestre impresiones relevantes y CTR/posición mejorables.
+
+NOTA
+La auditoría web externa no pudo completarse desde el entorno de revisión porque vrmatch.es no fue accesible desde la herramienta de red. La validación de archivos, rutas, metadatos y estructura se realizó sobre el paquete final V18.9.1. Conviene hacer una comprobación manual de 5 URLs en producción después del despliegue.
