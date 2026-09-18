@@ -1,0 +1,76 @@
+V/R MATCH 18.9.1 + 30 LANDINGS SEO — PARCHE FINAL
+=================================================
+
+BASE USADA
+----------
+Este paquete parte del server(2).js que me pasaste como última versión 18.9.1.
+Ese servidor conserva las rutas dinámicas:
+
+/espera       -> public/waitlist.html
+/activar      -> public/activate.html
+/admin/launch -> public/admin-launch.html
+
+NO borres la carpeta public/ que ya tienes en GitHub.
+NO sustituyas el proyecto por una carpeta vacía.
+Este ZIP se debe SUPERPONER sobre el repositorio actual.
+
+ARCHIVOS QUE SÍ DEBES SUSTITUIR EN LA RAÍZ
+-------------------------------------------
+server.js
+package.json
+sw.js
+
+ARCHIVOS/CARPETAS NUEVOS SEO
+-----------------------------
+descubrir.html
+robots.txt
+sitemap-landings.xml
+ciudades/
+guias/
+seo-assets/
+
+ARCHIVOS QUE ESTE ZIP NO INCLUYE Y DEBES CONSERVAR
+---------------------------------------------------
+public/
+  waitlist.html
+  activate.html
+  admin-launch.html
+index.html
+styles.css
+manifest.webmanifest
+offline.html
+icons/
+como-funciona.html
+funciones.html
+privacy.html
+terms.html
+community.html
+uploads/ (en Render se conserva mediante almacenamiento persistente)
+data/    (en Render se conserva mediante almacenamiento persistente)
+
+ORDEN RECOMENDADO
+-----------------
+1. Haz una copia/backup del repositorio actual.
+2. Sube server.js, package.json y sw.js de este ZIP a la raíz, reemplazando los actuales.
+3. Sube descubrir.html, robots.txt y sitemap-landings.xml a la raíz.
+4. Sube completas las carpetas ciudades/, guias/ y seo-assets/.
+5. NO borres public/.
+6. Commit en la rama conectada a Render.
+7. Render -> Manual Deploy -> Clear build cache & deploy.
+
+COMPROBAR DESPUÉS
+-----------------
+https://vrmatch.es/healthz          debe indicar 18.9.1
+https://vrmatch.es/espera           debe cargar la lista de espera
+https://vrmatch.es/activar          debe cargar
+https://vrmatch.es/admin/launch     debe cargar para admin
+https://vrmatch.es/descubrir.html   debe cargar el centro SEO
+https://vrmatch.es/ciudades/valencia.html
+https://vrmatch.es/guias/app-para-conocer-gente.html
+https://vrmatch.es/robots.txt
+https://vrmatch.es/sitemap-landings.xml
+
+IMPORTANTE
+----------
+Las 30 páginas SEO usan un CSS separado en /seo-assets/seo-landings.css.
+No se ha modificado tu styles.css principal.

@@ -1,0 +1,12 @@
+VALIDACIONES REALIZADAS ANTES DE ENTREGAR
+=========================================
+- Base de servidor: V18.9.1 aportada por el usuario.
+- Conservadas /espera, /activar y /admin/launch.
+- Añadidas /descubrir, /ciudades, /guias y /seo-assets.
+- Añadidos /robots.txt y /sitemap-landings.xml.
+- styles.css principal no se modifica.
+- package.json conserva version 18.9.1.
+- sw.js conserva cache vr-match-shell-v18-9-1.
+- node --check server.js: OK (verificado al generar el paquete).
+- node --check sw.js: OK (verificado al generar el paquete).
+- 6 landings de ciudades + 24 guías = 30 landings.

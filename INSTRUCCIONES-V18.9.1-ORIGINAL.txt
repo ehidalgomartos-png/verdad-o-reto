@@ -1,0 +1,194 @@
+V/R MATCH 18.9.1 — PRELANZAMIENTO · RELEASE CANDIDATE
+=======================================================
+
+REEMPLAZA EN LA RAÍZ:
+
+- server.js
+- package.json
+- sw.js
+
+REEMPLAZA EN /public:
+
+- public/admin-launch.html
+- public/waitlist.html
+
+
+QUÉ CIERRA ESTA VERSIÓN
+-----------------------
+
+1. PREFLIGHT TÉCNICO EN /admin/launch
+
+El panel comprueba automáticamente:
+
+- VR_LAUNCH_MODE=production
+- dominio propio + VR_APP_BASE_URL definitivo
+- persistencia de SQLite/uploads
+- SMTP
+- VR_REQUIRE_EMAIL_VERIFICATION=true
+- administrador configurado
+- Socket.IO restringido al origen
+- VR_CITY_LAUNCH_ENABLED=true
+- cola de correo sin errores
+- backup manual reciente (últimos 7 días)
+
+Solo cuando todos los puntos requeridos están en verde mostrará:
+
+LISTO PARA ABRIR
+
+
+2. SOCKET.IO
+
+Antes, si no había VR_ALLOWED_ORIGINS, Socket.IO aceptaba cualquier Origin.
+
+Ahora:
+- si existe VR_ALLOWED_ORIGINS, usa esa lista;
+- si no, pero existe VR_APP_BASE_URL, acepta únicamente ese origen;
+- si ninguno está configurado, sigue permitiendo conexión solo para mantener
+  compatibilidad de pruebas, pero Preflight lo marca como bloqueo.
+
+Para un despliegue normal con un único dominio, basta con configurar bien:
+
+VR_APP_BASE_URL=https://tu-dominio-real
+
+
+3. ENLACES SENSIBLES
+
+Cuando VR_LAUNCH_MODE=production, el servidor ya NO construye enlaces de
+verificación, recuperación o activación a partir de un Host arbitrario.
+
+Por eso VR_APP_BASE_URL pasa a ser obligatorio para el lanzamiento real.
+
+
+4. ANALÍTICA
+
+Se corrigió la línea temporal:
+
+- altas: fecha real de alta;
+- referidos: fecha real de alta;
+- activaciones: fecha real de activación;
+- visitas: fecha real del evento.
+
+La tasa email → cuenta se calcula sobre la cohorte de accesos enviados
+durante el periodo seleccionado.
+
+
+5. V/R PEOPLE
+
+Se corrigió la visualización de perfiles cuyo avatar es un emoji.
+Las imágenes /uploads/ continúan mostrándose como foto.
+
+
+PASOS FINALES EN RENDER
+-----------------------
+
+NO cambies todas las variables a producción de golpe.
+
+Primero despliega 18.9.1 y comprueba:
+
+/healthz
+
+version: 18.9.1
+
+Después entra en:
+
+/admin/launch
+
+y revisa “Preflight técnico”.
+
+Los puntos pendientes te dirán exactamente qué falta.
+
+
+CUANDO TERMINEN LAS PRUEBAS
+---------------------------
+
+La configuración final esperada incluye como mínimo:
+
+VR_APP_BASE_URL=https://TU-DOMINIO
+VR_STORAGE_DIR=/var/data
+VR_REQUIRE_EMAIL_VERIFICATION=true
+VR_CITY_LAUNCH_ENABLED=true
+VR_LAUNCH_MODE=production
+
+Más:
+- VR_ADMIN_EMAILS correctamente configurado;
+- SMTP funcionando;
+- Persistent Disk montado;
+- backup manual reciente.
+
+VR_ALLOWED_ORIGINS es opcional si VR_APP_BASE_URL ya contiene el único
+origen desde el que debe conectarse la web.
+
+
+ANTES DE PONER VR_CITY_LAUNCH_ENABLED=true
+------------------------------------------
+
+1. Reinicia/limpia las ciudades usadas exclusivamente para pruebas.
+2. Restaura los objetivos reales.
+3. Comprueba que no quedan emails ERROR.
+4. Descarga un backup desde Admin → Producción/Sistema.
+5. Haz una última prueba con 2 cuentas.
+6. Solo entonces activa el lanzamiento por ciudades.
+
+
+PRUEBA DE HUMO FINAL
+--------------------
+
+Cuenta A:
+- entrar o activar;
+- completar perfil;
+- aparecer en Descubrir.
+
+Cuenta B:
+- crear/activar;
+- Like mutuo;
+- Match;
+- mensaje;
+- iniciar partida.
+
+Juego:
+- completar algunos turnos;
+- probar ronda sincronizada;
+- recargar una pestaña;
+- recuperar partida antes de 45 s;
+- volver al mismo chat.
+
+Lista:
+- registrar un email;
+- compartir referido;
+- verificar contador;
+- READY al llegar a objetivo temporal;
+- desbloquear;
+- recibir email;
+- activar;
+- probar reenvío de acceso.
+
+Admin:
+- añadir ciudad;
+- cambiar objetivo;
+- exportar CSV;
+- revisar analítica;
+- revisar preflight;
+- backup.
+
+
+IMPORTANTE
+----------
+
+“Preflight técnico listo” no sustituye una revisión jurídica/fiscal
+profesional. La plataforma trata datos personales y es una app de citas;
+la revisión legal definitiva de privacidad, términos, consentimiento y
+operación comercial debe hacerse por separado antes de una apertura pública
+a gran escala.
+
+
+VALIDACIONES DE ESTE PAQUETE
+----------------------------
+
+- node --check server.js: OK
+- node --check sw.js: OK
+- JS inline admin-launch.html: OK
+- JS inline waitlist.html: OK
+- Smoke test SQL de consultas de analítica: OK
+
+No se ejecutó un servidor Node completo en el entorno de empaquetado porque
+no contiene node_modules. La prueba HTTP/Socket.IO final debe hacerse en Render.
