@@ -144,3 +144,18 @@ CREATE TABLE IF NOT EXISTS growth_acquisition (
 );
 CREATE INDEX IF NOT EXISTS idx_growth_acquisition_source ON growth_acquisition(source,attributed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_growth_acquisition_campaign ON growth_acquisition(campaign,attributed_at DESC);
+
+
+-- V18.14.0 — retención por email
+CREATE TABLE IF NOT EXISTS retention_email_log (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  context_key TEXT NOT NULL DEFAULT '',
+  sent_at INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'sent',
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_retention_email_user_kind ON retention_email_log(user_id,kind,sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_retention_email_context ON retention_email_log(kind,context_key,sent_at DESC);
+-- La columna notification_preferences.retention_email se añade automáticamente al arrancar.

@@ -820,6 +820,7 @@
         <label class="setting-switch compact"><span><b>Mensajes</b><small>Nuevos mensajes de tus matches.</small></span><input id="notifPrefMessage" type="checkbox" checked></label>
         <label class="setting-switch compact"><span><b>Invitaciones a jugar</b><small>Rompehielos, Conóceme o Verdad o Reto.</small></span><input id="notifPrefInvite" type="checkbox" checked></label>
         <label class="setting-switch compact"><span><b>Tu turno</b><small>Cuando vuelve a tocarte durante una partida.</small></span><input id="notifPrefTurn" type="checkbox" checked></label>
+        <label class="setting-switch compact"><span><b>Recordatorios por email</b><small>Perfil incompleto, mensajes cuando estás fuera, invitaciones a jugar y ayuda para romper el hielo. Sin spam.</small></span><input id="notifPrefRetentionEmail" type="checkbox" checked></label>
         <button class="btn btn-secondary" type="button" onclick="guardarPreferenciasNotificaciones()">Guardar preferencias</button>
       </div>
 
@@ -936,7 +937,7 @@
     let adminSelectedUserId = null;
     let notificationItems = [];
     let notificationUnread = 0;
-    let notificationPreferences = { newMatch:true, newMessage:true, gameInvite:true, gameTurn:true, pushEnabled:false };
+    let notificationPreferences = { newMatch:true, newMessage:true, gameInvite:true, gameTurn:true, retentionEmail:true, pushEnabled:false };
     let pushConfigured = false;
     let pushSubscriptionActive = false;
     let notificationBrowserEnabled = localStorage.getItem('vr_browser_notifications') === '1';
@@ -1699,6 +1700,7 @@
         newMessage:data.newMessage !== false,
         gameInvite:data.gameInvite !== false,
         gameTurn:data.gameTurn !== false,
+        retentionEmail:data.retentionEmail !== false,
         pushEnabled:Boolean(data.pushEnabled)
       };
     }
@@ -1741,6 +1743,7 @@
       if($('notifPrefMessage'))$('notifPrefMessage').checked=notificationPreferences.newMessage;
       if($('notifPrefInvite'))$('notifPrefInvite').checked=notificationPreferences.gameInvite;
       if($('notifPrefTurn'))$('notifPrefTurn').checked=notificationPreferences.gameTurn;
+      if($('notifPrefRetentionEmail'))$('notifPrefRetentionEmail').checked=notificationPreferences.retentionEmail;
       const status=$('notificationPushStatus'), button=$('notificationPushButton');
       if(!status||!button)return;
       if(!('Notification' in window)) {
@@ -1842,6 +1845,7 @@
         newMessage:$('notifPrefMessage').checked,
         gameInvite:$('notifPrefInvite').checked,
         gameTurn:$('notifPrefTurn').checked,
+        retentionEmail:$('notifPrefRetentionEmail').checked,
         pushEnabled:notificationPreferences.pushEnabled
       };
       const res=await api('/api/notification-preferences',{method:'PUT',body});
@@ -2626,21 +2630,24 @@
       const days=Number($('adminMetricsDays').value||7);
       const res=await api(`/api/admin/metrics?days=${encodeURIComponent(days)}`);
       if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudieron cargar.')}</strong></div>`;return;}
-      const m=res.metric||{},f=res.funnel||{},sys=res.system||{},daily=res.daily||[],errors=res.recentErrors||[],channels=res.channels||[],campaigns=res.campaigns||[],cities=res.cities||[];
+      const m=res.metric||{},f=res.funnel||{},sys=res.system||{},daily=res.daily||[],errors=res.recentErrors||[],channels=res.channels||[],campaigns=res.campaigns||[],cities=res.cities||[],retentionEmails=res.retentionEmails||[];
       const visitConv=porcentaje(m.registered,m.visits),startConv=porcentaje(m.registered,m.registrationStarted);
-      const cards=[['Visitas',m.visits||0,'sesiones de entrada'],['Altas',m.registered,'cuentas nuevas'],['Conversión',`${visitConv}%`,'visita → alta'],['Inicio registro',m.registrationStarted||0,`${startConv}% terminan`],['Activos',m.activeUsers,`últimos ${days===1?'24 h':days+' días'}`],['Likes',m.likes,'acciones'],['Matches',m.matches,'creados'],['Mensajes',m.messages,'enviados'],['Partidas',m.gamesStarted,'iniciadas'],['Finalizadas',m.gamesCompleted,'partidas completas'],['Altas ref.',m.referralSignups||0,'atribuidas'],['Compartidos',m.referralShares||0,'invitaciones/resultados']];
+      const cards=[['Visitas',m.visits||0,'sesiones de entrada'],['Altas',m.registered,'cuentas nuevas'],['Conversión',`${visitConv}%`,'visita → alta'],['Inicio registro',m.registrationStarted||0,`${startConv}% terminan`],['Activos',m.activeUsers,`últimos ${days===1?'24 h':days+' días'}`],['Likes',m.likes,'acciones'],['Matches',m.matches,'creados'],['Mensajes',m.messages,'enviados'],['Partidas',m.gamesStarted,'iniciadas'],['Finalizadas',m.gamesCompleted,'partidas completas'],['Emails retención',m.retentionEmails||0,'avisos enviados'],['Altas ref.',m.referralSignups||0,'atribuidas'],['Compartidos',m.referralShares||0,'invitaciones/resultados']];
       const base=Math.max(1,Number(f.registered)||0);
       const funnel=[['Visitas',f.visits||0,100],['Inician registro',f.registrationStarted||0,porcentaje(f.registrationStarted,f.visits)],['Registro',f.registered||0,porcentaje(f.registered,f.visits)],['Ciudad',f.city||0,porcentaje(f.city,base)],['Perfil',f.profile||0,porcentaje(f.profile,base)],['Primer like',f.liked||0,porcentaje(f.liked,base)],['Match',f.matched||0,porcentaje(f.matched,base)],['Mensaje',f.messaged||0,porcentaje(f.messaged,base)],['Partida',f.played||0,porcentaje(f.played,base)],['Comparte',f.shared||0,porcentaje(f.shared,base)]];
       const maxDaily=Math.max(1,...daily.map(d=>Math.max(Number(d.visits)||0,Number(d.registered)||0,Number(d.matches)||0,Number(d.games)||0)));
       const channelRows=channels.length?channels.map(r=>`<tr><td><b>${escapeHtml(r.source||'direct')}</b><small>${escapeHtml(r.medium||'none')}</small></td><td>${Number(r.visits)||0}</td><td>${Number(r.signups)||0}</td><td>${r.conversion==null?'—':`${Number(r.conversion).toFixed(1)}%`}</td></tr>`).join(''):'<tr><td colspan="4">Aún no hay datos de adquisición.</td></tr>';
       const campaignRows=campaigns.length?campaigns.map(r=>`<tr><td><b>${escapeHtml(r.campaign||'(sin campaña)')}</b><small>${escapeHtml(r.source||'direct')} · ${escapeHtml(r.medium||'none')}</small></td><td>${escapeHtml(r.content||'—')}</td><td>${Number(r.visits)||0}</td><td>${Number(r.signups)||0}</td><td>${r.conversion==null?'—':`${Number(r.conversion).toFixed(1)}%`}</td></tr>`).join(''):'<tr><td colspan="5">Añade UTM a tus campañas para ver aquí qué Reel o anuncio convierte.</td></tr>';
       const maxCity=Math.max(1,...cities.map(c=>Number(c.signups)||0));
+      const retentionLabels={profile_incomplete:'Perfil incompleto',new_message:'Nuevo mensaje',game_invite:'Invitación a jugar',match_no_chat:'Match sin conversación'};
+      const retentionRows=retentionEmails.length?retentionEmails.map(r=>`<tr><td><b>${escapeHtml(retentionLabels[r.kind]||r.kind)}</b></td><td>${Number(r.sent)||0}</td><td>${Number(r.activityAfter)||0}</td></tr>`).join(''):'<tr><td colspan="3">Aún no se han enviado recordatorios de retención.</td></tr>';
       box.innerHTML=`<div class="metrics-summary">${cards.map(([label,val,sub])=>`<article><strong>${typeof val==='string'?escapeHtml(val):Number(val)||0}</strong><span>${escapeHtml(label)}</span><small>${escapeHtml(sub)}</small></article>`).join('')}</div>
         <section class="metrics-section growth-highlight"><div class="metrics-section-head"><div><strong>Embudo de crecimiento</strong><small>Visita → registro → activación → interacción → viralidad.</small></div><span>${days===1?'24 h':days+' días'}</span></div><div class="funnel-grid">${funnel.map(([label,val,pct])=>`<div><div><b>${escapeHtml(label)}</b><span>${Number(val)||0} · ${Number(pct)||0}%</span></div><i><em style="width:${Math.max(2,Math.min(100,Number(pct)||0))}%"></em></i></div>`).join('')}</div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Canales que traen usuarios</strong><small>Sesiones y registros atribuidos por fuente/medio.</small></div></div><div class="growth-table-wrap"><table class="growth-table"><thead><tr><th>Canal</th><th>Visitas</th><th>Altas</th><th>Conversión</th></tr></thead><tbody>${channelRows}</tbody></table></div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Campañas y contenidos</strong><small>Usa utm_campaign y utm_content. Ej.: campaña LANZAMIENTO_VALENCIA · contenido REEL-023.</small></div></div><div class="growth-table-wrap"><table class="growth-table"><thead><tr><th>Campaña</th><th>Contenido</th><th>Visitas</th><th>Altas</th><th>Conv.</th></tr></thead><tbody>${campaignRows}</tbody></table></div><div class="utm-example"><b>Ejemplo:</b><code>/?register=1&city=Valencia&utm_source=tiktok&utm_medium=organic_social&utm_campaign=LANZAMIENTO_VALENCIA&utm_content=REEL-023</code></div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Altas por ciudad</strong><small>Nuevas cuentas del periodo según la ciudad elegida.</small></div></div><div class="city-growth-admin">${cities.length?cities.map(c=>`<div><span>${escapeHtml(c.city||'Sin ciudad')}</span><i><em style="width:${Math.max(3,(Number(c.signups)||0)*100/maxCity)}%"></em></i><b>${Number(c.signups)||0}</b></div>`).join(''):'<div class="empty-state compact"><span>📍</span><strong>Aún no hay ciudades en este periodo.</strong></div>'}</div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Actividad diaria</strong><small>Visitas, altas, matches y partidas. Datos agregados.</small></div></div><div class="daily-chart">${daily.map(d=>`<div class="daily-row"><small>${escapeHtml(d.day.slice(5))}</small><div title="Visitas: ${d.visits}"><i class="visit" style="width:${Math.max(2,Number(d.visits)*100/maxDaily)}%"></i></div><div title="Altas: ${d.registered}"><i class="reg" style="width:${Math.max(2,Number(d.registered)*100/maxDaily)}%"></i></div><div title="Matches: ${d.matches}"><i class="match" style="width:${Math.max(2,Number(d.matches)*100/maxDaily)}%"></i></div><div title="Partidas: ${d.games}"><i class="game" style="width:${Math.max(2,Number(d.games)*100/maxDaily)}%"></i></div></div>`).join('')}</div><div class="chart-legend"><span><i class="visit"></i>Visitas</span><span><i class="reg"></i>Altas</span><span><i class="match"></i>Matches</span><span><i class="game"></i>Partidas</span></div></section>
+        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Retención por email</strong><small>Avisos enviados y cuentas con actividad posterior al envío. La actividad posterior no implica causalidad.</small></div></div><div class="growth-table-wrap"><table class="growth-table"><thead><tr><th>Tipo</th><th>Enviados</th><th>Actividad posterior</th></tr></thead><tbody>${retentionRows}</tbody></table></div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Salud del sistema</strong><small>Diagnóstico técnico de esta instancia. No contiene secretos.</small></div></div><div class="system-grid"><div><b>${sys.onlineUsers||0}</b><span>usuarios online</span></div><div><b>${sys.sockets||0}</b><span>sockets</span></div><div><b>${sys.rssMb||0} MB</b><span>memoria RSS</span></div><div><b>${sys.heapUsedMb||0} MB</b><span>heap usado</span></div><div><b>${bytesLegibles(sys.dbBytes)}</b><span>SQLite</span></div><div><b>${sys.uploadFiles||0}</b><span>archivos · ${bytesLegibles(sys.uploadBytes)}</span></div></div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Errores recientes del cliente</strong><small>Solo mensaje técnico, pantalla y posición. No se guardan chats ni coordenadas.</small></div></div><div class="error-list">${errors.length?errors.map(e=>`<article><div><strong>${escapeHtml(e.message||'Error')}</strong><small>${escapeHtml(adminFecha(e.created_at))}</small></div><p>${escapeHtml(e.name||e.email||'Usuario')} · ${escapeHtml(e.page||'/')} ${e.source?`· ${escapeHtml(e.source)}:${Number(e.line)||0}`:''}</p></article>`).join(''):'<div class="empty-state compact"><span>✓</span><strong>Sin errores registrados</strong></div>'}</div></section>`;
     }
@@ -3048,7 +3055,7 @@
       gamePartnerProfile = match;
       socket.emit('dating_game_invite', { oponenteID: match.id, mazo }, (res) => {
         if (!res || !res.ok) return mostrarToast((res && res.error) || 'No se pudo enviar la invitación.', 'warn');
-        mostrarToast(`Invitación enviada a ${match.nombre}.`, 'info');
+        mostrarToast(res.offline ? `${match.nombre} no está conectado. Le hemos avisado para que vuelva a V/R Match.` : `Invitación enviada a ${match.nombre}.`, 'info');
       });
     }
 

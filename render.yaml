@@ -28,6 +28,16 @@ services:
         sync: false
       - key: VR_MATCH_EMAIL_ENABLED
         value: "true"
+      - key: VR_RETENTION_EMAIL_ENABLED
+        value: "true"
+      - key: VR_RETENTION_SWEEP_MINUTES
+        value: "30"
+      - key: VR_RETENTION_PROFILE_HOURS
+        value: "24"
+      - key: VR_RETENTION_MATCH_HOURS
+        value: "18"
+      - key: VR_RETENTION_MESSAGE_COOLDOWN_HOURS
+        value: "6"
       - key: VAPID_PUBLIC_KEY
         sync: false
       - key: VAPID_PRIVATE_KEY

@@ -1,0 +1,35 @@
+V/R MATCH 18.14.0 — RETENCIÓN
+================================
+
+1. Haz copia de seguridad de la base de datos y de uploads.
+2. Sustituye el código por esta versión SIN borrar data/ ni uploads/.
+3. Conserva tus variables SMTP actuales.
+4. Añade/revisa en Render:
+
+   VR_RETENTION_EMAIL_ENABLED=true
+   VR_RETENTION_SWEEP_MINUTES=30
+   VR_RETENTION_PROFILE_HOURS=24
+   VR_RETENTION_MATCH_HOURS=18
+   VR_RETENTION_MESSAGE_COOLDOWN_HOURS=6
+
+5. Reinicia el servicio.
+6. Comprueba https://vrmatch.es/healthz. Debe indicar version 18.14.0.
+
+PRUEBA RÁPIDA RECOMENDADA
+-------------------------
+A. Usa dos cuentas con correos VERIFICADOS y que tengan match.
+B. Cierra sesión/ventana de la cuenta B para que no tenga conexión activa.
+C. Desde A envía un mensaje a B.
+D. B debe recibir el email corporativo "te ha escrito" si tiene activados Mensajes + Recordatorios por email.
+E. Desde A envía una invitación a jugar con B desconectado. B debe conservar el aviso y puede recibir email según preferencias.
+F. En B abre Notificaciones y verifica que existe "Recordatorios por email" y que puede desactivarse.
+G. En Administración → Métricas comprueba la sección Retención por email.
+
+NOTAS
+-----
+- Perfil incompleto: se envía una sola vez después de 24 h por defecto.
+- Match sin conversación: se envía una sola vez por usuario/match después de 18 h por defecto.
+- Nuevo mensaje: máximo un email por match cada 6 h por defecto.
+- Los recordatorios se procesan cada 30 minutos por defecto.
+- Los límites se pueden modificar por Environment sin tocar código.
+- El email de nuevo match de V18.12 sigue funcionando de forma independiente mediante VR_MATCH_EMAIL_ENABLED.

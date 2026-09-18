@@ -30,7 +30,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.13.0';
+const APP_VERSION = '18.14.0';
 const LEGAL_VERSION = '2026-09-18';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -67,6 +67,11 @@ const STRIPE_MODE = STRIPE_SECRET_KEY.startsWith('sk_live_') ? 'live' : (STRIPE_
 // Las funciones V/R+ actuales forman parte de la experiencia disponible para todos.
 const SMTP_CONFIGURED = Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_FROM);
 const MATCH_EMAIL_ENABLED = String(process.env.VR_MATCH_EMAIL_ENABLED || 'true').toLowerCase() !== 'false';
+const RETENTION_EMAIL_ENABLED = String(process.env.VR_RETENTION_EMAIL_ENABLED || 'true').toLowerCase() !== 'false';
+const RETENTION_SWEEP_MINUTES = Math.max(10, Math.min(360, Number(process.env.VR_RETENTION_SWEEP_MINUTES) || 30));
+const RETENTION_PROFILE_HOURS = Math.max(6, Math.min(168, Number(process.env.VR_RETENTION_PROFILE_HOURS) || 24));
+const RETENTION_MATCH_HOURS = Math.max(6, Math.min(168, Number(process.env.VR_RETENTION_MATCH_HOURS) || 18));
+const RETENTION_MESSAGE_COOLDOWN_HOURS = Math.max(1, Math.min(72, Number(process.env.VR_RETENTION_MESSAGE_COOLDOWN_HOURS) || 6));
 const VAPID_PUBLIC_KEY = String(process.env.VAPID_PUBLIC_KEY || '').trim();
 const VAPID_PRIVATE_KEY = String(process.env.VAPID_PRIVATE_KEY || '').trim();
 const VAPID_SUBJECT = String(process.env.VAPID_SUBJECT || 'mailto:admin@vrmatch.local').trim();
@@ -376,6 +381,16 @@ CREATE TABLE IF NOT EXISTS growth_acquisition (
 );
 CREATE INDEX IF NOT EXISTS idx_growth_acquisition_source ON growth_acquisition(source,attributed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_growth_acquisition_campaign ON growth_acquisition(campaign,attributed_at DESC);
+CREATE TABLE IF NOT EXISTS retention_email_log (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  context_key TEXT NOT NULL DEFAULT '',
+  sent_at INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'sent'
+);
+CREATE INDEX IF NOT EXISTS idx_retention_email_user_kind ON retention_email_log(user_id,kind,sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_retention_email_context ON retention_email_log(kind,context_key,sent_at DESC);
 CREATE TABLE IF NOT EXISTS game_sessions (
   id TEXT PRIMARY KEY,
   match_id TEXT REFERENCES matches(id) ON DELETE SET NULL,
@@ -403,6 +418,7 @@ CREATE INDEX IF NOT EXISTS idx_game_sessions_user2_started ON game_sessions(user
 CREATE INDEX IF NOT EXISTS idx_game_sessions_match_started ON game_sessions(match_id,started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_game_sessions_status_started ON game_sessions(status,started_at DESC);
 `);
+ensureColumn('notification_preferences', 'retention_email', 'INTEGER NOT NULL DEFAULT 1');
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS launch_cities (
@@ -1020,6 +1036,138 @@ async function sendNewMatchEmail(recipientUserId, actorProfile, notificationId='
   const text=`${recipientName ? `Hola ${recipientName},\n\n` : ''}${actorName} ha hecho match contigo en V/R Match.\n\nEl interés es mutuo. Ya podéis hablar y romper el hielo jugando.\n\nVer mi match: ${matchUrl}\n\nPuedes desactivar los avisos de Nuevo match desde el centro de notificaciones de V/R Match.`;
   return sendEmail({to:recipient.email,subject:`💗 ${actorName} ha hecho match contigo | V/R Match`,text,html});
 }
+
+function retentionEmailWasSent(userId, kind, contextKey='', withinMs=null) {
+  const row=db.prepare('SELECT sent_at FROM retention_email_log WHERE user_id=? AND kind=? AND context_key=? AND status=\'sent\' ORDER BY sent_at DESC LIMIT 1').get(userId,kind,String(contextKey||''));
+  if(!row)return false;
+  if(withinMs===null)return true;
+  return now()-Number(row.sent_at||0) < Math.max(0,Number(withinMs)||0);
+}
+function logRetentionEmail(userId, kind, contextKey='', status='sent') {
+  db.prepare('INSERT INTO retention_email_log(id,user_id,kind,context_key,sent_at,status) VALUES(?,?,?,?,?,?)')
+    .run(safeId('remail'),userId,cleanShortText(kind,60),cleanShortText(contextKey,160),now(),status==='sent'?'sent':'error');
+}
+function retentionRecipient(userId) {
+  return db.prepare("SELECT u.id,u.email,u.email_verified,u.status,p.name,p.city FROM users u LEFT JOIN profiles p ON p.user_id=u.id WHERE u.id=? AND u.status='active'").get(userId)||null;
+}
+function retentionBaseUrl() { return APP_BASE_URL || `http://localhost:${PORT}`; }
+function retentionAllowed(userId, notificationType='') {
+  if(!RETENTION_EMAIL_ENABLED || !SMTP_CONFIGURED)return false;
+  const prefs=notificationPreferences(userId);
+  if(!prefs.retentionEmail)return false;
+  if(notificationType && !notificationAllowed(userId,notificationType))return false;
+  return true;
+}
+async function sendNewMessageEmail(recipientUserId, actorProfile, notificationId='', matchId='') {
+  if(!retentionAllowed(recipientUserId,'message'))return {sent:false,reason:'disabled'};
+  const key=String(matchId||actorProfile?.id||'message');
+  if(retentionEmailWasSent(recipientUserId,'new_message',key,RETENTION_MESSAGE_COOLDOWN_HOURS*3600000))return {sent:false,reason:'cooldown'};
+  const recipient=retentionRecipient(recipientUserId);
+  if(!recipient?.email || !recipient.email_verified)return {sent:false,reason:'unverified'};
+  const actorName=cleanName(actorProfile?.nombre||'Tu match')||'Tu match';
+  const recipientName=cleanName(recipient.name||'');
+  const url=`${retentionBaseUrl()}/?${notificationId?`notification=${encodeURIComponent(notificationId)}`:'open=matches'}`;
+  const safeActor=escapeEmailHtml(actorName), safeRecipient=escapeEmailHtml(recipientName);
+  const html=vrEmailShell({
+    preheader:`${actorName} te ha escrito en V/R Match.`,eyebrow:'TIENES UN MENSAJE 💬',title:`${actorName} te ha escrito`,
+    bodyHtml:`${safeRecipient?`<p style="margin:0 0 16px;">Hola <strong style="color:#fff;">${safeRecipient}</strong>,</p>`:''}<p style="margin:0;"><strong style="color:#fff;">${safeActor}</strong> te ha dejado un mensaje. Entra en V/R Match para continuar la conversación.</p><p style="margin:16px 0 0;color:#a9a5b4;font-size:13px;">Por privacidad, no incluimos el contenido del chat en el email.</p>`,
+    ctaLabel:'Leer mensaje',ctaUrl:url,
+    footerHtml:'Este aviso respeta tus preferencias de <strong style="color:#a9a5b4;">Mensajes</strong> y <strong style="color:#a9a5b4;">Recordatorios por email</strong>. Puedes cambiarlas desde V/R Match.'
+  });
+  const result=await sendEmail({to:recipient.email,subject:`💬 ${actorName} te ha escrito | V/R Match`,text:`${recipientName?`Hola ${recipientName},\n\n`:''}${actorName} te ha escrito en V/R Match.\n\nLeer mensaje: ${url}\n\nPor privacidad, el contenido del chat no se incluye en el email.` ,html});
+  if(result.sent)logRetentionEmail(recipientUserId,'new_message',key);
+  return result;
+}
+async function sendGameInviteEmail(recipientUserId, actorProfile, notificationId='', deck='rompehielos') {
+  if(!retentionAllowed(recipientUserId,'game_invite'))return {sent:false,reason:'disabled'};
+  const key=`${actorProfile?.id||'match'}:${validDeck(deck)}`;
+  if(retentionEmailWasSent(recipientUserId,'game_invite',key,6*3600000))return {sent:false,reason:'cooldown'};
+  const recipient=retentionRecipient(recipientUserId);
+  if(!recipient?.email || !recipient.email_verified)return {sent:false,reason:'unverified'};
+  const actorName=cleanName(actorProfile?.nombre||'Tu match')||'Tu match';
+  const recipientName=cleanName(recipient.name||'');
+  const deckName=validDeck(deck)==='verdadoreto'?'Verdad o Reto':(validDeck(deck)==='conoceme'?'Conóceme':'Rompehielos');
+  const url=`${retentionBaseUrl()}/?${notificationId?`notification=${encodeURIComponent(notificationId)}`:'open=matches'}`;
+  const html=vrEmailShell({
+    preheader:`${actorName} quiere jugar contigo en V/R Match.`,eyebrow:'INVITACIÓN A JUGAR 🎮',title:`${actorName} quiere romper el hielo`,
+    bodyHtml:`${recipientName?`<p style="margin:0 0 16px;">Hola <strong style="color:#fff;">${escapeEmailHtml(recipientName)}</strong>,</p>`:''}<p style="margin:0;"><strong style="color:#fff;">${escapeEmailHtml(actorName)}</strong> te ha invitado a <strong style="color:#ff6dac;">${escapeEmailHtml(deckName)}</strong>. Entra en V/R Match para responderle.</p>`,
+    ctaLabel:'Abrir V/R Match',ctaUrl:url,
+    footerHtml:'Este aviso respeta tus preferencias de <strong style="color:#a9a5b4;">Invitaciones a jugar</strong> y <strong style="color:#a9a5b4;">Recordatorios por email</strong>.'
+  });
+  const result=await sendEmail({to:recipient.email,subject:`🎮 ${actorName} quiere jugar contigo | V/R Match`,text:`${actorName} quiere jugar a ${deckName} contigo en V/R Match.\n\nAbrir: ${url}`,html});
+  if(result.sent)logRetentionEmail(recipientUserId,'game_invite',key);
+  return result;
+}
+async function sendProfileReminderEmail(userId) {
+  if(!retentionAllowed(userId))return {sent:false,reason:'disabled'};
+  if(retentionEmailWasSent(userId,'profile_incomplete','account'))return {sent:false,reason:'already_sent'};
+  const recipient=retentionRecipient(userId);
+  if(!recipient?.email || !recipient.email_verified)return {sent:false,reason:'unverified'};
+  const city=communityCityForUser(userId)?.name||'';
+  const url=retentionBaseUrl();
+  const html=vrEmailShell({
+    preheader:'Completa tu perfil para empezar a descubrir personas en V/R Match.',eyebrow:'TE FALTA MUY POCO ✨',title:'Completa tu perfil y empieza a hacer match',
+    bodyHtml:`<p style="margin:0;">Tu cuenta ya está creada${city?` en <strong style="color:#fff;">${escapeEmailHtml(city)}</strong>`:''}. Solo falta completar el perfil para que otras personas puedan descubrirte y tú puedas empezar a ver perfiles compatibles.</p><p style="margin:16px 0 0;color:#a9a5b4;">Añade una foto, una breve descripción y tus preferencias. Puedes cambiarlo cuando quieras.</p>`,
+    ctaLabel:'Completar mi perfil',ctaUrl:url,
+    footerHtml:'Es un recordatorio único de activación. Puedes desactivar <strong style="color:#a9a5b4;">Recordatorios por email</strong> desde el centro de notificaciones.'
+  });
+  const result=await sendEmail({to:recipient.email,subject:'✨ Termina tu perfil en V/R Match',text:`Tu cuenta de V/R Match ya está creada. Completa tu perfil para empezar a descubrir personas.\n\n${url}`,html});
+  if(result.sent)logRetentionEmail(userId,'profile_incomplete','account');
+  return result;
+}
+async function sendMatchConversationNudgeEmail(userId, partnerProfile, matchId) {
+  if(!retentionAllowed(userId,'match'))return {sent:false,reason:'disabled'};
+  if(retentionEmailWasSent(userId,'match_no_chat',matchId))return {sent:false,reason:'already_sent'};
+  const recipient=retentionRecipient(userId);
+  if(!recipient?.email || !recipient.email_verified)return {sent:false,reason:'unverified'};
+  const partnerName=cleanName(partnerProfile?.nombre||'Tu match')||'Tu match';
+  const url=retentionBaseUrl();
+  const html=vrEmailShell({
+    preheader:`Tienes un match con ${partnerName}. Rompe el hielo jugando.`,eyebrow:'TENÉIS MATCH 🔥',title:'¿Quién rompe el hielo primero?',
+    bodyHtml:`<p style="margin:0;">Tú y <strong style="color:#fff;">${escapeEmailHtml(partnerName)}</strong> hicisteis match, pero todavía no habéis empezado a hablar.</p><p style="margin:16px 0 0;">Si no sabes qué decir, prueba <strong style="color:#ff6dac;">Rompehielos</strong>: una partida puede ser más fácil que empezar con “hola”.</p>`,
+    ctaLabel:'Romper el hielo',ctaUrl:url,
+    footerHtml:'Este recordatorio se envía una sola vez por match y respeta tus preferencias de <strong style="color:#a9a5b4;">Nuevo match</strong> y <strong style="color:#a9a5b4;">Recordatorios por email</strong>.'
+  });
+  const result=await sendEmail({to:recipient.email,subject:`🔥 Rompe el hielo con ${partnerName} | V/R Match`,text:`Tienes un match con ${partnerName}, pero todavía no habéis hablado. Entra en V/R Match y prueba Rompehielos.\n\n${url}`,html});
+  if(result.sent)logRetentionEmail(userId,'match_no_chat',matchId);
+  return result;
+}
+async function processRetentionEmails(limit=40) {
+  if(!RETENTION_EMAIL_ENABLED || !SMTP_CONFIGURED)return {sent:0,skipped:true};
+  let sent=0;
+  const ts=now();
+  const profileCutoff=ts-RETENTION_PROFILE_HOURS*3600000;
+  const profileRows=db.prepare(`SELECT u.id FROM users u LEFT JOIN profiles p ON p.user_id=u.id
+    LEFT JOIN notification_preferences np ON np.user_id=u.id
+    WHERE u.status='active' AND u.email_verified=1 AND u.created_at<=? AND p.user_id IS NULL
+      AND COALESCE(np.retention_email,1)<>0
+      AND NOT EXISTS(SELECT 1 FROM retention_email_log r WHERE r.user_id=u.id AND r.kind='profile_incomplete' AND r.context_key='account' AND r.status='sent')
+    ORDER BY u.created_at ASC LIMIT ?`).all(profileCutoff,Math.max(1,Math.min(100,Number(limit)||40)));
+  for(const row of profileRows){
+    if(socketForUser(row.id))continue;
+    try{const r=await sendProfileReminderEmail(row.id);if(r.sent)sent++;}catch(e){console.warn('Email perfil incompleto:',e.message);}
+  }
+  const matchCutoff=ts-RETENTION_MATCH_HOURS*3600000;
+  const matchRows=db.prepare(`SELECT m.id,m.user1,m.user2 FROM matches m
+    WHERE m.active=1 AND m.created_at<=? AND NOT EXISTS(SELECT 1 FROM messages x WHERE x.match_id=m.id)
+      AND (
+        EXISTS(SELECT 1 FROM users u LEFT JOIN notification_preferences np ON np.user_id=u.id
+          WHERE u.id=m.user1 AND u.status='active' AND u.email_verified=1 AND COALESCE(np.retention_email,1)<>0 AND COALESCE(np.new_match,1)<>0
+          AND NOT EXISTS(SELECT 1 FROM retention_email_log r WHERE r.user_id=u.id AND r.kind='match_no_chat' AND r.context_key=m.id AND r.status='sent'))
+        OR EXISTS(SELECT 1 FROM users u LEFT JOIN notification_preferences np ON np.user_id=u.id
+          WHERE u.id=m.user2 AND u.status='active' AND u.email_verified=1 AND COALESCE(np.retention_email,1)<>0 AND COALESCE(np.new_match,1)<>0
+          AND NOT EXISTS(SELECT 1 FROM retention_email_log r WHERE r.user_id=u.id AND r.kind='match_no_chat' AND r.context_key=m.id AND r.status='sent'))
+      )
+    ORDER BY m.created_at ASC LIMIT ?`).all(matchCutoff,Math.max(1,Math.min(60,Number(limit)||40)));
+  for(const match of matchRows){
+    for(const [uid,pid] of [[match.user1,match.user2],[match.user2,match.user1]]){
+      if(socketForUser(uid) || blockedEitherWay(uid,pid))continue;
+      try{const r=await sendMatchConversationNudgeEmail(uid,publicProfile(getProfile(pid)),match.id);if(r.sent)sent++;}catch(e){console.warn('Email match sin conversación:',e.message);}
+    }
+  }
+  return {sent};
+}
+
 async function sendVerificationEmail(req, user) {
   const token = issueAuthToken(user.id,'verify',EMAIL_VERIFY_HOURS*3600000);
   const link = `${baseUrl(req)}/api/auth/verify?token=${encodeURIComponent(token)}`;
@@ -1463,6 +1611,8 @@ if (legacyLaunchSecretsScrubbed || launchSecurityCleanupAtBoot.expired || launch
 setTimeout(()=>processLaunchMailQueue(20).catch(e=>console.warn('Launch mail:',e.message)),5000).unref();
 setInterval(()=>processLaunchMailQueue(20).catch(e=>console.warn('Launch mail:',e.message)),30000).unref();
 setInterval(()=>cleanupLaunchSecurityData(),6*60*60*1000).unref();
+setTimeout(()=>processRetentionEmails(40).catch(e=>console.warn('Retención email:',e.message)),90*1000).unref();
+setInterval(()=>processRetentionEmails(40).catch(e=>console.warn('Retención email:',e.message)),RETENTION_SWEEP_MINUTES*60*1000).unref();
 
 function mimeExt(mime) {
   if (mime === 'image/png') return 'png';
@@ -1717,6 +1867,7 @@ function notificationPreferences(userId) {
     newMessage: row ? row.new_message !== 0 : true,
     gameInvite: row ? row.game_invite !== 0 : true,
     gameTurn: row ? row.game_turn !== 0 : true,
+    retentionEmail: row ? row.retention_email !== 0 : true,
     pushEnabled: row ? row.push_enabled !== 0 : false
   };
 }
@@ -2116,12 +2267,13 @@ app.put('/api/notification-preferences', requireAuth, (req,res) => {
     newMessage:bool01(req.body?.newMessage,current.newMessage),
     gameInvite:bool01(req.body?.gameInvite,current.gameInvite),
     gameTurn:bool01(req.body?.gameTurn,current.gameTurn),
+    retentionEmail:bool01(req.body?.retentionEmail,current.retentionEmail),
     pushEnabled:bool01(req.body?.pushEnabled,current.pushEnabled)
   };
-  db.prepare(`INSERT INTO notification_preferences(user_id,new_match,new_message,game_invite,game_turn,push_enabled,updated_at)
-    VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET new_match=excluded.new_match,new_message=excluded.new_message,
-    game_invite=excluded.game_invite,game_turn=excluded.game_turn,push_enabled=excluded.push_enabled,updated_at=excluded.updated_at`)
-    .run(req.user.id,next.newMatch,next.newMessage,next.gameInvite,next.gameTurn,next.pushEnabled,ts);
+  db.prepare(`INSERT INTO notification_preferences(user_id,new_match,new_message,game_invite,game_turn,retention_email,push_enabled,updated_at)
+    VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET new_match=excluded.new_match,new_message=excluded.new_message,
+    game_invite=excluded.game_invite,game_turn=excluded.game_turn,retention_email=excluded.retention_email,push_enabled=excluded.push_enabled,updated_at=excluded.updated_at`)
+    .run(req.user.id,next.newMatch,next.newMessage,next.gameInvite,next.gameTurn,next.retentionEmail,next.pushEnabled,ts);
   res.json({ok:true,preferences:notificationPreferences(req.user.id),pushConfigured:PUSH_CONFIGURED});
 });
 app.get('/api/push/config', requireAuth, (req,res) => {
@@ -2140,9 +2292,9 @@ app.post('/api/push/subscribe', requireAuth, (req,res) => {
   if(existing) db.prepare('UPDATE push_subscriptions SET p256dh=?,auth=?,updated_at=? WHERE id=?').run(p256dh,auth,ts,existing.id);
   else db.prepare('INSERT INTO push_subscriptions(id,user_id,endpoint,p256dh,auth,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').run(safeId('push'),req.user.id,endpoint,p256dh,auth,ts,ts);
   const p=notificationPreferences(req.user.id);
-  db.prepare(`INSERT INTO notification_preferences(user_id,new_match,new_message,game_invite,game_turn,push_enabled,updated_at)
-    VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET push_enabled=1,updated_at=excluded.updated_at`)
-    .run(req.user.id,p.newMatch?1:0,p.newMessage?1:0,p.gameInvite?1:0,p.gameTurn?1:0,1,ts);
+  db.prepare(`INSERT INTO notification_preferences(user_id,new_match,new_message,game_invite,game_turn,retention_email,push_enabled,updated_at)
+    VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET push_enabled=1,updated_at=excluded.updated_at`)
+    .run(req.user.id,p.newMatch?1:0,p.newMessage?1:0,p.gameInvite?1:0,p.gameTurn?1:0,p.retentionEmail?1:0,1,ts);
   res.json({ok:true,preferences:notificationPreferences(req.user.id)});
 });
 app.post('/api/push/unsubscribe', requireAuth, (req,res) => {
@@ -2284,6 +2436,7 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
     const reports=db.prepare('SELECT id,reported,reason,details,created_at,status,updated_at,moderator_note FROM reports WHERE reporter=? ORDER BY created_at ASC').all(userId);
     const feedback=db.prepare('SELECT id,kind,message,page,created_at,status,admin_note,updated_at FROM feedback WHERE user_id=? ORDER BY created_at ASC').all(userId);
     const notifications=db.prepare('SELECT id,source_user,type,title,body,data_json,created_at,read_at FROM notifications WHERE user_id=? ORDER BY created_at ASC').all(userId).map(n=>({...n,data:safeJsonObject(n.data_json),data_json:undefined}));
+    const retentionEmails=db.prepare('SELECT kind,context_key,sent_at,status FROM retention_email_log WHERE user_id=? ORDER BY sent_at ASC').all(userId);
     const referralStats=memberReferralStats(userId);
     const referralAttribution=db.prepare('SELECT referral_code,attributed_at FROM user_referral_attributions WHERE invitee_user_id=?').get(userId)||null;
     const growthAcquisition=growthAcquisitionForUser(userId);
@@ -2304,7 +2457,7 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
       referrals:{...referralStats,referredBy:referralAttribution?{referralCode:referralAttribution.referral_code,attributedAt:referralAttribution.attributed_at}:null},
       acquisition:growthAcquisition,growthEvents,
       communityCity:communityCityForUser(userId),
-      likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,notifications,gameSessions,matches
+      likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,notifications,retentionEmails,gameSessions,matches
     };
     res.setHeader('Content-Type','application/json; charset=utf-8');
     res.setHeader('Content-Disposition','attachment; filename="vr-match-mis-datos.json"');
@@ -3070,6 +3223,7 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
     referralVisits: db.prepare("SELECT COUNT(*) n FROM user_referral_events WHERE event_type='VISIT' AND created_at>=?").get(since).n,
     referralShares: db.prepare("SELECT COUNT(*) n FROM user_referral_events WHERE event_type LIKE 'SHARE_%' AND created_at>=?").get(since).n,
     referralSignups: db.prepare('SELECT COUNT(*) n FROM user_referral_attributions WHERE attributed_at>=?').get(since).n,
+    retentionEmails: db.prepare("SELECT COUNT(*) n FROM retention_email_log WHERE status='sent' AND sent_at>=?").get(since).n,
     verifiedTotal: db.prepare('SELECT COUNT(*) n FROM users WHERE email_verified=1').get().n,
     activePlus: db.prepare("SELECT COUNT(*) n FROM plus_memberships WHERE status='active' AND (expires_at IS NULL OR expires_at>?)").get(until).n
   };
@@ -3117,6 +3271,9 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
   const cvMap=new Map(campaignVisits.map(r=>[`${r.source}|${r.medium}|${r.campaign}|${r.content}`,Number(r.visits)||0]));
   const campaignPerformance=campaigns.map(r=>{const visits=cvMap.get(`${r.source}|${r.medium}|${r.campaign}|${r.content}`)||0;return {...r,visits,conversion:visits?Math.round(r.signups*1000/visits)/10:null};}).sort((a,b)=>b.signups-a.signups||b.visits-a.visits).slice(0,25);
   const cities=db.prepare(`SELECT c.name city,COUNT(*) signups FROM users u JOIN community_city_memberships m ON m.user_id=u.id JOIN community_cities c ON c.slug=m.city_slug WHERE u.created_at>=? GROUP BY c.slug,c.name ORDER BY signups DESC LIMIT 15`).all(since).map(r=>({city:r.city,signups:Number(r.signups)||0}));
+  const retentionEmails=db.prepare(`SELECT r.kind,COUNT(*) sent,SUM(CASE WHEN u.last_seen_at>r.sent_at THEN 1 ELSE 0 END) activity_after
+    FROM retention_email_log r JOIN users u ON u.id=r.user_id WHERE r.status='sent' AND r.sent_at>=? GROUP BY r.kind ORDER BY sent DESC`).all(since)
+    .map(r=>({kind:r.kind,sent:Number(r.sent)||0,activityAfter:Number(r.activity_after)||0}));
   const uploads=folderStatsSafe(UPLOAD_DIR), mem=process.memoryUsage();
   const system={
     uptimeSeconds:Math.round(process.uptime()),rssMb:Math.round(mem.rss/1024/1024),heapUsedMb:Math.round(mem.heapUsed/1024/1024),
@@ -3125,7 +3282,7 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
   const recentErrors=db.prepare(`SELECT ce.id,ce.message,ce.source,ce.line,ce.column_no,ce.page,ce.app_version,ce.created_at,u.email,p.name
     FROM client_errors ce LEFT JOIN users u ON u.id=ce.user_id LEFT JOIN profiles p ON p.user_id=ce.user_id
     ORDER BY ce.created_at DESC LIMIT 20`).all();
-  res.json({ok:true,days,metric,funnel,daily,channels,campaigns:campaignPerformance,cities,system,recentErrors});
+  res.json({ok:true,days,metric,funnel,daily,channels,campaigns:campaignPerformance,cities,retentionEmails,system,recentErrors});
 });
 
 app.get('/api/admin/growth/export.csv', requireAuth, requireAdmin, (req,res) => {
@@ -4076,8 +4233,12 @@ io.on('connection', socket => {
     db.prepare('INSERT INTO messages(id,match_id,from_user,text,created_at) VALUES(?,?,?,?,?)').run(message.id,match.id,userId,text,message.ts);
     recordFirstUserGrowthEvent(userId,'first_message');
     emitToUser(userId,'dating_chat_message',message);emitToUser(target,'dating_chat_message',message);emitMatches(userId);emitMatches(target);
-    const senderName=getProfile(userId)?.nombre||'Tu match';
-    createNotification(target,'message','Nuevo mensaje',`${senderName} te ha escrito.`,{partnerId:userId,matchId:match.id,messageId:message.id},userId);
+    const senderProfile=publicProfile(getProfile(userId));
+    const senderName=senderProfile?.nombre||'Tu match';
+    const messageNotification=createNotification(target,'message','Nuevo mensaje',`${senderName} te ha escrito.`,{partnerId:userId,matchId:match.id,messageId:message.id},userId);
+    if(!socketForUser(target) && messageNotification){
+      setImmediate(()=>sendNewMessageEmail(target,senderProfile,messageNotification.id,match.id).catch(e=>console.warn('Email nuevo mensaje:',e.message)));
+    }
     done({ok:true,id:message.id});
   });
 
@@ -4085,12 +4246,16 @@ io.on('connection', socket => {
     const done=typeof ack==='function'?ack:()=>{}; const target=String(data.oponenteID||''); const opponent=socketForUser(target);
     if(!getActiveMatch(userId,target)||blockedEitherWay(userId,target))return done({ok:false,error:'Solo puedes jugar con un match activo.'});
     const targetProfile=getProfile(target); if(targetProfile?.privacy?.allowGameInvites===false)return done({ok:false,error:'Este match ha desactivado las invitaciones a jugar.'});
-    if(!opponent)return done({ok:false,error:'Tu match no está conectado ahora mismo.'});
     const me=publicProfile(getProfile(userId)); const mazo=validDeck(data.mazo);
-    pendingGameInvites.set(gameInviteKey(userId,target),{from:userId,to:target,mazo,expiresAt:now()+GAME_INVITE_TTL_MS});
-    emitToUser(target,'dating_game_invite',{...me,mazo});
-    createNotification(target,'game_invite','Invitación a jugar',`${me?.nombre||'Tu match'} quiere romper el hielo contigo.`,{partnerId:userId,mazo,expiresAt:now()+GAME_INVITE_TTL_MS},userId);
-    done({ok:true});
+    if(opponent){
+      pendingGameInvites.set(gameInviteKey(userId,target),{from:userId,to:target,mazo,expiresAt:now()+GAME_INVITE_TTL_MS});
+      emitToUser(target,'dating_game_invite',{...me,mazo});
+    }
+    const inviteNotification=createNotification(target,'game_invite','Invitación a jugar',`${me?.nombre||'Tu match'} quiere romper el hielo contigo.`,{partnerId:userId,mazo,expiresAt:opponent?now()+GAME_INVITE_TTL_MS:null,offline:!opponent},userId);
+    if(!opponent && inviteNotification){
+      setImmediate(()=>sendGameInviteEmail(target,me,inviteNotification.id,mazo).catch(e=>console.warn('Email invitación a jugar:',e.message)));
+    }
+    done({ok:true,offline:!opponent});
   });
 
   socket.on('dating_game_accept',(data={},ack)=>{
