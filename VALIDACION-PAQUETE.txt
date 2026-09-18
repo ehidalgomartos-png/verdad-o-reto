@@ -1,3 +1,5 @@
+AVISO V18.10.0: este documento pertenece a la base V18.9.1. Para el paquete actual usa LEEME-V18.10.0-VIRAL.txt y VALIDACION-V18.10.0.txt.
+
 VALIDACIONES REALIZADAS ANTES DE ENTREGAR
 =========================================
 - Base de servidor: V18.9.1 aportada por el usuario.

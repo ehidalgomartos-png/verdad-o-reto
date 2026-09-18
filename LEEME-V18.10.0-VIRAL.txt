@@ -1,0 +1,30 @@
+V/R MATCH 18.10.0 — VIRAL V1
+================================
+
+Esta versión parte de la V18.9.1 y añade el primer bucle viral dentro del producto.
+
+NUEVO
+- Enlace personal de referido para cada cuenta.
+- Seguimiento agregado de visitas, altas y compartidos.
+- Objetivo "Invita a 3 amigos" + insignia visual de Fundador.
+- Botón Invitar visible en Descubrir y en Cuenta.
+- WhatsApp + compartir nativo + copiar enlace.
+- Los enlaces de referido abren directamente Crear cuenta con mensaje de invitación.
+- Tarjeta 1080x1350 para compartir el resultado al final de una partida.
+- Métricas de referidos en Admin > Métricas.
+- Exportación de datos y borrado de cuenta actualizados para contemplar referidos.
+- Política de privacidad actualizada.
+
+SUBIDA
+1. Haz backup de producción y de la base de datos.
+2. Sube todo el contenido de esta carpeta a tu repositorio/servidor sustituyendo los archivos anteriores.
+3. No borres data/ ni uploads/ del almacenamiento persistente de producción.
+4. Comprueba en Render que VR_APP_BASE_URL=https://vrmatch.es.
+5. Reinicia/despliega.
+6. Comprueba https://vrmatch.es/healthz -> version 18.10.0.
+7. Prueba una invitación desde una cuenta y abre el enlace en incógnito.
+8. Crea una cuenta de prueba y verifica que el contador pasa a 1/3.
+9. Completa una partida y prueba "Compartir resultado".
+
+Las tablas nuevas se crean automáticamente al arrancar server.js.
+No ejecutes schema.sql manualmente si tu instalación actual ya utiliza la base de datos gestionada por server.js.

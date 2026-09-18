@@ -1,3 +1,5 @@
+AVISO V18.10.0: este documento pertenece a la base V18.9.1. Para el paquete actual usa LEEME-V18.10.0-VIRAL.txt y VALIDACION-V18.10.0.txt.
+
 V/R MATCH 18.9.1 + 30 LANDINGS SEO — PARCHE FINAL
 =================================================
 

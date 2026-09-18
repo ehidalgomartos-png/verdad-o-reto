@@ -30,8 +30,8 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.9.1';
-const LEGAL_VERSION = '2026-09-17';
+const APP_VERSION = '18.10.0';
+const LEGAL_VERSION = '2026-09-18';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -406,6 +406,30 @@ CREATE TABLE IF NOT EXISTS launch_referral_events (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_launch_referral_code ON launch_referral_events(referral_code,created_at DESC);
+
+CREATE TABLE IF NOT EXISTS user_referrals (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  referral_code TEXT NOT NULL UNIQUE,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_user_referrals_code ON user_referrals(referral_code);
+CREATE TABLE IF NOT EXISTS user_referral_attributions (
+  invitee_user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  referrer_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  referral_code TEXT NOT NULL,
+  attributed_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_user_referral_attr_referrer ON user_referral_attributions(referrer_user_id,attributed_at DESC);
+CREATE TABLE IF NOT EXISTS user_referral_events (
+  id TEXT PRIMARY KEY,
+  referral_code TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_user_referral_events_code ON user_referral_events(referral_code,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_referral_events_type ON user_referral_events(event_type,created_at DESC);
+
 CREATE TABLE IF NOT EXISTS launch_activation_tokens (
   token_hash TEXT PRIMARY KEY,
   waitlist_user_id TEXT NOT NULL REFERENCES launch_waitlist_users(id) ON DELETE CASCADE,
@@ -974,6 +998,46 @@ function refreshLaunchFounderQualification(referralCode, ts=now()) {
     return {...stats,founderQualified:true,remaining:0};
   }
   return stats;
+}
+
+// ---- CRECIMIENTO VIRAL · REFERIDOS DE USUARIOS ACTIVOS ----
+function normalizeMemberReferralCode(value) {
+  return cleanShortText(value,40).toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,24);
+}
+function ensureMemberReferral(userId) {
+  if (!userId) return null;
+  let row=db.prepare('SELECT user_id,referral_code,created_at FROM user_referrals WHERE user_id=?').get(userId);
+  if (row) return row;
+  let code;
+  do { code=`VR${crypto.randomBytes(5).toString('hex').toUpperCase()}`; }
+  while(db.prepare('SELECT 1 FROM user_referrals WHERE referral_code=?').get(code));
+  const ts=now();
+  db.prepare('INSERT INTO user_referrals(user_id,referral_code,created_at) VALUES(?,?,?)').run(userId,code,ts);
+  return {user_id:userId,referral_code:code,created_at:ts};
+}
+function memberReferralStats(userId) {
+  const row=ensureMemberReferral(userId);
+  if (!row) return null;
+  const code=row.referral_code;
+  const visits=Number(db.prepare("SELECT COUNT(*) n FROM user_referral_events WHERE referral_code=? AND event_type='VISIT'").get(code)?.n||0);
+  const shares=Number(db.prepare("SELECT COUNT(*) n FROM user_referral_events WHERE referral_code=? AND event_type LIKE 'SHARE_%'").get(code)?.n||0);
+  const signups=Number(db.prepare('SELECT COUNT(*) n FROM user_referral_attributions WHERE referrer_user_id=?').get(userId)?.n||0);
+  const goal=3;
+  return {code,visits,shares,signups,goal,remaining:Math.max(0,goal-signups),rewardUnlocked:signups>=goal};
+}
+function attributeMemberReferral(inviteeUserId, rawCode) {
+  const code=normalizeMemberReferralCode(rawCode);
+  if (!inviteeUserId || !code) return null;
+  const owner=db.prepare('SELECT user_id,referral_code FROM user_referrals WHERE referral_code=?').get(code);
+  if (!owner || owner.user_id===inviteeUserId) return null;
+  const existing=db.prepare('SELECT 1 FROM user_referral_attributions WHERE invitee_user_id=?').get(inviteeUserId);
+  if (existing) return null;
+  const ts=now();
+  db.prepare('INSERT INTO user_referral_attributions(invitee_user_id,referrer_user_id,referral_code,attributed_at) VALUES(?,?,?,?)')
+    .run(inviteeUserId,owner.user_id,owner.referral_code,ts);
+  db.prepare('INSERT INTO user_referral_events(id,referral_code,event_type,user_id,created_at) VALUES(?,?,?,?,?)')
+    .run(safeId('uref'),owner.referral_code,'SIGNUP',inviteeUserId,ts);
+  return {referrerUserId:owner.user_id,code:owner.referral_code};
 }
 function issueLaunchActivation(waitlistUserId, days = LAUNCH_ACTIVATION_DAYS) {
   const raw = crypto.randomBytes(32).toString('base64url');
@@ -1658,6 +1722,7 @@ app.post('/api/auth/register', rateLimit({limit:8,windowMs:60*60*1000,key:req=>r
     const password = String(req.body?.password || '');
     const confirmAdult = req.body?.confirmAdult === true;
     const acceptTerms = req.body?.acceptTerms === true;
+    const referralCode = normalizeMemberReferralCode(req.body?.referralCode);
     if (!confirmAdult) return res.status(400).json({ok:false,error:'Debes confirmar que tienes 18 años o más.'});
     if (!acceptTerms) return res.status(400).json({ok:false,error:'Debes aceptar las condiciones de uso y la política de privacidad.'});
     if (CITY_LAUNCH_ENABLED) return res.status(403).json({ok:false,error:'V/R Match se está abriendo por ciudades. Únete a la lista de espera para recibir acceso cuando tu ciudad se active.',waitlist:true,waitlistUrl:'/espera'});
@@ -1668,6 +1733,8 @@ app.post('/api/auth/register', rateLimit({limit:8,windowMs:60*60*1000,key:req=>r
     const passwordHash = hashPassword(password);
     const ts = now();
     db.prepare('INSERT INTO users(id,email,password_hash,created_at,last_seen_at,email_verified,onboarding_completed) VALUES(?,?,?,?,?,0,0)').run(id,email,passwordHash,ts,ts);
+    ensureMemberReferral(id);
+    if (referralCode) attributeMemberReferral(id,referralCode);
     db.prepare('INSERT INTO legal_acceptances(id,user_id,legal_version,adult_confirmed,terms_accepted,accepted_at) VALUES(?,?,?,?,?,?)')
       .run(safeId('legal'),id,LEGAL_VERSION,1,1,ts);
     const user = {id,email};
@@ -1930,6 +1997,8 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
     const reports=db.prepare('SELECT id,reported,reason,details,created_at,status,updated_at,moderator_note FROM reports WHERE reporter=? ORDER BY created_at ASC').all(userId);
     const feedback=db.prepare('SELECT id,kind,message,page,created_at,status,admin_note,updated_at FROM feedback WHERE user_id=? ORDER BY created_at ASC').all(userId);
     const notifications=db.prepare('SELECT id,source_user,type,title,body,data_json,created_at,read_at FROM notifications WHERE user_id=? ORDER BY created_at ASC').all(userId).map(n=>({...n,data:safeJsonObject(n.data_json),data_json:undefined}));
+    const referralStats=memberReferralStats(userId);
+    const referralAttribution=db.prepare('SELECT referral_code,attributed_at FROM user_referral_attributions WHERE invitee_user_id=?').get(userId)||null;
     const gameSessions=db.prepare(`SELECT id,match_id,user1,user2,deck,started_at,core_completed_at,ended_at,status,finish_reason,total_turns,sync_rounds,coincidences,guess_hits,reactions,personalized_sync,extended,duration_seconds
       FROM game_sessions WHERE user1=? OR user2=? ORDER BY started_at ASC`).all(userId,userId).map(g=>({...g,partner_id:g.user1===userId?g.user2:g.user1,user1:undefined,user2:undefined}));
     const matches=db.prepare('SELECT * FROM matches WHERE user1=? OR user2=? ORDER BY created_at ASC').all(userId,userId).map(m=>{
@@ -1943,6 +2012,7 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
       account:{id:user.id,email:user.email,status:user.status,createdAt:user.created_at,lastSeenAt:user.last_seen_at,emailVerified:Boolean(user.email_verified),emailVerifiedAt:user.email_verified_at||null,onboardingCompleted:Boolean(user.onboarding_completed)},
       profile: profile ? {...profile,storedLocation:profileRow&&hasStoredLocation(profileRow)?{lat:Number(profileRow.location_lat),lng:Number(profileRow.location_lng),updatedAt:profileRow.location_updated_at}:null}:null,
       plus:getPlusState(userId),notificationPreferences:notificationPreferences(userId),legalAcceptances:legal,
+      referrals:{...referralStats,referredBy:referralAttribution?{referralCode:referralAttribution.referral_code,attributedAt:referralAttribution.attributed_at}:null},
       likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,notifications,gameSessions,matches
     };
     res.setHeader('Content-Type','application/json; charset=utf-8');
@@ -1967,6 +2037,11 @@ app.post('/api/account/delete', requireAuth, rateLimit({limit:3,windowMs:24*60*6
     if(!STRIPE_SECRET_KEY)return res.status(503).json({ok:false,error:'Tu cuenta tiene una suscripción vinculada y el servidor no puede cancelarla ahora. Contacta con soporte antes de borrar la cuenta.'});
     try{const canceled=await cancelStripeSubscription(billing.subscription_id);syncStripeSubscription(canceled);}catch(e){console.error('Cancelación antes de borrar cuenta:',cleanShortText(e.message,220));return res.status(502).json({ok:false,error:'No pudimos cancelar la suscripción. La cuenta no se borró para evitar un cobro posterior.'});}
   }
+  const referralRow=db.prepare('SELECT referral_code FROM user_referrals WHERE user_id=?').get(req.user.id);
+  if(referralRow?.referral_code){
+    db.prepare('DELETE FROM user_referral_events WHERE referral_code=? OR user_id=?').run(referralRow.referral_code,req.user.id);
+    db.prepare("UPDATE user_referral_attributions SET referrer_user_id=NULL,referral_code='DELETED' WHERE referrer_user_id=?").run(req.user.id);
+  } else db.prepare('DELETE FROM user_referral_events WHERE user_id=?').run(req.user.id);
   disconnectUserSockets(req.user.id,'account_deleted',{}); deleteUserUploads(req.user.id); db.prepare('DELETE FROM users WHERE id=?').run(req.user.id); onlineUsers.delete(req.user.id); broadcastDiscovery();
   res.json({ok:true});
 });
@@ -2060,6 +2135,31 @@ app.post('/api/telemetry/client-error', requireAuth, rateLimit({limit:20,windowM
   res.json({ok:true});
 });
 
+
+// ---- CRECIMIENTO VIRAL · API DE REFERIDOS ----
+app.post('/api/referrals/visit', rateLimit({limit:120,windowMs:60*60*1000,key:req=>req.ip}), (req,res) => {
+  const code=normalizeMemberReferralCode(req.body?.code);
+  if (!code) return res.status(400).json({ok:false,error:'Código requerido.'});
+  const owner=db.prepare('SELECT user_id,referral_code FROM user_referrals WHERE referral_code=?').get(code);
+  if (!owner) return res.status(404).json({ok:false,error:'Código de invitación no encontrado.'});
+  db.prepare('INSERT INTO user_referral_events(id,referral_code,event_type,user_id,created_at) VALUES(?,?,?,?,?)')
+    .run(safeId('uref'),owner.referral_code,'VISIT',null,now());
+  res.json({ok:true});
+});
+
+app.get('/api/referrals/me', requireAuth, rateLimit({limit:90,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  const stats=memberReferralStats(req.user.id);
+  const referralUrl=`${baseUrl(req)}/?ref=${encodeURIComponent(stats.code)}&utm_source=referral&utm_medium=member&utm_campaign=invite3`;
+  res.json({ok:true,referral:{...stats,url:referralUrl}});
+});
+
+app.post('/api/referrals/share', requireAuth, rateLimit({limit:120,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  const row=ensureMemberReferral(req.user.id);
+  const source=['invite','game_result'].includes(String(req.body?.source||''))?String(req.body.source):'invite';
+  db.prepare('INSERT INTO user_referral_events(id,referral_code,event_type,user_id,created_at) VALUES(?,?,?,?,?)')
+    .run(safeId('uref'),row.referral_code,source==='game_result'?'SHARE_GAME':'SHARE_INVITE',req.user.id,now());
+  res.json({ok:true,referral:memberReferralStats(req.user.id)});
+});
 
 // ---- LANZAMIENTO POR CIUDADES · API PÚBLICA ----
 app.get('/api/launch/cities', (req,res) => {
@@ -2640,6 +2740,9 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
     reports: db.prepare('SELECT COUNT(*) n FROM reports WHERE created_at>=?').get(since).n,
     feedback: db.prepare('SELECT COUNT(*) n FROM feedback WHERE created_at>=?').get(since).n,
     clientErrors: db.prepare('SELECT COUNT(*) n FROM client_errors WHERE created_at>=?').get(since).n,
+    referralVisits: db.prepare("SELECT COUNT(*) n FROM user_referral_events WHERE event_type='VISIT' AND created_at>=?").get(since).n,
+    referralShares: db.prepare("SELECT COUNT(*) n FROM user_referral_events WHERE event_type LIKE 'SHARE_%' AND created_at>=?").get(since).n,
+    referralSignups: db.prepare('SELECT COUNT(*) n FROM user_referral_attributions WHERE attributed_at>=?').get(since).n,
     verifiedTotal: db.prepare('SELECT COUNT(*) n FROM users WHERE email_verified=1').get().n,
     activePlus: db.prepare("SELECT COUNT(*) n FROM plus_memberships WHERE status='active' AND (expires_at IS NULL OR expires_at>?)").get(until).n
   };
@@ -3773,6 +3876,6 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v18.9.1 escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
+server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v${APP_VERSION} escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
   console.log(`Resiliencia: reconexión de partidas ${Math.round(GAME_RECONNECT_GRACE_MS/1000)}s + mantenimiento + backup manual`);
   console.log(`Activación de ciudades: tokens hash-only · ${LAUNCH_ACTIVATION_DAYS} días · reenvío protegido`);console.log(`Socket origin: ${(allowedOrigins.length||appBaseOrigin)?'restringido':'ABIERTO (solo desarrollo)'}`);console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad: sesiones + bloqueados + exportación de datos');});

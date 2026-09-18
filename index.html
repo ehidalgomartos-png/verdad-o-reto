@@ -166,6 +166,7 @@
           <h2>Encuentra tu vibra.</h2>
         </div>
         <div class="dating-top-actions">
+          <button id="inviteGrowthPill" class="invite-growth-pill" type="button" onclick="abrirInvitaAmigos()">↗ Invitar</button>
           <button id="vrPlusPill" class="vr-plus-pill" type="button" onclick="abrirPlus()">V/R+</button>
           <button class="filter-button" type="button" onclick="toggleDatingFilters()" aria-label="Filtros">☷</button>
           <button class="dating-profile-button" type="button" onclick="volverPerfil()" aria-label="Editar perfil"><span id="datingAvatarMini">🙂</span></button>
@@ -555,6 +556,7 @@
           <div><strong id="gameStatCoincidences">0</strong><small>coincidencias</small></div>
           <div><strong id="gameStatReactions">0</strong><small>reacciones</small></div>
         </div>
+        <button class="btn game-share-btn" type="button" onclick="compartirResultadoPartida()">🔥 Compartir resultado</button>
         <div class="game-final-actions"><button class="btn btn-secondary" type="button" onclick="continuarPartida()">Seguir jugando</button><button class="btn btn-primary" type="button" onclick="terminarPartidaFinal()">Terminar partida</button></div>
       </div>
 
@@ -673,6 +675,7 @@
       <span class="eyebrow">CUENTA</span><h3>Privacidad y seguridad</h3>
       <div class="account-email-card"><div><small>CORREO</small><strong id="settingsEmail">—</strong></div><span id="emailVerifiedBadge" class="security-badge">Pendiente</span></div>
       <button id="resendVerificationButton" class="mini-link account-resend" type="button" onclick="reenviarVerificacion()">Reenviar verificación</button>
+      <div class="settings-section referral-account-section"><strong>Invita a tus amigos</strong><p class="account-legal-copy">Tu enlace personal cuenta las altas que traes a VRMatch. Llega a 3 para desbloquear la insignia de Fundador.</p><button class="btn btn-secondary" type="button" onclick="cerrarCuenta();abrirInvitaAmigos()">🔥 Ver mi enlace de invitación</button></div>
       <div class="settings-section"><strong>Privacidad</strong><label class="setting-switch"><span><b>Mostrarme en Descubrir</b><small>Desactívalo para pausar temporalmente tu perfil.</small></span><input id="privacyDiscoverable" type="checkbox" checked></label><label class="setting-switch"><span><b>Mostrar estado online</b><small>Oculta el indicador de conexión a otros usuarios.</small></span><input id="privacyShowOnline" type="checkbox" checked></label><label class="setting-switch"><span><b>Permitir invitaciones a jugar</b><small>Tus matches podrán proponerte una partida.</small></span><input id="privacyGameInvites" type="checkbox" checked></label><button class="btn btn-secondary" type="button" onclick="guardarPrivacidad()">Guardar privacidad</button></div>
       <div id="pwaInstallSection" class="settings-section"><strong>Aplicación</strong><div class="pwa-install-card"><div class="pwa-install-icon">V/R</div><div><b>Instalar V/R Match</b><small id="pwaInstallStatus">Añade V/R Match a tu pantalla de inicio y ábrelo como una app.</small></div></div><button id="pwaInstallButton" class="btn btn-secondary" type="button" onclick="instalarPWA()">⇩ Instalar aplicación</button></div>
       <div class="settings-section"><strong>Cambiar contraseña</strong><div class="field"><input id="currentPassword" type="password" aria-label="Contraseña actual" maxlength="72" autocomplete="current-password" placeholder="Contraseña actual"></div><div class="field"><input id="newPassword" type="password" aria-label="Nueva contraseña" maxlength="72" autocomplete="new-password" placeholder="Nueva contraseña · mínimo 8"></div><button class="btn btn-secondary" type="button" onclick="cambiarPasswordCuenta()">Actualizar contraseña</button></div>
@@ -682,6 +685,27 @@
       <div class="settings-section"><strong>Información, legal y seguridad</strong><p class="account-legal-copy">Consulta cómo funciona la plataforma, las funciones disponibles, las condiciones, la privacidad y las normas de comunidad.</p><div class="account-legal-links"><a href="/como-funciona.html" target="_blank" rel="noopener">Cómo funciona</a><a href="/funciones.html" target="_blank" rel="noopener">Funciones V/R+</a><a href="/terms.html" target="_blank" rel="noopener">Condiciones</a><a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a><a href="/community.html" target="_blank" rel="noopener">Normas de comunidad</a></div></div>
       <button id="adminPanelButton" class="btn btn-secondary hidden" type="button" onclick="abrirAdmin()">⚑ Abrir panel de moderación</button>
       <div class="danger-zone"><strong>Zona de riesgo</strong><p>Eliminar la cuenta borra perfil, matches, mensajes, fotos y sesiones de forma permanente.</p><button class="btn btn-danger-soft" type="button" onclick="abrirEliminarCuenta()">Eliminar mi cuenta</button></div>
+    </div>
+  </div>
+
+  <div id="inviteFriendsModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card account-modal-card invite-friends-card">
+      <button class="modal-close" type="button" aria-label="Cerrar invitaciones" onclick="cerrarInvitaAmigos()">×</button>
+      <span class="eyebrow">CRECE VRMATCH</span><h3>Invita a 3 amigos 🔥</h3>
+      <p>Comparte tu enlace personal. Cada alta válida suma para desbloquear tu insignia de Fundador.</p>
+      <div class="referral-progress-card">
+        <div class="referral-progress-head"><strong id="referralProgressText">0 de 3 altas</strong><span id="referralRewardBadge">FUNDADOR</span></div>
+        <div class="referral-progress-track"><i id="referralProgressBar"></i></div>
+        <small id="referralProgressHint">Te faltan 3 altas.</small>
+      </div>
+      <div class="referral-link-box"><small>TU ENLACE</small><strong id="referralLinkText">Preparando enlace…</strong></div>
+      <div class="referral-stats"><div><strong id="referralVisits">0</strong><small>visitas</small></div><div><strong id="referralSignups">0</strong><small>altas</small></div><div><strong id="referralShares">0</strong><small>compartidos</small></div></div>
+      <div class="referral-actions">
+        <button class="btn btn-whatsapp" type="button" onclick="compartirInvitacionWhatsApp()">WhatsApp</button>
+        <button class="btn btn-secondary" type="button" onclick="compartirInvitacionNativa()">↗ Compartir</button>
+        <button class="btn btn-ghost" type="button" onclick="copiarEnlaceReferral()">📋 Copiar enlace</button>
+      </div>
+      <small class="referral-privacy-note">Solo contamos visitas, compartidos y altas atribuidas a tu código. No mostramos quién se registró.</small>
     </div>
   </div>
 
@@ -872,6 +896,7 @@
     let notificationBrowserEnabled = localStorage.getItem('vr_browser_notifications') === '1';
     let deferredInstallPrompt = null;
     let pwaInstalled = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    let referralState = null;
 
     const baseDeDatos = {
       rompehielos: {
@@ -1471,6 +1496,16 @@
     const $ = (id) => document.getElementById(id);
     const screens = ['pantallaAuth','pantallaPerfil','pantallaDescubrir','pantallaPlus','pantallaMatches','pantallaChat','pantallaAdmin','pantallaMazos','pantallaMenu','pantallaLobby','pantallaJuego'];
 
+    const incomingReferralCode = String(params.get('ref') || '').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,24);
+    if (incomingReferralCode) {
+      if(!authToken)localStorage.setItem('vr_member_ref', incomingReferralCode);
+      const visitKey=`vr_ref_visit_${incomingReferralCode}`;
+      if(!sessionStorage.getItem(visitKey)) {
+        fetch('/api/referrals/visit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:incomingReferralCode})})
+          .then(r=>{if(r.ok)sessionStorage.setItem(visitKey,'1');}).catch(()=>{});
+      }
+    }
+
     function showScreen(id) {
       screens.forEach(x => $(x).classList.toggle('hidden', x !== id));
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1953,6 +1988,89 @@
       });
     }
 
+    async function cargarReferralState(force=false) {
+      if(!authToken)return null;
+      if(referralState&&!force)return referralState;
+      const res=await api('/api/referrals/me');
+      if(!res.ok)return null;
+      referralState=res.referral||null;
+      pintarReferralState();
+      return referralState;
+    }
+
+    function pintarReferralState() {
+      const r=referralState;if(!r)return;
+      if($('referralLinkText'))$('referralLinkText').textContent=r.url||'';
+      if($('referralVisits'))$('referralVisits').textContent=String(r.visits||0);
+      if($('referralSignups'))$('referralSignups').textContent=String(r.signups||0);
+      if($('referralShares'))$('referralShares').textContent=String(r.shares||0);
+      if($('referralProgressText'))$('referralProgressText').textContent=`${Math.min(r.goal||3,r.signups||0)} de ${r.goal||3} altas`;
+      if($('referralProgressBar'))$('referralProgressBar').style.width=`${Math.min(100,Math.round((Number(r.signups||0)*100)/Math.max(1,Number(r.goal||3))))}%`;
+      if($('referralProgressHint'))$('referralProgressHint').textContent=r.rewardUnlocked?'🔥 Insignia de Fundador desbloqueada.':`Te faltan ${r.remaining||0} alta${Number(r.remaining||0)===1?'':'s'}.`;
+      if($('referralRewardBadge'))$('referralRewardBadge').classList.toggle('unlocked',Boolean(r.rewardUnlocked));
+      if($('inviteGrowthPill'))$('inviteGrowthPill').textContent=r.rewardUnlocked?'✓ Fundador':'↗ Invitar';
+    }
+
+    async function abrirInvitaAmigos() {
+      if(!authToken)return mostrarToast('Entra en tu cuenta para invitar amigos.','info');
+      $('inviteFriendsModal').classList.remove('hidden');$('inviteFriendsModal').setAttribute('aria-hidden','false');
+      const r=await cargarReferralState(true);
+      if(!r)mostrarToast('No se pudo preparar tu enlace de invitación.','warn');
+    }
+    function cerrarInvitaAmigos(){$('inviteFriendsModal').classList.add('hidden');$('inviteFriendsModal').setAttribute('aria-hidden','true');}
+    function textoInvitacionReferral(){return `Estoy probando VRMatch: haces match y rompes el hielo jugando 🔥 ¿Te apuntas? ${referralState?.url||location.origin}`;}
+    async function registrarShareReferral(source='invite'){
+      if(!authToken)return;
+      const res=await api('/api/referrals/share',{method:'POST',body:{source}});
+      if(res.ok&&res.referral){referralState={...(referralState||{}),...res.referral,url:referralState?.url||''};pintarReferralState();}
+    }
+    function compartirInvitacionWhatsApp(){
+      if(!referralState?.url)return mostrarToast('Abre de nuevo Invitaciones para preparar el enlace.','warn');
+      window.open(`https://wa.me/?text=${encodeURIComponent(textoInvitacionReferral())}`,'_blank','noopener');
+      void registrarShareReferral('invite');
+    }
+    async function compartirInvitacionNativa(){
+      if(!referralState?.url)return mostrarToast('No hay enlace disponible todavía.','warn');
+      const data={title:'VRMatch',text:'Haz match y rompe el hielo jugando 🔥',url:referralState.url};
+      if(navigator.share){try{await navigator.share(data);await registrarShareReferral('invite');return;}catch(e){if(e?.name==='AbortError')return;}}
+      await copiarEnlaceReferral();
+    }
+    async function copiarEnlaceReferral(){
+      if(!referralState?.url)return mostrarToast('No hay enlace disponible todavía.','warn');
+      try{await navigator.clipboard.writeText(referralState.url);await registrarShareReferral('invite');mostrarToast('Enlace de invitación copiado.','success');}
+      catch{mostrarToast('No se pudo copiar automáticamente.','warn');}
+    }
+
+    function crearTarjetaResultadoBlob() {
+      return new Promise(resolve=>{
+        const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1350;const ctx=canvas.getContext('2d');
+        const gradient=ctx.createLinearGradient(0,0,1080,1350);gradient.addColorStop(0,'#09090d');gradient.addColorStop(.52,'#1b0b1d');gradient.addColorStop(1,'#251047');ctx.fillStyle=gradient;ctx.fillRect(0,0,1080,1350);
+        const glow=ctx.createRadialGradient(830,180,20,830,180,520);glow.addColorStop(0,'rgba(255,45,117,.55)');glow.addColorStop(1,'rgba(255,45,117,0)');ctx.fillStyle=glow;ctx.fillRect(0,0,1080,720);
+        ctx.textAlign='center';ctx.fillStyle='#ff3d83';ctx.font='900 58px system-ui';ctx.fillText('V/R MATCH',540,160);ctx.fillStyle='#ffffff';ctx.font='900 78px system-ui';ctx.fillText('HEMOS ROTO EL HIELO 🔥',540,300);
+        const coincidencias=Number($('gameStatCoincidences')?.textContent||0),momentos=Number($('gameStatSpecial')?.textContent||0),reacciones=Number($('gameStatReactions')?.textContent||0);
+        const cards=[[String(coincidencias),'COINCIDENCIAS'],[String(momentos),'MOMENTOS V/R'],[String(reacciones),'REACCIONES']];
+        cards.forEach((item,i)=>{const x=90+i*320;ctx.fillStyle='rgba(255,255,255,.055)';ctx.strokeStyle='rgba(255,255,255,.12)';ctx.lineWidth=2;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,430,260,220,34);else ctx.rect(x,430,260,220);ctx.fill();ctx.stroke();ctx.fillStyle='#fff';ctx.font='900 70px system-ui';ctx.fillText(item[0],x+130,535);ctx.fillStyle='#aaa4b1';ctx.font='800 24px system-ui';ctx.fillText(item[1],x+130,590);});
+        ctx.fillStyle='#ffffff';ctx.font='900 64px system-ui';ctx.fillText('¿NOS SUPERAS?',540,820);ctx.fillStyle='#c9c2ce';ctx.font='500 36px system-ui';ctx.fillText('Haz match. Juega. Descubre si hay química.',540,900);
+        ctx.fillStyle='#ff3d83';ctx.font='900 48px system-ui';ctx.fillText('vrmatch.es',540,1050);ctx.fillStyle='#817a89';ctx.font='600 25px system-ui';ctx.fillText('#RompeElHielo  ·  +18',540,1130);
+        canvas.toBlob(blob=>resolve(blob),'image/png',.94);
+      });
+    }
+
+    async function compartirResultadoPartida(){
+      await cargarReferralState();
+      const url=referralState?.url||`${location.origin}/?utm_source=game_share&utm_medium=organic&utm_campaign=rompe_el_hielo`;
+      const coinc=Number($('gameStatCoincidences')?.textContent||0);
+      const text=`Mi Match y yo hemos terminado una partida en VRMatch con ${coinc} coincidencia${coinc===1?'':'s'} 🔥 ¿Nos superas? ${url}`;
+      const blob=await crearTarjetaResultadoBlob();
+      try{
+        if(blob&&window.File&&navigator.canShare){const file=new File([blob],'vrmatch-resultado.png',{type:'image/png'});if(navigator.canShare({files:[file]})){await navigator.share({title:'Resultado VRMatch',text,files:[file]});await registrarShareReferral('game_result');return;}}
+        if(navigator.share){await navigator.share({title:'Resultado VRMatch',text,url});await registrarShareReferral('game_result');return;}
+      }catch(e){if(e?.name==='AbortError')return;}
+      if(blob){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='vrmatch-resultado.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1500);}
+      try{await navigator.clipboard.writeText(text);}catch{}
+      await registrarShareReferral('game_result');mostrarToast('Resultado preparado y enlace copiado.','success');
+    }
+
     function aplicarCuenta(user) {
       currentUserId = user?.id || '';
       currentUserEmail = user?.email || '';
@@ -1973,6 +2091,7 @@
       if (Array.isArray(result.matches)) datingMatches = result.matches;
       conectarSocket();
       cargarNotificaciones().catch(()=>{});
+      cargarReferralState(true).catch(()=>{});
       if (result.profile) {
         if (salaInvitacion) {
           showScreen('pantallaPerfil');
@@ -2008,7 +2127,7 @@
       if (callApi && oldToken) await desvincularPushSesion();
       if (callApi && oldToken) await api('/api/auth/logout', { method:'POST', body:{} });
       if (socket.connected) socket.disconnect();
-      authToken=''; currentUserId=''; currentUserEmail=''; currentUserEmailVerified=false; currentUserAdmin=false; currentOnboardingCompleted=true; currentPlus=normalizarPlus({});
+      authToken=''; currentUserId=''; currentUserEmail=''; currentUserEmailVerified=false; currentUserAdmin=false; currentOnboardingCompleted=true; currentPlus=normalizarPlus({}); referralState=null;
       notificationItems=[];notificationUnread=0;notificationPreferences=normalizarPreferenciasNotificacion({});pushSubscriptionActive=false;
       localStorage.removeItem('vr_auth_token'); localStorage.removeItem('vr_profile');
       datingProfiles=[]; datingMatches=[]; datingPassed=new Set(); datingChats.clear();
@@ -2345,7 +2464,7 @@
       const res=await api(`/api/admin/metrics?days=${encodeURIComponent(days)}`);
       if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudieron cargar.')}</strong></div>`;return;}
       const m=res.metric||{},f=res.funnel||{},sys=res.system||{},daily=res.daily||[],errors=res.recentErrors||[];
-      const cards=[['Altas',m.registered,'cuentas nuevas'],['Activos',m.activeUsers,`últimos ${days===1?'24 h':days+' días'}`],['Likes',m.likes,'acciones'],['Matches',m.matches,'creados'],['Mensajes',m.messages,'enviados'],['Partidas',m.gamesStarted,'iniciadas'],['Finalizadas',m.gamesCompleted,'partidas completas'],['Denuncias',m.reports,'creadas'],['Feedback',m.feedback,'comentarios'],['Errores cliente',m.clientErrors,'registrados']];
+      const cards=[['Altas',m.registered,'cuentas nuevas'],['Activos',m.activeUsers,`últimos ${days===1?'24 h':days+' días'}`],['Likes',m.likes,'acciones'],['Matches',m.matches,'creados'],['Mensajes',m.messages,'enviados'],['Partidas',m.gamesStarted,'iniciadas'],['Finalizadas',m.gamesCompleted,'partidas completas'],['Visitas ref.',m.referralVisits||0,'por invitación'],['Altas ref.',m.referralSignups||0,'atribuidas'],['Compartidos',m.referralShares||0,'invitaciones/resultados'],['Denuncias',m.reports,'creadas'],['Feedback',m.feedback,'comentarios'],['Errores cliente',m.clientErrors,'registrados']];
       const funnel=[['Registro',f.registered,100],['Perfil',f.profile,porcentaje(f.profile,f.registered)],['Match',f.matched,porcentaje(f.matched,f.registered)],['Mensaje',f.messaged,porcentaje(f.messaged,f.registered)],['Jugó',f.played,porcentaje(f.played,f.registered)]];
       const maxDaily=Math.max(1,...daily.map(d=>Math.max(Number(d.registered)||0,Number(d.matches)||0,Number(d.messages)||0,Number(d.games)||0)));
       box.innerHTML=`<div class="metrics-summary">${cards.map(([label,val,sub])=>`<article><strong>${Number(val)||0}</strong><span>${escapeHtml(label)}</span><small>${escapeHtml(sub)}</small></article>`).join('')}</div>
@@ -4131,7 +4250,7 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
       if (!email || !password) return mostrarToast('Completa correo y contraseña.','warn');
       const endpoint=authMode==='register'?'/api/auth/register':'/api/auth/login';
       const body={email,password};
-      if(authMode==='register'){body.confirmAdult=$('confirmAdult').checked;body.acceptTerms=$('acceptTerms').checked;if(!body.confirmAdult)return mostrarToast('Confirma que tienes 18 años o más.','warn');if(!body.acceptTerms)return mostrarToast('Acepta las Condiciones y la Privacidad.','warn');}
+      if(authMode==='register'){body.confirmAdult=$('confirmAdult').checked;body.acceptTerms=$('acceptTerms').checked;body.referralCode=localStorage.getItem('vr_member_ref')||'';if(!body.confirmAdult)return mostrarToast('Confirma que tienes 18 años o más.','warn');if(!body.acceptTerms)return mostrarToast('Acepta las Condiciones y la Privacidad.','warn');}
       const res=await api(endpoint,{method:'POST',body});
       if (!res.ok) {
         if(res.waitlist && res.waitlistUrl){ location.href=res.waitlistUrl; return; }
@@ -4143,6 +4262,7 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
         }
         return mostrarToast(res.error || 'No se pudo acceder.','error');
       }
+      localStorage.removeItem('vr_member_ref');
       if (res.verificationRequired && !res.token) {
         cambiarAuthMode('login');
         mostrarVerificacionPendiente(email,Boolean(res.emailSent));
@@ -4174,6 +4294,12 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
     initDatingSwipe();
     $('deckAdult').title = 'Solo mayores de 18 años';
     if (mazoInvitacion) $('mazoSeleccionadoLabel').textContent = `Mazo: ${nombreMazo(mazoInvitacion)}`;
+    if(incomingReferralCode && !authToken){
+      cambiarAuthMode('register');
+      $('publicCommercialIcon').textContent='🔥';
+      $('publicCommercialTitle').textContent='Te han invitado a VRMatch';
+      $('publicCommercialCopy').textContent='Crea tu cuenta y descubre una forma distinta de hacer match y romper el hielo jugando.';
+    }
     if (verificationResult === 'ok') { history.replaceState({},document.title,location.pathname); setTimeout(()=>mostrarToast('Correo verificado correctamente. Ya puedes entrar.','info'),150); }
     if (verificationResult === 'invalid') { history.replaceState({},document.title,location.pathname); setTimeout(()=>mostrarToast('El enlace de verificación no es válido o ha caducado.','warn'),150); }
     if (billingResult) { history.replaceState({},document.title,location.pathname); setTimeout(()=>mostrarToast('Estado de suscripción actualizado.','info'),220); }

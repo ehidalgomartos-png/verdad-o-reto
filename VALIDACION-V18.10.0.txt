@@ -1,0 +1,13 @@
+VALIDACIÓN V/R MATCH 18.10.0 — VIRAL V1
+
+COMPROBADO EN EL PAQUETE
+- server.js: sintaxis JavaScript válida con node --check.
+- JavaScript inline de index.html: sintaxis válida con node --check.
+- sw.js: sintaxis JavaScript válida con node --check.
+- index.html: sin IDs HTML duplicados.
+- Tablas SQLite nuevas: estructura validada en una base temporal.
+- package.json: versión 18.10.0.
+- APP_VERSION: 18.10.0.
+- Cache PWA: vr-match-shell-v18-10-0.
+
+NO SE EJECUTÓ UN SERVIDOR COMPLETO EN ESTE ENTORNO porque las dependencias npm del proyecto no estaban instaladas aquí. En producción, tras desplegar, usa /healthz y las pruebas manuales indicadas en LEEME-V18.10.0-VIRAL.txt.

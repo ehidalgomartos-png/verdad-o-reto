@@ -43,3 +43,26 @@ INSERT OR IGNORE INTO city_launches(city_slug, city_name, target_users) VALUES
 ('barcelona','Barcelona',750),
 ('alicante','Alicante',400),
 ('castellon','Castellón',250);
+
+-- V18.10.0 — referidos de cuentas activas
+CREATE TABLE IF NOT EXISTS user_referrals (
+  user_id TEXT PRIMARY KEY,
+  referral_code TEXT NOT NULL UNIQUE,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS user_referral_attributions (
+  invitee_user_id TEXT PRIMARY KEY,
+  referrer_user_id TEXT,
+  referral_code TEXT NOT NULL,
+  attributed_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_user_referral_attr_referrer ON user_referral_attributions(referrer_user_id, attributed_at DESC);
+CREATE TABLE IF NOT EXISTS user_referral_events (
+  id TEXT PRIMARY KEY,
+  referral_code TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  user_id TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_user_referral_events_code ON user_referral_events(referral_code, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_referral_events_type ON user_referral_events(event_type, created_at DESC);
