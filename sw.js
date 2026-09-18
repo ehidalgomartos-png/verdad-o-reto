@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vr-match-shell-v18-10-0';
+const CACHE_NAME = 'vr-match-shell-v18-11-0';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -10,6 +10,7 @@ const APP_SHELL = [
   '/community.html',
   '/como-funciona.html',
   '/funciones.html',
+  '/espera',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/icon-maskable-512.png',

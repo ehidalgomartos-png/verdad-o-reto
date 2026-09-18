@@ -4,158 +4,37 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#09090d">
-<title>V/R Match · Desbloquea tu ciudad</title>
+<meta name="description" content="Mira cómo está creciendo VRMatch por ciudades. Puedes crear tu cuenta ahora mismo: no hay lista de espera.">
+<title>VRMatch · Comunidad por ciudades</title>
 <style>
-:root{--bg:#09090d;--panel:#12121a;--line:#292936;--text:#f8f8fb;--muted:#9a98a5;--pink:#ff2f78;--violet:#8c5cff}
-*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 15% 0,rgba(140,92,255,.15),transparent 28%),radial-gradient(circle at 85% 8%,rgba(255,47,120,.15),transparent 24%),var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit;text-decoration:none}button,input,select{font:inherit}.wrap{width:min(1120px,calc(100% - 36px));margin:auto}.top{height:78px;display:flex;align-items:center;justify-content:space-between}.brand{display:flex;align-items:center;gap:9px;font-weight:950;letter-spacing:.08em}.brand b{background:linear-gradient(135deg,var(--pink),var(--violet));padding:10px;border-radius:12px;letter-spacing:0}.btn{border:0;border-radius:14px;padding:13px 18px;background:linear-gradient(135deg,var(--pink),#ff5f78);color:#fff;font-weight:900;cursor:pointer}.btn.alt{background:#17171f;border:1px solid var(--line)}.hero{text-align:center;padding:72px 0 82px}.kicker{font-size:11px;letter-spacing:.18em;font-weight:900;color:#c5c2cc}.hero h1{font-size:clamp(46px,7vw,86px);line-height:.94;letter-spacing:-.058em;margin:16px auto 24px;max-width:940px}.hero h1 em{font-style:normal;background:linear-gradient(90deg,#fff,var(--pink),#af8aff);color:transparent;background-clip:text}.lead{max-width:700px;margin:auto;color:var(--muted);font-size:18px;line-height:1.6}.unlock{max-width:720px;margin:38px auto 0;text-align:left;background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.02));border:1px solid var(--line);border-radius:24px;padding:22px}.city-select{width:100%;margin-bottom:18px;background:#0d0d13;border:1px solid #30303d;border-radius:14px;color:#fff;padding:14px}.row{display:flex;align-items:center;justify-content:space-between;gap:15px}.tiny{font-size:11px;letter-spacing:.13em;color:var(--muted);font-weight:800}.city-title{font-size:22px;font-weight:950;margin-top:4px}.percent{font-size:29px;font-weight:950}.track{height:12px;background:#282832;border-radius:99px;margin:17px 0 13px;overflow:hidden}.fill{height:100%;width:0;background:linear-gradient(90deg,var(--pink),var(--violet));border-radius:99px;transition:width .35s}.muted{color:var(--muted)}.small{font-size:13px}.people{padding:20px 0 90px}.section-head{display:flex;justify-content:space-between;gap:24px;align-items:end;margin-bottom:24px}.section-head h2{font-size:clamp(34px,5vw,54px);letter-spacing:-.045em;margin:7px 0 0}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.card{border:1px solid var(--line);background:var(--panel);border-radius:21px;overflow:hidden}.avatar{height:210px;display:grid;place-items:center;font-size:48px;font-weight:950;background:linear-gradient(145deg,#5f2651,#2d285d);background-size:cover;background-position:center}.info{padding:16px}.info strong{font-size:19px}.empty{grid-column:1/-1;padding:38px;border:1px dashed #30303d;border-radius:20px;text-align:center;color:var(--muted)}.signup{padding:25px 0 110px}.formbox{max-width:760px;margin:auto;border:1px solid var(--line);background:var(--panel);border-radius:27px;padding:30px}.formbox h2{font-size:40px;letter-spacing:-.045em;margin:7px 0}.form{display:grid;gap:14px;margin-top:24px}.form label{display:grid;gap:7px;color:#d0ced6;font-size:13px}.form input,.form select{width:100%;border:1px solid #30303d;background:#0d0d13;color:#fff;border-radius:13px;padding:14px;outline:none}.two{display:grid;grid-template-columns:.35fr .65fr;gap:12px}.check{display:grid!important;grid-template-columns:auto 1fr!important;align-items:start!important}.check input{width:auto;margin-top:3px}.result{display:none;margin-top:18px;padding:18px;border:1px solid #28553e;background:#0c2118;border-radius:16px}.referral-impact{display:none;margin-top:16px;padding:18px;border:1px solid #3c315b;background:linear-gradient(135deg,#171225,#101623);border-radius:16px}.referral-impact-head{display:flex;justify-content:space-between;gap:12px;align-items:start}.referral-impact h3{margin:0;font-size:19px}.referral-impact strong.big{display:block;font-size:30px;margin:10px 0 2px}.ref-progress{height:9px;background:#292633;border-radius:99px;overflow:hidden;margin:13px 0}.ref-progress i{display:block;height:100%;background:linear-gradient(90deg,var(--pink),var(--violet));border-radius:99px}.founder-pill{display:inline-flex;padding:6px 9px;border-radius:99px;background:#49350f;color:#ffd979;font-size:10px;font-weight:900;letter-spacing:.05em}.share{word-break:break-all;color:#8fffc1;font-size:13px}.error{color:#ff8baa;font-size:13px}.active-panel{display:none;margin-top:16px;padding:22px;background:linear-gradient(135deg,#0d271b,#111b2b);border:1px solid #29583e;border-radius:18px}.active-panel h3{margin:0 0 8px;font-size:26px;letter-spacing:-.03em}.active-panel p{margin:0 0 16px;color:#a9b6b0;line-height:1.55}.active-panel .btn{display:inline-flex;align-items:center}.active-panel small{display:block;margin-top:14px;color:#7f9188;line-height:1.5}.is-hidden{display:none!important}.footer{padding:30px 0 60px;border-top:1px solid var(--line);display:flex;gap:20px;justify-content:space-between;color:#787682;font-size:12px}@media(max-width:800px){.grid{grid-template-columns:repeat(2,1fr)}.section-head{align-items:start;flex-direction:column}}@media(max-width:520px){.grid{grid-template-columns:1fr}.two{grid-template-columns:1fr}.hero{padding-top:45px}.hero h1{font-size:50px}.top .btn{padding:11px 13px}.formbox{padding:24px}}
+:root{--bg:#09090d;--panel:#12121a;--line:#292936;--text:#f8f8fb;--muted:#9895a3;--pink:#ff2f78;--violet:#8c5cff}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 12% 0,rgba(140,92,255,.15),transparent 30%),radial-gradient(circle at 88% 7%,rgba(255,47,120,.15),transparent 26%),var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit;text-decoration:none}.wrap{width:min(1080px,calc(100% - 34px));margin:auto}.top{min-height:76px;display:flex;align-items:center;justify-content:space-between;gap:16px}.brand{display:flex;align-items:center;gap:9px;font-weight:950;letter-spacing:.09em}.brand b{background:linear-gradient(135deg,var(--pink),var(--violet));padding:10px;border-radius:12px;letter-spacing:0}.btn{display:inline-flex;justify-content:center;align-items:center;border:0;border-radius:14px;padding:13px 18px;background:linear-gradient(135deg,var(--pink),var(--violet));color:#fff;font-weight:900;cursor:pointer}.hero{text-align:center;padding:64px 0 38px}.kicker{font-size:11px;letter-spacing:.17em;font-weight:950;color:#c8c3cf}.hero h1{font-size:clamp(44px,7vw,82px);line-height:.96;letter-spacing:-.055em;margin:16px auto 22px;max-width:900px}.hero h1 em{font-style:normal;background:linear-gradient(90deg,#fff,var(--pink),#b69aff);color:transparent;background-clip:text}.lead{max-width:720px;margin:auto;color:var(--muted);font-size:17px;line-height:1.6}.open-note{max-width:720px;margin:26px auto 0;padding:15px 18px;border-radius:16px;border:1px solid rgba(55,220,133,.2);background:rgba(55,220,133,.06);color:#ccebdd;font-size:14px}.stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:720px;margin:18px auto 0}.stat{padding:18px;border:1px solid var(--line);background:rgba(255,255,255,.025);border-radius:18px}.stat strong{display:block;font-size:28px}.stat small{color:var(--muted)}.section{padding:36px 0 80px}.section-head{display:flex;justify-content:space-between;gap:18px;align-items:end;margin-bottom:20px}.section-head h2{font-size:clamp(30px,5vw,48px);letter-spacing:-.04em;margin:5px 0}.section-head p{max-width:420px;color:var(--muted);line-height:1.5}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}.city{padding:18px;border:1px solid var(--line);background:linear-gradient(180deg,rgba(24,24,34,.95),rgba(14,14,20,.95));border-radius:21px}.city-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.city h3{margin:0;font-size:19px}.city .count{font-size:24px;font-weight:950}.city .muted{color:var(--muted);font-size:12px}.track{height:9px;background:#252530;border-radius:99px;overflow:hidden;margin:14px 0 8px}.track i{display:block;height:100%;background:linear-gradient(90deg,var(--pink),var(--violet));border-radius:inherit}.city a{margin-top:12px;width:100%}.empty{grid-column:1/-1;padding:32px;text-align:center;border:1px dashed var(--line);border-radius:18px;color:var(--muted)}.footer{padding:28px 0 52px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:16px;color:#777582;font-size:12px}@media(max-width:760px){.grid{grid-template-columns:1fr 1fr}.section-head{align-items:flex-start;flex-direction:column}}@media(max-width:520px){.grid,.stats{grid-template-columns:1fr}.hero{padding-top:40px}.hero h1{font-size:48px}.top .btn{padding:11px 13px}.footer{flex-direction:column}}
 </style>
 </head>
 <body>
-<header class="wrap top">
-  <a class="brand" href="/"><b>V/R</b><span>MATCH</span></a>
-  <a id="topCta" class="btn" href="#registro">Quiero entrar</a>
-</header>
+<header class="wrap top"><a class="brand" href="/"><b>V/R</b><span>MATCH</span></a><a class="btn" href="/?register=1">Crear cuenta</a></header>
 <main>
 <section class="wrap hero">
-  <div class="kicker">CITAS + JUEGO + QUÍMICA REAL</div>
-  <h1 id="heroTitle">¿Quién está esperando <em>hacer Match</em> en tu ciudad?</h1>
-  <p id="heroLead" class="lead">V/R Match se abre por ciudades. Apúntate, comparte tu enlace y ayuda a reunir suficientes personas para que la experiencia tenga sentido desde el primer día.</p>
-  <div class="unlock">
-    <select id="city" class="city-select" aria-label="Elige tu ciudad"><option>Cargando ciudades…</option></select>
-    <div class="row"><div><div class="tiny">ESTADO DE CIUDAD</div><div id="cityName" class="city-title">—</div></div><div id="percent" class="percent">—</div></div>
-    <div id="progressBlock">
-      <div class="track"><div id="fill" class="fill"></div></div>
-      <div class="row small muted"><span><b id="current">—</b> personas dentro</span><span>Meta: <b id="goal">—</b></span></div>
-    </div>
-    <div id="activePanel" class="active-panel">
-      <h3>V/R Match ya está disponible aquí 🔓</h3>
-      <p>La fase de lista de espera ha terminado para esta ciudad. Ya puedes entrar directamente en V/R Match.</p>
-      <a class="btn" href="/">Entrar a V/R Match →</a>
-      <small>¿Ya estabas en la lista? Revisa el correo de activación que recibiste cuando se abrió la ciudad.</small>
-    </div>
-  </div>
+  <div class="kicker">COMUNIDAD VRMATCH</div>
+  <h1>Tu ciudad ya puede <em>empezar a hacer match.</em></h1>
+  <p class="lead">El registro está abierto. Crea tu cuenta ahora, elige tu ciudad y ayuda a que haya cada vez más personas cerca de ti.</p>
+  <div class="open-note">✓ No tienes que esperar a que se complete ningún contador para usar VRMatch.</div>
+  <div class="stats"><div class="stat"><strong id="total">—</strong><small>personas con ciudad elegida</small></div><div class="stat"><strong id="cityCount">—</strong><small>ciudades y municipios creciendo</small></div></div>
 </section>
-<section class="wrap people">
-  <div class="section-head"><div><div class="kicker">V/R PEOPLE</div><h2 id="peopleHeading">Gente esperando en <span id="peopleCity">tu ciudad</span></h2></div><p class="muted small">Solo aparecen personas que han aceptado expresamente mostrarse aquí.</p></div>
-  <div id="people" class="grid"><div class="empty">Cargando…</div></div>
-</section>
-<section class="wrap signup" id="registro">
-  <div class="formbox">
-    <div class="kicker">ACCESO ANTICIPADO</div>
-    <h2>Entra en la lista.</h2>
-    <p class="muted">Cuando tu ciudad se desbloquee recibirás un enlace privado para activar tu cuenta. También obtendrás tu enlace personal para invitar gente.</p>
-    <form id="form" class="form">
-      <label>Nombre o alias<input name="alias" maxlength="30" required placeholder="Ej. Sebas"></label>
-      <div class="two"><label>Edad<input name="age" type="number" min="18" max="99" required placeholder="28"></label><label>Ciudad<select name="city" id="formCity"></select></label></div>
-      <label>Correo<input name="email" type="email" maxlength="254" required placeholder="tu@email.com"></label>
-      <label class="check"><input name="publicProfile" type="checkbox"><span>Quiero que mi alias, edad y ciudad puedan aparecer en V/R People.</span></label>
-      <label class="check"><input name="launchConsent" type="checkbox" required><span>Acepto recibir los mensajes necesarios sobre la lista de espera y la activación de mi ciudad. <a href="/privacy.html" target="_blank" rel="noopener" style="color:#ff78a8">Privacidad</a>.</span></label>
-      <button class="btn" type="submit">Conseguir mi acceso anticipado</button>
-      <div id="error" class="error"></div>
-    </form>
-    <div id="result" class="result"><strong id="resultTitle">Ya estás dentro 🔥</strong><p id="resultCopy" class="small"></p><div id="shareUrl" class="share"></div><p><button id="shareBtn" type="button" class="btn">Compartir mi enlace</button></p></div>
-    <div id="referralImpact" class="referral-impact">
-      <div class="referral-impact-head"><div><div class="tiny">TU IMPACTO</div><h3>Ayuda a desbloquear tu ciudad</h3></div><span id="founderPill" class="founder-pill" style="display:none">★ V/R FOUNDER</span></div>
-      <strong id="inviteCount" class="big">0</strong>
-      <div class="small muted">personas se han apuntado con tu enlace.</div>
-      <div class="ref-progress"><i id="refFill" style="width:0"></i></div>
-      <div id="refMilestone" class="small muted"></div>
-      <div id="refVisits" class="small muted" style="margin-top:8px"></div>
-    </div>
-  </div>
+<section class="wrap section">
+  <div class="section-head"><div><div class="kicker">CRECIMIENTO LOCAL</div><h2>¿Cómo va tu ciudad?</h2></div><p>Los contadores son reales y se actualizan con cuentas activas que han elegido esa ciudad. El objetivo es un hito de comunidad, no una barrera de acceso.</p></div>
+  <div id="cities" class="grid"><div class="empty">Cargando ciudades…</div></div>
 </section>
 </main>
-<footer class="wrap footer"><span>V/R Match · Hidalgo Entertainment</span><span><a href="/privacy.html">Privacidad</a> · <a href="/terms.html">Condiciones</a></span></footer>
+<footer class="wrap footer"><span>VRMatch · Hidalgo Entertainment</span><span><a href="/privacy.html">Privacidad</a> · <a href="/terms.html">Condiciones</a></span></footer>
 <script>
-const API='/api/launch', $=s=>document.querySelector(s);
-let cities=[], referral=new URLSearchParams(location.search).get('ref')||'', shareUrl='', ownReferral=localStorage.getItem('vr_launch_referral_code')||'';
-function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-async function api(url,opt={}){const r=await fetch(url,opt);const d=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(d.error||'Error del servidor'),d);return d}
-
-async function loadReferralImpact(code=ownReferral){
-  if(!code){$('#referralImpact').style.display='none';return}
-  try{
-    const d=await api(`${API}/referrals/${encodeURIComponent(code)}`),r=d.referral||{};
-    ownReferral=code;localStorage.setItem('vr_launch_referral_code',code);
-    $('#referralImpact').style.display='block';
-    $('#inviteCount').textContent=Number(r.successfulInvites||0).toLocaleString('es-ES');
-    $('#refVisits').textContent=`${Number(r.visits||0).toLocaleString('es-ES')} visitas registradas en tu enlace.`;
-    const target=Math.max(1,Number(r.founderTarget||3)),invites=Number(r.successfulInvites||0);
-    $('#refFill').style.width=`${Math.min(100,Math.round(invites*100/target))}%`;
-    $('#founderPill').style.display=r.founderQualified?'inline-flex':'none';
-    $('#refMilestone').textContent=r.founderQualified
-      ? 'Has alcanzado el hito V/R Founder. Tu acceso queda marcado como Founder.'
-      : `Te ${Number(r.remaining||0)===1?'falta':'faltan'} ${Number(r.remaining||0)} ${Number(r.remaining||0)===1?'alta':'altas'} para el hito V/R Founder.`;
-  }catch{$('#referralImpact').style.display='none'}
-}
-
-async function load(){
-  try{
-    const d=await api(API+'/cities');cities=d.cities||[];
-    if(!cities.length)throw new Error('Todavía no hay ciudades configuradas.');
-    const options=cities.map(c=>`<option value="${esc(c.slug)}">${esc(c.name)}</option>`).join('');
-    $('#city').innerHTML=options;$('#formCity').innerHTML=options;
-    const wanted=new URLSearchParams(location.search).get('city');
-    if(wanted&&cities.some(c=>c.slug===wanted)){$('#city').value=wanted;$('#formCity').value=wanted}
-    $('#city').onchange=()=>{$('#formCity').value=$('#city').value;renderCity()};
-    $('#formCity').onchange=()=>{$('#city').value=$('#formCity').value;renderCity()};
-    if(referral)fetch(API+'/referrals/visit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:referral})}).catch(()=>{});
-    await renderCity();
-    if(ownReferral)await loadReferralImpact(ownReferral);
-  }catch(e){$('#cityName').textContent='No disponible';$('#people').innerHTML=`<div class="empty">${esc(e.message)}</div>`}
-}
-async function renderCity(){
-  const c=cities.find(x=>x.slug===$('#city').value)||cities[0];if(!c)return;
-  const active=c.status==='ACTIVE';
-  $('#cityName').textContent=c.name+(c.status==='READY'?' · LISTA 🔥':active?' · ABIERTA 🔓':'');
-  $('#percent').textContent=active?'ABIERTA':c.percent+'%';
-  $('#fill').style.width=c.percent+'%';
-  $('#current').textContent=Number(c.current||0).toLocaleString('es-ES');$('#goal').textContent=Number(c.goal||0).toLocaleString('es-ES');$('#peopleCity').textContent=c.name;
-  $('#progressBlock').classList.toggle('is-hidden',active);
-  $('#activePanel').style.display=active?'block':'none';
-  $('#registro').classList.toggle('is-hidden',active);
-  $('#topCta').textContent=active?'Entrar a V/R Match':'Quiero entrar';
-  $('#topCta').href=active?'/':'#registro';
-  $('#heroTitle').innerHTML=active?`V/R Match ya está <em>disponible en ${esc(c.name)}</em>`:'¿Quién está esperando <em>hacer Match</em> en tu ciudad?';
-  $('#heroLead').textContent=active?'La espera terminó en esta ciudad. Entra en la app, crea tu perfil y empieza a descubrir personas.':'V/R Match se abre por ciudades. Apúntate, comparte tu enlace y ayuda a reunir suficientes personas para que la experiencia tenga sentido desde el primer día.';
-  $('#peopleHeading').innerHTML=active?`V/R People en <span id="peopleCity">${esc(c.name)}</span>`:`Gente esperando en <span id="peopleCity">${esc(c.name)}</span>`;
-  try{
-    const d=await api(`${API}/cities/${encodeURIComponent(c.slug)}/people?limit=8`), people=d.people||[];
-    $('#people').innerHTML=people.length?people.map(p=>{
-      const avatar=String(p.avatar||'');
-      const imageAvatar=/^\/uploads\/[a-zA-Z0-9_.-]+$/.test(avatar);
-      const emojiAvatar=!imageAvatar&&avatar?esc(avatar):'';
-      const bg=imageAvatar?`style="background-image:linear-gradient(180deg,transparent,rgba(0,0,0,.18)),url('${esc(avatar)}')"`:'';
-      const initials=esc(String(p.alias||'VR').slice(0,2).toUpperCase());
-      return `<article class="card"><div class="avatar" ${bg}>${imageAvatar?'':(emojiAvatar||initials)}</div><div class="info"><strong>${esc(p.alias)}, ${Number(p.age)||''}</strong><div class="muted small">📍 ${esc(c.name)}</div></div></article>`;
-    }).join(''):'<div class="empty">Todavía no hay perfiles públicos en esta ciudad. Puedes ser de los primeros.</div>';
-  }catch{$('#people').innerHTML='<div class="empty">No se pudieron cargar los perfiles.</div>'}
-}
-$('#form').onsubmit=async e=>{
-  e.preventDefault();$('#error').textContent='';const f=new FormData(e.currentTarget);const btn=e.currentTarget.querySelector('button[type=submit]');btn.disabled=true;
-  try{
-    const d=await api(API+'/waitlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      alias:f.get('alias'),age:Number(f.get('age')),email:f.get('email'),city:f.get('city'),
-      publicProfile:f.get('publicProfile')==='on',launchConsent:f.get('launchConsent')==='on',referredBy:referral||null
-    })});
-    shareUrl=d.referralUrl||'';
-    ownReferral=d.referralCode||ownReferral;
-    if(ownReferral)localStorage.setItem('vr_launch_referral_code',ownReferral);
-    $('#shareUrl').textContent=shareUrl;
-    $('#resultTitle').textContent=d.immediateActivation?'Tu ciudad ya está abierta 🔓':'Ya estás dentro 🔥';
-    $('#resultCopy').textContent=d.immediateActivation?'Te hemos preparado un acceso y recibirás el correo de activación.':'Comparte tu enlace: cada alta ayuda a acercar tu ciudad al objetivo.';
-    $('#result').style.display='block';
-    const refresh=await api(API+'/cities');cities=refresh.cities||cities;await renderCity();if(ownReferral)await loadReferralImpact(ownReferral);
-  }catch(err){
-    $('#error').textContent=err.message;
-    if(err.cityActive||err.existingAccount)setTimeout(()=>location.href=err.nextUrl||err.loginUrl||'/',1000);
-  }finally{btn.disabled=false}
-};
-$('#shareBtn').onclick=async()=>{
-  if(!shareUrl)return;
-  if(navigator.share){try{await navigator.share({title:'V/R Match',text:'Ayúdame a desbloquear V/R Match en mi ciudad 🔥',url:shareUrl});return}catch{}}
-  try{await navigator.clipboard.writeText(shareUrl);$('#shareBtn').textContent='Enlace copiado ✓'}catch{}
-};
-load();
+const box=document.querySelector('#cities');
+const fmt=n=>new Intl.NumberFormat('es-ES').format(Number(n)||0);
+const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+fetch('/api/community/cities?limit=300').then(r=>r.json()).then(d=>{
+  if(!d.ok)throw new Error(d.error||'No se pudieron cargar las ciudades.');
+  const cities=d.cities||[];document.querySelector('#total').textContent=fmt(d.total);document.querySelector('#cityCount').textContent=fmt(cities.filter(c=>Number(c.current)>0).length);
+  box.innerHTML=cities.length?cities.map(c=>`<article class="city"><div class="city-top"><div><h3>${esc(c.name)}</h3><div class="muted">Comunidad local</div></div><div class="count">${fmt(c.current)}</div></div><div class="track"><i style="width:${Math.max(0,Math.min(100,Number(c.percent)||0))}%"></i></div><div class="muted">${fmt(c.current)} / ${fmt(c.goal)} · ${Number(c.percent)||0}% del siguiente hito</div><a class="btn" href="/?register=1&city=${encodeURIComponent(c.name)}">Unirme desde ${esc(c.name)}</a></article>`).join(''):'<div class="empty">Sé la primera persona en añadir tu ciudad al crear la cuenta.</div>';
+}).catch(e=>{box.innerHTML=`<div class="empty">${esc(e.message)}</div>`});
 </script>
-</body></html>
+</body>
+</html>

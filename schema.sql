@@ -66,3 +66,22 @@ CREATE TABLE IF NOT EXISTS user_referral_events (
 );
 CREATE INDEX IF NOT EXISTS idx_user_referral_events_code ON user_referral_events(referral_code, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_referral_events_type ON user_referral_events(event_type, created_at DESC);
+
+-- V18.11.0 — registro abierto + comunidad por ciudades
+CREATE TABLE IF NOT EXISTS community_cities (
+  slug TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  target_users INTEGER NOT NULL DEFAULT 500,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS community_city_memberships (
+  user_id TEXT PRIMARY KEY,
+  city_slug TEXT NOT NULL,
+  joined_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY(city_slug) REFERENCES community_cities(slug)
+);
+CREATE INDEX IF NOT EXISTS idx_community_membership_city
+  ON community_city_memberships(city_slug, joined_at DESC);

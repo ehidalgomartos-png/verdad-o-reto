@@ -30,7 +30,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.10.0';
+const APP_VERSION = '18.11.0';
 const LEGAL_VERSION = '2026-09-18';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -54,6 +54,7 @@ const APP_BASE_URL = ENV_APP_BASE_URL;
 const LAUNCH_MODE = String(process.env.VR_LAUNCH_MODE || 'development').toLowerCase() === 'production' ? 'production' : 'development';
 const CITY_LAUNCH_ENABLED = String(process.env.VR_CITY_LAUNCH_ENABLED || 'false').toLowerCase() === 'true';
 const FOUNDER_REFERRALS_TARGET = Math.max(1,Math.min(50,Number(process.env.VR_FOUNDER_REFERRALS || 3) || 3));
+const COMMUNITY_DEFAULT_TARGET = Math.max(25,Math.min(100000,Number(process.env.VR_CITY_COMMUNITY_TARGET || 500) || 500));
 const LAUNCH_ACTIVATION_DAYS = Math.max(1,Math.min(30,Number(process.env.VR_LAUNCH_ACTIVATION_DAYS)||7));
 const LAUNCH_RESEND_COOLDOWN_MS = 15 * 60 * 1000;
 const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || '').trim();
@@ -430,6 +431,21 @@ CREATE TABLE IF NOT EXISTS user_referral_events (
 CREATE INDEX IF NOT EXISTS idx_user_referral_events_code ON user_referral_events(referral_code,created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_referral_events_type ON user_referral_events(event_type,created_at DESC);
 
+CREATE TABLE IF NOT EXISTS community_cities (
+  slug TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  target_users INTEGER NOT NULL DEFAULT 500,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS community_city_memberships (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  city_slug TEXT NOT NULL REFERENCES community_cities(slug),
+  joined_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_community_membership_city ON community_city_memberships(city_slug,joined_at DESC);
+
 CREATE TABLE IF NOT EXISTS launch_activation_tokens (
   token_hash TEXT PRIMARY KEY,
   waitlist_user_id TEXT NOT NULL REFERENCES launch_waitlist_users(id) ON DELETE CASCADE,
@@ -472,6 +488,8 @@ ensureColumn('launch_waitlist_users', 'founder_qualified_at', 'INTEGER');
 for (const [slug,name,target] of launchSeedCities) {
   db.prepare(`INSERT OR IGNORE INTO launch_cities(slug,name,target_users,default_target_users,status,created_at,updated_at)
     VALUES(?,?,?,?,'WAITING',?,?)`).run(slug,name,target,target,now(),now());
+  db.prepare(`INSERT OR IGNORE INTO community_cities(slug,name,target_users,created_at,updated_at)
+    VALUES(?,?,?,?,?)`).run(slug,name,target,now(),now());
 }
 // Solo en la primera migración desde 18.6.1 se corrigen los objetivos base
 // de las ciudades incluidas originalmente.
@@ -914,6 +932,90 @@ function normalizeLaunchCity(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()
     .replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60);
 }
+function cleanCommunityCityName(value) {
+  const raw=cleanShortText(value,60).replace(/\s*,\s*(España|Spain)$/i,'').trim();
+  if (raw.length < 2) return '';
+  if (!/[\p{L}]/u.test(raw)) return '';
+  const lower=raw.toLocaleLowerCase('es-ES');
+  const minor=new Set(['de','del','la','las','los','y','el']);
+  let wordIndex=0;
+  return lower.split(/(\s+|-)/u).map(part=>{
+    if (!part || /^\s+$/.test(part) || part==='-') return part;
+    const isMinor=minor.has(part) && wordIndex>0;
+    wordIndex++;
+    if (isMinor) return part;
+    return part.replace(/^([\p{L}])/u, ch=>ch.toLocaleUpperCase('es-ES'));
+  }).join('');
+}
+function ensureCommunityCity(name) {
+  const clean=cleanCommunityCityName(name);
+  if (!clean) return null;
+  const slug=normalizeLaunchCity(clean);
+  if (!slug) return null;
+  let row=db.prepare('SELECT slug,name,target_users FROM community_cities WHERE slug=?').get(slug);
+  if (!row) {
+    const target=Number(db.prepare('SELECT target_users FROM launch_cities WHERE slug=?').get(slug)?.target_users || COMMUNITY_DEFAULT_TARGET);
+    db.prepare('INSERT INTO community_cities(slug,name,target_users,created_at,updated_at) VALUES(?,?,?,?,?)')
+      .run(slug,clean,target,now(),now());
+    row={slug,name:clean,target_users:target};
+  }
+  return row;
+}
+function communityCityStats(slug) {
+  const row=db.prepare(`SELECT c.slug,c.name,c.target_users goal,
+    COUNT(CASE WHEN u.status='active' THEN 1 END) current
+    FROM community_cities c
+    LEFT JOIN community_city_memberships m ON m.city_slug=c.slug
+    LEFT JOIN users u ON u.id=m.user_id
+    WHERE c.slug=? GROUP BY c.slug`).get(slug);
+  if(!row)return null;
+  const current=Number(row.current||0),goal=Math.max(1,Number(row.goal||COMMUNITY_DEFAULT_TARGET));
+  return {...row,current,goal,percent:Math.min(100,Math.round(current*100/goal)),remaining:Math.max(0,goal-current)};
+}
+function communityCitiesStats(limit=100) {
+  return db.prepare(`SELECT c.slug,c.name,c.target_users goal,
+    COUNT(CASE WHEN u.status='active' THEN 1 END) current
+    FROM community_cities c
+    LEFT JOIN community_city_memberships m ON m.city_slug=c.slug
+    LEFT JOIN users u ON u.id=m.user_id
+    GROUP BY c.slug
+    ORDER BY current DESC,c.name ASC LIMIT ?`).all(Math.max(1,Math.min(300,Number(limit)||100))).map(row=>{
+      const current=Number(row.current||0),goal=Math.max(1,Number(row.goal||COMMUNITY_DEFAULT_TARGET));
+      return {...row,current,goal,percent:Math.min(100,Math.round(current*100/goal)),remaining:Math.max(0,goal-current)};
+    });
+}
+function communityCityForUser(userId) {
+  const row=db.prepare(`SELECT m.user_id,m.city_slug,m.joined_at,m.updated_at,c.name,c.target_users
+    FROM community_city_memberships m JOIN community_cities c ON c.slug=m.city_slug WHERE m.user_id=?`).get(userId);
+  if(!row)return null;
+  const stats=communityCityStats(row.city_slug);
+  return {slug:row.city_slug,name:row.name,joinedAt:row.joined_at,updatedAt:row.updated_at,...stats};
+}
+function setCommunityCityForUser(userId, name) {
+  const city=ensureCommunityCity(name);
+  if(!city)return null;
+  const ts=now();
+  const existing=db.prepare('SELECT city_slug,joined_at FROM community_city_memberships WHERE user_id=?').get(userId);
+  db.prepare(`INSERT INTO community_city_memberships(user_id,city_slug,joined_at,updated_at)
+    VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET city_slug=excluded.city_slug,updated_at=excluded.updated_at`)
+    .run(userId,city.slug,existing?.joined_at||ts,ts);
+  const profile=db.prepare('SELECT user_id FROM profiles WHERE user_id=?').get(userId);
+  if(profile) db.prepare('UPDATE profiles SET city=?,updated_at=? WHERE user_id=?').run(city.name,ts,userId);
+  return communityCityForUser(userId);
+}
+function migrateProfilesToCommunityCities() {
+  let migrated=0;
+  const rows=db.prepare(`SELECT p.user_id,p.city FROM profiles p
+    JOIN users u ON u.id=p.user_id
+    LEFT JOIN community_city_memberships m ON m.user_id=p.user_id
+    WHERE m.user_id IS NULL AND u.status='active' AND TRIM(p.city)<>''`).all();
+  const tx=db.transaction(items=>{for(const row of items){if(setCommunityCityForUser(row.user_id,row.city))migrated++;}});
+  tx(rows);
+  return migrated;
+}
+const migratedCommunityCities=migrateProfilesToCommunityCities();
+if(migratedCommunityCities) console.log(`Ciudades de comunidad migradas desde perfiles: ${migratedCommunityCities}`);
+
 function launchHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
@@ -1725,7 +1827,6 @@ app.post('/api/auth/register', rateLimit({limit:8,windowMs:60*60*1000,key:req=>r
     const referralCode = normalizeMemberReferralCode(req.body?.referralCode);
     if (!confirmAdult) return res.status(400).json({ok:false,error:'Debes confirmar que tienes 18 años o más.'});
     if (!acceptTerms) return res.status(400).json({ok:false,error:'Debes aceptar las condiciones de uso y la política de privacidad.'});
-    if (CITY_LAUNCH_ENABLED) return res.status(403).json({ok:false,error:'V/R Match se está abriendo por ciudades. Únete a la lista de espera para recibir acceso cuando tu ciudad se active.',waitlist:true,waitlistUrl:'/espera'});
     if (!validEmail(email)) return res.status(400).json({ ok:false, error:'Introduce un correo válido.' });
     if (Buffer.byteLength(password,'utf8') < 8 || Buffer.byteLength(password,'utf8') > 72) return res.status(400).json({ ok:false, error:'La contraseña debe tener entre 8 y 72 caracteres aprox.' });
     if (db.prepare('SELECT 1 FROM users WHERE email=?').get(email)) return res.status(409).json({ ok:false, error:'Ya existe una cuenta con ese correo.' });
@@ -1805,7 +1906,7 @@ app.post('/api/auth/logout', requireAuth, (req,res) => {
 
 app.get('/api/me', requireAuth, (req,res) => {
   const full=db.prepare('SELECT email_verified,onboarding_completed FROM users WHERE id=?').get(req.user.id);
-  res.json({ ok:true, user:{id:req.user.id,email:req.user.email,emailVerified:Boolean(full?.email_verified),admin:isAdmin(req.user)}, profile:getProfile(req.user.id), matches:matchesFor(req.user.id), plus:getPlusState(req.user.id), notificationState:notificationState(req.user.id), onboardingCompleted:Boolean(full?.onboarding_completed) });
+  res.json({ ok:true, user:{id:req.user.id,email:req.user.email,emailVerified:Boolean(full?.email_verified),admin:isAdmin(req.user)}, profile:getProfile(req.user.id), communityCity:communityCityForUser(req.user.id), matches:matchesFor(req.user.id), plus:getPlusState(req.user.id), notificationState:notificationState(req.user.id), onboardingCompleted:Boolean(full?.onboarding_completed) });
 });
 
 app.post('/api/account/onboarding-complete', requireAuth, (req,res) => {
@@ -1905,8 +2006,12 @@ app.put('/api/profile', requireAuth, (req,res) => {
         locationLat = lat; locationLng = lng; locationUpdatedAt = now();
       }
     }
+    let communityCity=communityCityForUser(userId);
+    if (!communityCity && cleanShortText(req.body?.ciudad,40)) communityCity=setCommunityCityForUser(userId,req.body.ciudad);
+    const profileCity=communityCity?.name || cleanShortText(req.body?.ciudad,40);
+    if (!profileCity) return res.status(400).json({ok:false,error:'Elige tu ciudad antes de completar el perfil.'});
     const values = {
-      name, age, gender:cleanGender(req.body?.gender), city:cleanShortText(req.body?.ciudad,40), bio:cleanShortText(req.body?.bio,180),
+      name, age, gender:cleanGender(req.body?.gender), city:profileCity, bio:cleanShortText(req.body?.bio,180),
       interests:cleanInterests(req.body?.intereses), avatar, photos,
       ageMin, ageMax, lookingFor:cleanLooking(req.body?.preferences?.lookingFor), cityPref:cleanShortText(req.body?.preferences?.city,40), interestPref:cleanShortText(req.body?.preferences?.interest,30), radiusKm,
       locationLat, locationLng, locationUpdatedAt,
@@ -2013,6 +2118,7 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
       profile: profile ? {...profile,storedLocation:profileRow&&hasStoredLocation(profileRow)?{lat:Number(profileRow.location_lat),lng:Number(profileRow.location_lng),updatedAt:profileRow.location_updated_at}:null}:null,
       plus:getPlusState(userId),notificationPreferences:notificationPreferences(userId),legalAcceptances:legal,
       referrals:{...referralStats,referredBy:referralAttribution?{referralCode:referralAttribution.referral_code,attributedAt:referralAttribution.attributed_at}:null},
+      communityCity:communityCityForUser(userId),
       likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,notifications,gameSessions,matches
     };
     res.setHeader('Content-Type','application/json; charset=utf-8');
@@ -2137,6 +2243,25 @@ app.post('/api/telemetry/client-error', requireAuth, rateLimit({limit:20,windowM
 
 
 // ---- CRECIMIENTO VIRAL · API DE REFERIDOS ----
+// ---- COMUNIDAD POR CIUDADES · registro abierto ----
+app.get('/api/community/cities', rateLimit({limit:180,windowMs:60*60*1000,key:req=>req.ip}), (req,res) => {
+  const cities=communityCitiesStats(Number(req.query.limit)||100);
+  const total=Number(db.prepare(`SELECT COUNT(*) n FROM community_city_memberships m JOIN users u ON u.id=m.user_id WHERE u.status='active'`).get()?.n||0);
+  res.json({ok:true,total,cities});
+});
+app.get('/api/community/me', requireAuth, rateLimit({limit:120,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  res.json({ok:true,city:communityCityForUser(req.user.id)});
+});
+app.put('/api/community/me', requireAuth, rateLimit({limit:30,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  const cityName=cleanCommunityCityName(req.body?.city);
+  if(!cityName)return res.status(400).json({ok:false,error:'Escribe una ciudad o municipio válido.'});
+  const city=setCommunityCityForUser(req.user.id,cityName);
+  if(!city)return res.status(400).json({ok:false,error:'No se pudo guardar la ciudad.'});
+  if(getProfile(req.user.id)) broadcastDiscovery();
+  const total=Number(db.prepare(`SELECT COUNT(*) n FROM community_city_memberships m JOIN users u ON u.id=m.user_id WHERE u.status='active'`).get()?.n||0);
+  res.json({ok:true,city,total});
+});
+
 app.post('/api/referrals/visit', rateLimit({limit:120,windowMs:60*60*1000,key:req=>req.ip}), (req,res) => {
   const code=normalizeMemberReferralCode(req.body?.code);
   if (!code) return res.status(400).json({ok:false,error:'Código requerido.'});

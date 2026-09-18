@@ -69,8 +69,53 @@
       </div>
       <button id="forgotPasswordButton" class="auth-forgot" type="button" onclick="abrirRecuperacion()">¿Olvidaste tu contraseña?</button>
       <p class="legal-note">Solo +18. Consulta <a href="/como-funciona.html" target="_blank" rel="noopener">Cómo funciona</a>, nuestras <a href="/terms.html" target="_blank" rel="noopener">Condiciones</a>, <a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a> y <a href="/community.html" target="_blank" rel="noopener">Normas de comunidad</a>.</p>
-      <a class="auth-plus-footer-link" href="/espera">🔥 Lista de espera por ciudades</a>
+      <a class="auth-plus-footer-link" href="/espera">🔥 Ver cómo crece tu ciudad</a>
       <a class="auth-plus-footer-link" href="/funciones.html" target="_blank" rel="noopener">✦ Funciones V/R+</a>
+    </section>
+
+    <section id="pantallaCiudad" class="screen city-onboarding-screen hidden">
+      <div id="cityChoosePanel">
+        <div class="hero-icon city-pin">⌖</div>
+        <span class="eyebrow">TU CIUDAD</span>
+        <h1>¿Dónde quieres hacer match?</h1>
+        <p class="subtitle">Elige tu ciudad o municipio. La usamos para tu perfil y para mostrar cómo está creciendo VRMatch cerca de ti.</p>
+        <form id="cityOnboardingForm" class="form-stack" novalidate>
+          <div class="field">
+            <label for="cityOnboardingInput">Ciudad o municipio</label>
+            <input id="cityOnboardingInput" type="text" list="citySuggestions" maxlength="60" autocomplete="address-level2" placeholder="Ej. Valencia" required>
+            <datalist id="citySuggestions">
+              <option value="Valencia"><option value="Madrid"><option value="Barcelona"><option value="Alicante"><option value="Sevilla"><option value="Málaga"><option value="Zaragoza"><option value="Murcia"><option value="Palma"><option value="Bilbao"><option value="Córdoba"><option value="Valladolid"><option value="Vigo"><option value="Gijón"><option value="A Coruña"><option value="Granada"><option value="Vitoria-Gasteiz"><option value="Elche"><option value="Oviedo"><option value="Santa Cruz de Tenerife"><option value="Las Palmas de Gran Canaria"><option value="Cartagena"><option value="Terrassa"><option value="Jerez de la Frontera"><option value="Sabadell"><option value="Pamplona"><option value="Almería"><option value="Santander"><option value="Castellón de la Plana"><option value="Tarragona"><option value="Lleida"><option value="Marbella"><option value="León"><option value="Cádiz"><option value="Jaén"><option value="Girona"><option value="Sagunto"><option value="Torrent"><option value="Burjassot"><option value="Paterna"><option value="Mislata">
+            </datalist>
+            <small class="field-hint">Puedes escribir cualquier municipio de España aunque no aparezca en las sugerencias.</small>
+          </div>
+          <div class="city-quick-grid" aria-label="Ciudades frecuentes">
+            <button type="button" data-city="Valencia">Valencia</button><button type="button" data-city="Madrid">Madrid</button><button type="button" data-city="Barcelona">Barcelona</button><button type="button" data-city="Alicante">Alicante</button><button type="button" data-city="Sevilla">Sevilla</button><button type="button" data-city="Málaga">Málaga</button>
+          </div>
+          <button id="cityOnboardingSubmit" class="btn btn-primary btn-xl" type="submit"><span>Unirme desde mi ciudad</span><b>→</b></button>
+        </form>
+        <div class="city-privacy-note"><span>🛡️</span><p><strong>Ciudad, no dirección.</strong> El contador usa únicamente tu ciudad o municipio. La ubicación aproximada para calcular kilómetros es opcional y se configura después.</p></div>
+        <button id="cityCancelEditButton" class="mini-link city-change-link hidden" type="button" onclick="cancelarCambioCiudad()">← Volver al perfil</button>
+      </div>
+      <div id="cityGrowthPanel" class="hidden">
+        <div class="city-growth-flame">🔥</div>
+        <span class="eyebrow">YA ESTÁS DENTRO</span>
+        <h1>VRMatch crece en <span id="cityGrowthName">tu ciudad</span>.</h1>
+        <p class="subtitle">Tu cuenta ya está creada. No tienes que esperar a que se alcance ningún objetivo.</p>
+        <div class="city-growth-card">
+          <div class="city-growth-count"><strong id="cityGrowthCurrent">0</strong><span>personas ya se han unido en <b id="cityGrowthNameInline">tu ciudad</b></span></div>
+          <div class="city-growth-progress-head"><span>Comunidad local</span><b><span id="cityGrowthCurrentSmall">0</span> / <span id="cityGrowthGoal">500</span></b></div>
+          <div class="city-growth-track"><i id="cityGrowthBar"></i></div>
+          <small id="cityGrowthRemaining">Cada nueva alta hace que haya más perfiles cerca de ti.</small>
+        </div>
+        <div class="city-founder-card">
+          <span>★</span><div><strong>Ayuda a arrancar tu ciudad</strong><p>Invita a 3 personas y desbloquea tu insignia de Fundador VRMatch.</p></div>
+        </div>
+        <div class="city-growth-actions">
+          <button id="cityContinueButton" class="btn btn-primary btn-xl" type="button" onclick="continuarDesdeCiudad()"><span>Completar mi perfil</span><b>→</b></button>
+          <button class="btn btn-secondary" type="button" onclick="compartirCiudadWhatsApp()">WhatsApp · Invitar</button>
+        </div>
+        <button id="cityChangeAgainButton" class="mini-link city-change-link" type="button" onclick="editarCiudadDesdeResumen()">Cambiar ciudad</button>
+      </div>
     </section>
 
     <section id="pantallaPerfil" class="screen screen-profile hidden">
@@ -123,7 +168,8 @@
         </div>
         <div class="field">
           <label for="ciudadUsuario">Ciudad</label>
-          <input type="text" id="ciudadUsuario" placeholder="Ej. Valencia" maxlength="40" autocomplete="address-level2">
+          <div class="profile-city-row"><input type="text" id="ciudadUsuario" placeholder="Elige tu ciudad" maxlength="60" autocomplete="address-level2" readonly><button class="profile-city-change" type="button" onclick="abrirSelectorCiudad(true)">Cambiar</button></div>
+          <small class="field-hint">Tu ciudad alimenta el contador de comunidad. Para calcular kilómetros puedes activar la ubicación aproximada de forma opcional.</small>
         </div>
         <div class="location-card">
           <div class="location-copy">
@@ -897,6 +943,8 @@
     let deferredInstallPrompt = null;
     let pwaInstalled = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
     let referralState = null;
+    let communityCityState = null;
+    let citySelectorReturn = 'profile';
 
     const baseDeDatos = {
       rompehielos: {
@@ -1492,9 +1540,12 @@
     const verificationResult = params.get('verification') || '';
     const billingResult = params.get('billing') || '';
     let pendingNotificationId = params.get('notification') || '';
+    const registerIntent = params.get('register') === '1';
+    const incomingCityIntent = String(params.get('city') || '').trim().slice(0,60);
+    if(incomingCityIntent) localStorage.setItem('vr_pending_city', incomingCityIntent);
 
     const $ = (id) => document.getElementById(id);
-    const screens = ['pantallaAuth','pantallaPerfil','pantallaDescubrir','pantallaPlus','pantallaMatches','pantallaChat','pantallaAdmin','pantallaMazos','pantallaMenu','pantallaLobby','pantallaJuego'];
+    const screens = ['pantallaAuth','pantallaCiudad','pantallaPerfil','pantallaDescubrir','pantallaPlus','pantallaMatches','pantallaChat','pantallaAdmin','pantallaMazos','pantallaMenu','pantallaLobby','pantallaJuego'];
 
     const incomingReferralCode = String(params.get('ref') || '').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,24);
     if (incomingReferralCode) {
@@ -1534,6 +1585,72 @@
       } catch {
         return { ok:false, status:0, error:'No se pudo conectar con el servidor.' };
       }
+    }
+
+    function numeroLocal(value){
+      try{return new Intl.NumberFormat('es-ES').format(Number(value)||0);}catch{return String(Number(value)||0);}
+    }
+    function prefillCiudadPendiente(){
+      const pending=localStorage.getItem('vr_pending_city')||'';
+      if(pending && $('cityOnboardingInput') && !$('cityOnboardingInput').value) $('cityOnboardingInput').value=pending;
+    }
+    function mostrarEleccionCiudad(){
+      $('cityChoosePanel').classList.remove('hidden');
+      $('cityGrowthPanel').classList.add('hidden');
+      $('cityCancelEditButton').classList.toggle('hidden',citySelectorReturn!=='profile-edit');
+      prefillCiudadPendiente();
+      showScreen('pantallaCiudad');
+      setTimeout(()=>$('cityOnboardingInput')?.focus(),120);
+    }
+    function pintarCrecimientoCiudad(city){
+      if(!city)return mostrarEleccionCiudad();
+      communityCityState=city;
+      const current=Number(city.current)||0,goal=Math.max(1,Number(city.goal)||500),percent=Math.min(100,Math.max(0,Number(city.percent)||Math.round(current*100/goal)));
+      $('cityChoosePanel').classList.add('hidden');$('cityGrowthPanel').classList.remove('hidden');
+      $('cityGrowthName').textContent=city.name||'tu ciudad';$('cityGrowthNameInline').textContent=city.name||'tu ciudad';
+      $('cityGrowthCurrent').textContent=numeroLocal(current);$('cityGrowthCurrentSmall').textContent=numeroLocal(current);$('cityGrowthGoal').textContent=numeroLocal(goal);
+      $('cityGrowthBar').style.width=`${percent}%`;
+      $('cityGrowthRemaining').textContent=current>=goal?`🔥 ${city.name} ya ha superado el objetivo de comunidad. Sigue creciendo.`:`Faltan ${numeroLocal(Math.max(0,goal-current))} para llegar al siguiente hito. Puedes usar VRMatch desde ahora.`;
+      $('cityContinueButton').querySelector('span').textContent=citySelectorReturn==='profile-edit'?'Volver a mi perfil':'Completar mi perfil';
+      showScreen('pantallaCiudad');
+    }
+    async function cargarCommunityCityState(force=false){
+      if(communityCityState&&!force)return communityCityState;
+      if(!authToken)return null;
+      const res=await api('/api/community/me');
+      communityCityState=res.ok?(res.city||null):null;
+      return communityCityState;
+    }
+    async function guardarCiudadOnboarding(){
+      const city=String($('cityOnboardingInput').value||'').trim();
+      if(city.length<2)return mostrarToast('Escribe tu ciudad o municipio.','warn');
+      const btn=$('cityOnboardingSubmit');btn.disabled=true;btn.querySelector('span').textContent='Guardando…';
+      const res=await api('/api/community/me',{method:'PUT',body:{city}});
+      btn.disabled=false;btn.querySelector('span').textContent='Unirme desde mi ciudad';
+      if(!res.ok)return mostrarToast(res.error||'No se pudo guardar tu ciudad.','error');
+      localStorage.removeItem('vr_pending_city');communityCityState=res.city||null;
+      ciudadJugador=communityCityState?.name||city;$('ciudadUsuario').value=ciudadJugador;
+      pintarCrecimientoCiudad(communityCityState);mostrarToast(`Ya formas parte de VRMatch ${ciudadJugador}.`,'success');
+    }
+    function abrirSelectorCiudad(desdePerfil=false){
+      citySelectorReturn=desdePerfil?'profile-edit':'profile';
+      $('cityOnboardingInput').value=communityCityState?.name||ciudadJugador||localStorage.getItem('vr_pending_city')||'';
+      mostrarEleccionCiudad();
+    }
+    function editarCiudadDesdeResumen(){mostrarEleccionCiudad();}
+    function cancelarCambioCiudad(){showScreen('pantallaPerfil');}
+    function continuarDesdeCiudad(){
+      if(!communityCityState)return mostrarEleccionCiudad();
+      ciudadJugador=communityCityState.name||ciudadJugador;$('ciudadUsuario').value=ciudadJugador;
+      showScreen('pantallaPerfil');
+    }
+    async function compartirCiudadWhatsApp(){
+      if(!communityCityState)return mostrarToast('Elige primero tu ciudad.','warn');
+      await cargarReferralState(true);
+      const url=referralState?.url||`${location.origin}/?register=1&city=${encodeURIComponent(communityCityState.name)}`;
+      const text=`🔥 Ya estamos ${numeroLocal(communityCityState.current)} personas en VRMatch ${communityCityState.name}. Yo ya estoy dentro. ¿Te apuntas? ${url}`;
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`,'_blank','noopener');
+      void registrarShareReferral('invite');
     }
 
     function normalizarPreferenciasNotificacion(data={}) {
@@ -2089,6 +2206,7 @@
       if(result.notificationState)aplicarEstadoNotificaciones(result.notificationState);
       if (result.profile) aplicarPerfilServidor(result.profile);
       if (Array.isArray(result.matches)) datingMatches = result.matches;
+      communityCityState=result.communityCity||communityCityState;
       conectarSocket();
       cargarNotificaciones().catch(()=>{});
       cargarReferralState(true).catch(()=>{});
@@ -2101,8 +2219,13 @@
           pintarAvatar($('datingAvatarMini'), avatarJugador, nombreJugador || 'Tú');
           renderDatingCard(); renderMatches();
         }
-      } else showScreen('pantallaPerfil');
-      if (!currentOnboardingCompleted) setTimeout(abrirOnboarding, 180);
+        if (!currentOnboardingCompleted) setTimeout(abrirOnboarding, 180);
+      } else {
+        citySelectorReturn='profile';
+        const city=communityCityState||await cargarCommunityCityState(true);
+        if(city){ciudadJugador=city.name||'';$('ciudadUsuario').value=ciudadJugador;pintarCrecimientoCiudad(city);}
+        else mostrarEleccionCiudad();
+      }
     }
 
     function abrirOnboarding() { $('onboardingModal').classList.remove('hidden'); $('onboardingModal').setAttribute('aria-hidden','false'); }
@@ -2127,7 +2250,7 @@
       if (callApi && oldToken) await desvincularPushSesion();
       if (callApi && oldToken) await api('/api/auth/logout', { method:'POST', body:{} });
       if (socket.connected) socket.disconnect();
-      authToken=''; currentUserId=''; currentUserEmail=''; currentUserEmailVerified=false; currentUserAdmin=false; currentOnboardingCompleted=true; currentPlus=normalizarPlus({}); referralState=null;
+      authToken=''; currentUserId=''; currentUserEmail=''; currentUserEmailVerified=false; currentUserAdmin=false; currentOnboardingCompleted=true; currentPlus=normalizarPlus({}); referralState=null; communityCityState=null; citySelectorReturn='profile';
       notificationItems=[];notificationUnread=0;notificationPreferences=normalizarPreferenciasNotificacion({});pushSubscriptionActive=false;
       localStorage.removeItem('vr_auth_token'); localStorage.removeItem('vr_profile');
       datingProfiles=[]; datingMatches=[]; datingPassed=new Set(); datingChats.clear();
@@ -3225,6 +3348,7 @@
       aplicarPerfilServidor(res.profile);
       if (socket.connected) registrarDating(); else conectarSocket();
       if (salaInvitacion) inicializarInvitacion(); else irADescubrir();
+      if(!currentOnboardingCompleted)setTimeout(abrirOnboarding,220);
       mostrarToast('Perfil guardado.', 'info');
     });
 
@@ -3235,6 +3359,7 @@
       avatarJugador = saved.avatar || '';
       fotosJugador = Array.isArray(saved.fotos) ? saved.fotos.slice(0,4) : [];
       ciudadJugador = saved.ciudad || '';
+      if(communityCityState&&ciudadJugador)communityCityState={...communityCityState,name:ciudadJugador};
       bioJugador = saved.bio || '';
       interesesJugador = Array.isArray(saved.intereses) ? saved.intereses : [];
       $('nombreUsuario').value = nombreJugador;
@@ -4253,7 +4378,6 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
       if(authMode==='register'){body.confirmAdult=$('confirmAdult').checked;body.acceptTerms=$('acceptTerms').checked;body.referralCode=localStorage.getItem('vr_member_ref')||'';if(!body.confirmAdult)return mostrarToast('Confirma que tienes 18 años o más.','warn');if(!body.acceptTerms)return mostrarToast('Acepta las Condiciones y la Privacidad.','warn');}
       const res=await api(endpoint,{method:'POST',body});
       if (!res.ok) {
-        if(res.waitlist && res.waitlistUrl){ location.href=res.waitlistUrl; return; }
         if(res.verificationRequired){
           cambiarAuthMode('login');
           mostrarVerificacionPendiente(email,false);
@@ -4271,8 +4395,11 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
       }
       ocultarVerificacionPendiente();
       await completarAcceso(res);
-      mostrarToast(authMode==='register'?(res.emailVerificationPending?'Cuenta creada. Puedes verificar tu correo desde Cuenta y seguridad.':'Cuenta creada. Completa tu perfil.'):'Sesión iniciada.','info');
+      mostrarToast(authMode==='register'?(res.emailVerificationPending?'Cuenta creada. Puedes verificar tu correo desde Cuenta y seguridad.':'Cuenta creada. Ahora elige tu ciudad.'):'Sesión iniciada.','info');
     });
+
+    $('cityOnboardingForm').addEventListener('submit',(e)=>{e.preventDefault();guardarCiudadOnboarding();});
+    document.querySelectorAll('.city-quick-grid [data-city]').forEach(btn=>btn.addEventListener('click',()=>{$('cityOnboardingInput').value=btn.dataset.city||'';guardarCiudadOnboarding();}));
 
     $('authEmail').addEventListener('input', () => {
       const email = String($('authEmail').value || '').trim().toLowerCase();
@@ -4294,6 +4421,7 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
     initDatingSwipe();
     $('deckAdult').title = 'Solo mayores de 18 años';
     if (mazoInvitacion) $('mazoSeleccionadoLabel').textContent = `Mazo: ${nombreMazo(mazoInvitacion)}`;
+    if(registerIntent && !authToken)cambiarAuthMode('register');
     if(incomingReferralCode && !authToken){
       cambiarAuthMode('register');
       $('publicCommercialIcon').textContent='🔥';

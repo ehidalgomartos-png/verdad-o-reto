@@ -3,7 +3,7 @@
   if (!statusNode) return;
 
   const slug = statusNode.dataset.cityStatus;
-  const apiUrl = location.protocol === 'file:' ? 'https://vrmatch.es/api/launch/cities' : '/api/launch/cities';
+  const apiUrl = location.protocol === 'file:' ? 'https://vrmatch.es/api/community/cities' : '/api/community/cities';
 
   fetch(apiUrl, { headers: { Accept: 'application/json' } })
     .then((response) => response.ok ? response.json() : Promise.reject(new Error('status unavailable')))
@@ -11,27 +11,17 @@
       const city = Array.isArray(payload.cities)
         ? payload.cities.find((item) => item.slug === slug)
         : null;
-
-      if (!city) return;
-
-      if (city.status === 'ACTIVE') {
+      if (!city) {
         statusNode.classList.add('is-ready');
-        statusNode.textContent = 'V/R Match ya está disponible en ' + city.name;
-        document.querySelectorAll('[data-primary-cta]').forEach((link) => {
-          link.href = 'https://vrmatch.es/';
-          link.textContent = 'Entrar en V/R Match';
-        });
+        statusNode.textContent = 'Registro abierto · puedes ser de las primeras personas de esta ciudad';
         return;
       }
-
-      if (city.status === 'READY') {
-        statusNode.classList.add('is-pending');
-        statusNode.textContent = 'Objetivo alcanzado en ' + city.name + ' · apertura pendiente';
-        return;
-      }
-
-      statusNode.classList.add('is-waiting');
-      statusNode.textContent = 'Lista de espera activa en ' + city.name;
+      statusNode.classList.add('is-ready');
+      statusNode.textContent = `${Number(city.current || 0).toLocaleString('es-ES')} personas ya se han unido en ${city.name}`;
+      document.querySelectorAll('[data-primary-cta]').forEach((link) => {
+        link.href = `https://vrmatch.es/?register=1&city=${encodeURIComponent(city.name)}`;
+        link.textContent = `Crear cuenta en ${city.name}`;
+      });
     })
     .catch(() => {});
 })();

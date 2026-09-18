@@ -1,6 +1,6 @@
 {
   "name": "vr-match",
-  "version": "18.10.0",
+  "version": "18.11.0",
   "private": true,
   "description": "V/R Match dating app - historial seguro de partidas, juego sincronizado, PWA, seguridad, privacidad y métricas de lanzamiento",
   "main": "server.js",
