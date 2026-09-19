@@ -1,8 +1,8 @@
 {
   "name": "vr-match",
-  "version": "18.19.0",
+  "version": "18.20.0",
   "private": true,
-  "description": "V/R Match - viralidad 2.0 con recompensas de referidos, códigos de creadores y crecimiento por ciudades",
+  "description": "V/R Match - push medible, horarios silenciosos y reactivación inteligente",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

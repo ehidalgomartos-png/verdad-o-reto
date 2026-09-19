@@ -645,3 +645,12 @@ textarea { font: inherit; }
 @media(max-width:720px){.referral-stats-four{grid-template-columns:1fr 1fr}.creator-code-form{grid-template-columns:1fr}.creator-code-form button{width:100%}}
 
 .dating-premium-meta span.viral-profile-badge{color:#ffe8f6;border-color:rgba(255,45,117,.34);background:linear-gradient(135deg,rgba(255,45,117,.19),rgba(118,82,255,.14));box-shadow:0 0 14px rgba(255,45,117,.07)}
+
+/* V18.20 · Push y reactivación inteligente */
+.notification-quiet-box{margin-top:2px;padding:10px;border-radius:15px;background:rgba(112,82,255,.045);border:1px solid rgba(143,118,255,.13)}
+.notification-quiet-box .setting-switch{background:transparent;border:0;padding:0 0 8px}
+.notification-quiet-times{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.notification-quiet-times label{display:grid;gap:5px;color:#8d8999;font-size:8px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}
+.notification-quiet-times .profile-input{min-height:38px;padding:8px 10px;font-size:11px}
+.notification-quiet-times .profile-input:disabled{opacity:.42}
+@media(max-width:520px){.notification-quiet-times{grid-template-columns:1fr}}

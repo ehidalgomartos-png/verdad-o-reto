@@ -1,0 +1,19 @@
+V/R MATCH 18.20.0 — PUSH Y REACTIVACIÓN INTELIGENTE
+
+1. Haz backup de la base de datos y de uploads antes de actualizar.
+2. Sustituye el código, manteniendo el almacenamiento persistente actual.
+3. Configura en Render las claves Web Push:
+   VAPID_PUBLIC_KEY
+   VAPID_PRIVATE_KEY
+   VAPID_SUBJECT=mailto:admin@vrmatch.es
+   Puedes generarlas localmente con: npm run vapid
+4. Variables recomendadas:
+   VR_SMART_PUSH_ENABLED=true
+   VR_SMART_PUSH_SWEEP_MINUTES=30
+   VR_PUSH_DAILY_CAP=8
+   VR_PUSH_SMART_DAILY_CAP=2
+5. Reinicia Render.
+6. Comprueba /healthz -> 18.20.0.
+7. Entra con una cuenta real, activa Notificaciones y realiza el checklist PRUEBA-V18.20.md.
+
+NOTA: iPhone/iPad requiere soporte Web Push y, según la versión de iOS, puede exigir que la PWA esté añadida a la pantalla de inicio.

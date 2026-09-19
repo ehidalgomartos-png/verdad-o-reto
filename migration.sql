@@ -242,3 +242,22 @@ CREATE TABLE IF NOT EXISTS creator_attributions (
   attributed_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_creator_attributions_code ON creator_attributions(code,attributed_at DESC);
+
+
+-- V18.20 · Push medible, horarios silenciosos y reactivación inteligente.
+-- Las columnas city_activity, recommendations, reactivation_push, quiet_hours_enabled,
+-- quiet_start, quiet_end y timezone de notification_preferences se añaden de forma
+-- compatible al arrancar el servidor mediante ensureColumn().
+CREATE TABLE IF NOT EXISTS push_delivery_log (
+  id TEXT PRIMARY KEY, notification_id TEXT NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, kind TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'event',
+  status TEXT NOT NULL DEFAULT 'sent', sent_at INTEGER, opened_at INTEGER, created_at INTEGER NOT NULL, UNIQUE(notification_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS deferred_pushes (
+  notification_id TEXT PRIMARY KEY REFERENCES notifications(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  available_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS smart_push_log (
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, kind TEXT NOT NULL, context_key TEXT NOT NULL DEFAULT '',
+  notification_id TEXT REFERENCES notifications(id) ON DELETE SET NULL, created_at INTEGER NOT NULL, UNIQUE(user_id,kind,context_key)
+);

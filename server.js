@@ -30,7 +30,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.19.0';
+const APP_VERSION = '18.20.0';
 const LEGAL_VERSION = '2026-09-18';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -73,6 +73,10 @@ const RETENTION_SWEEP_MINUTES = Math.max(10, Math.min(360, Number(process.env.VR
 const RETENTION_PROFILE_HOURS = Math.max(6, Math.min(168, Number(process.env.VR_RETENTION_PROFILE_HOURS) || 24));
 const RETENTION_MATCH_HOURS = Math.max(6, Math.min(168, Number(process.env.VR_RETENTION_MATCH_HOURS) || 18));
 const RETENTION_MESSAGE_COOLDOWN_HOURS = Math.max(1, Math.min(72, Number(process.env.VR_RETENTION_MESSAGE_COOLDOWN_HOURS) || 6));
+const SMART_PUSH_ENABLED = String(process.env.VR_SMART_PUSH_ENABLED || 'true').toLowerCase() !== 'false';
+const SMART_PUSH_SWEEP_MINUTES = Math.max(10, Math.min(360, Number(process.env.VR_SMART_PUSH_SWEEP_MINUTES) || 30));
+const PUSH_DAILY_CAP = Math.max(2, Math.min(30, Number(process.env.VR_PUSH_DAILY_CAP) || 8));
+const PUSH_SMART_DAILY_CAP = Math.max(1, Math.min(6, Number(process.env.VR_PUSH_SMART_DAILY_CAP) || 2));
 const SYSTEM_ERROR_RETENTION_DAYS = Math.max(7, Math.min(180, Number(process.env.VR_SYSTEM_ERROR_RETENTION_DAYS) || 30));
 const HEALTH_MEMORY_WARN_MB = Math.max(128, Math.min(4096, Number(process.env.VR_HEALTH_MEMORY_WARN_MB) || 768));
 const VAPID_PUBLIC_KEY = String(process.env.VAPID_PUBLIC_KEY || '').trim();
@@ -291,6 +295,14 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
   new_message INTEGER NOT NULL DEFAULT 1,
   game_invite INTEGER NOT NULL DEFAULT 1,
   game_turn INTEGER NOT NULL DEFAULT 1,
+  retention_email INTEGER NOT NULL DEFAULT 1,
+  city_activity INTEGER NOT NULL DEFAULT 1,
+  recommendations INTEGER NOT NULL DEFAULT 1,
+  reactivation_push INTEGER NOT NULL DEFAULT 1,
+  quiet_hours_enabled INTEGER NOT NULL DEFAULT 1,
+  quiet_start TEXT NOT NULL DEFAULT '23:00',
+  quiet_end TEXT NOT NULL DEFAULT '08:00',
+  timezone TEXT NOT NULL DEFAULT 'Europe/Madrid',
   push_enabled INTEGER NOT NULL DEFAULT 0,
   updated_at INTEGER NOT NULL
 );
@@ -439,8 +451,49 @@ CREATE INDEX IF NOT EXISTS idx_game_sessions_match_started ON game_sessions(matc
 CREATE INDEX IF NOT EXISTS idx_game_sessions_status_started ON game_sessions(status,started_at DESC);
 `);
 ensureColumn('notification_preferences', 'retention_email', 'INTEGER NOT NULL DEFAULT 1');
+ensureColumn('notification_preferences', 'city_activity', 'INTEGER NOT NULL DEFAULT 1');
+ensureColumn('notification_preferences', 'recommendations', 'INTEGER NOT NULL DEFAULT 1');
+ensureColumn('notification_preferences', 'reactivation_push', 'INTEGER NOT NULL DEFAULT 1');
+ensureColumn('notification_preferences', 'quiet_hours_enabled', 'INTEGER NOT NULL DEFAULT 1');
+ensureColumn('notification_preferences', 'quiet_start', "TEXT NOT NULL DEFAULT '23:00'");
+ensureColumn('notification_preferences', 'quiet_end', "TEXT NOT NULL DEFAULT '08:00'");
+ensureColumn('notification_preferences', 'timezone', "TEXT NOT NULL DEFAULT 'Europe/Madrid'");
 
 db.exec(`
+-- V18.20 · Push medible, horarios silenciosos y reactivación inteligente.
+CREATE TABLE IF NOT EXISTS push_delivery_log (
+  id TEXT PRIMARY KEY,
+  notification_id TEXT NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'event',
+  status TEXT NOT NULL DEFAULT 'sent',
+  sent_at INTEGER,
+  opened_at INTEGER,
+  created_at INTEGER NOT NULL,
+  UNIQUE(notification_id,user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_push_delivery_user_sent ON push_delivery_log(user_id,sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_push_delivery_kind_sent ON push_delivery_log(kind,sent_at DESC);
+CREATE TABLE IF NOT EXISTS deferred_pushes (
+  notification_id TEXT PRIMARY KEY REFERENCES notifications(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  available_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_deferred_push_available ON deferred_pushes(available_at,expires_at);
+CREATE TABLE IF NOT EXISTS smart_push_log (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  context_key TEXT NOT NULL DEFAULT '',
+  notification_id TEXT REFERENCES notifications(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE(user_id,kind,context_key)
+);
+CREATE INDEX IF NOT EXISTS idx_smart_push_user_kind ON smart_push_log(user_id,kind,created_at DESC);
+
 CREATE TABLE IF NOT EXISTS profile_verification_requests (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1369,6 +1422,84 @@ async function processRetentionEmails(limit=40) {
   return {sent};
 }
 
+
+async function processDeferredPushes(limit=80) {
+  if(!PUSH_CONFIGURED)return {sent:0,skipped:true};
+  const ts=now(); db.prepare('DELETE FROM deferred_pushes WHERE expires_at<?').run(ts);
+  const rows=db.prepare(`SELECT d.notification_id,d.user_id,n.type,n.title,n.body,n.data_json,n.source_user,n.created_at
+    FROM deferred_pushes d JOIN notifications n ON n.id=d.notification_id
+    WHERE d.available_at<=? AND d.expires_at>? ORDER BY d.available_at ASC LIMIT ?`).all(ts,ts,Math.max(1,Math.min(200,Number(limit)||80)));
+  let sent=0;
+  for(const row of rows){
+    if(userInQuietHours(row.user_id))continue;
+    let data={};try{data=JSON.parse(row.data_json||'{}')||{};}catch{}
+    const notification={id:row.notification_id,type:row.type,title:row.title,body:row.body,data,sourceUser:row.source_user,createdAt:row.created_at};
+    try{const result=await sendPushForUser(row.user_id,notification,{bypassQuiet:true,source:'deferred'});if(result.sent)sent++;else if(!result.deferred&&['disabled','category_disabled','no_subscription','cap','online'].includes(result.reason))db.prepare('DELETE FROM deferred_pushes WHERE notification_id=?').run(row.notification_id);}catch(e){console.warn('Push diferido:',e.message);}
+  }
+  return {sent};
+}
+function smartPushAlready(userId,kind,contextKey='') {
+  return Boolean(db.prepare('SELECT 1 FROM smart_push_log WHERE user_id=? AND kind=? AND context_key=?').get(userId,kind,String(contextKey||'')));
+}
+function logSmartPush(userId,kind,contextKey,notificationId) {
+  db.prepare('INSERT OR IGNORE INTO smart_push_log(id,user_id,kind,context_key,notification_id,created_at) VALUES(?,?,?,?,?,?)')
+    .run(safeId('spl'),userId,kind,String(contextKey||''),notificationId||null,now());
+}
+function smartPushCooldown(userId,kind,hours) {
+  const row=db.prepare('SELECT created_at FROM smart_push_log WHERE user_id=? AND kind=? ORDER BY created_at DESC LIMIT 1').get(userId,kind);
+  return row && now()-Number(row.created_at||0)<hours*3600000;
+}
+function reactivationBucket(lastSeenAt) {
+  const days=Math.floor((now()-Number(lastSeenAt||0))/86400000);
+  if(days>=14)return {days:14,key:'14d'};
+  if(days>=7)return {days:7,key:'7d'};
+  if(days>=3)return {days:3,key:'3d'};
+  return null;
+}
+async function processSmartPushes(limit=50) {
+  if(!PUSH_CONFIGURED || !SMART_PUSH_ENABLED)return {created:0,skipped:true};
+  const ts=now(), max=Math.max(1,Math.min(120,Number(limit)||50));
+  const rows=db.prepare(`SELECT u.id,u.last_seen_at,p.city FROM users u JOIN profiles p ON p.user_id=u.id JOIN notification_preferences np ON np.user_id=u.id
+    WHERE u.status='active' AND np.push_enabled<>0 AND EXISTS(SELECT 1 FROM push_subscriptions ps WHERE ps.user_id=u.id)
+      AND u.last_seen_at<=? ORDER BY u.last_seen_at ASC LIMIT ?`).all(ts-36*3600000,max);
+  let created=0;
+  for(const row of rows){
+    if(socketForUser(row.id)||userInQuietHours(row.id)||!pushBudgetAvailable(row.id,'recommendation'))continue;
+    const prefs=notificationPreferences(row.id);
+    const bucket=reactivationBucket(row.last_seen_at);
+    if(bucket && prefs.reactivationPush){
+      const context=`${bucket.key}:${new Date(Number(row.last_seen_at)||0).toISOString().slice(0,10)}`; if(smartPushAlready(row.id,'reactivation',context))continue;
+      const candidates=discoverFor(row.id); if(!candidates.length)continue;
+      const city=cleanCommunityCityName(row.city||'');
+      const title=bucket.days>=14?'¿Volvemos a romper el hielo?':bucket.days>=7?'V/R Match sigue moviéndose':'Hay novedades por descubrir';
+      const body=city?`Tienes perfiles por descubrir en ${city} y alrededores.`:'Tienes perfiles por descubrir cuando quieras volver.';
+      const n=createNotification(row.id,'reactivation',title,body,{reason:'reactivation',inactivityDays:bucket.days,open:'discover'});
+      if(n){logSmartPush(row.id,'reactivation',context,n.id);created++;}
+      continue;
+    }
+    if(bucket)continue;
+    if(prefs.cityActivity && !smartPushCooldown(row.id,'city_activity',72)){
+      const membership=db.prepare('SELECT city_slug FROM community_city_memberships WHERE user_id=?').get(row.id);
+      if(membership){
+        const city=db.prepare('SELECT name FROM community_cities WHERE slug=?').get(membership.city_slug);
+        const joined=Number(db.prepare('SELECT COUNT(*) n FROM community_city_memberships WHERE city_slug=? AND joined_at>? AND user_id<>?').get(membership.city_slug,row.last_seen_at,row.id)?.n||0);
+        if(joined>=3){
+          const context=new Date(ts).toISOString().slice(0,10);
+          const n=createNotification(row.id,'city_activity','🔥 Tu ciudad se mueve',`${joined} personas se han unido recientemente a VRMatch ${city?.name||row.city||''}.`,{reason:'city_activity',city:city?.name||row.city||'',open:'discover'});
+          if(n){logSmartPush(row.id,'city_activity',context,n.id);created++;continue;}
+        }
+      }
+    }
+    if(prefs.recommendations && !smartPushCooldown(row.id,'recommendation',72)){
+      const candidates=discoverFor(row.id); if(!candidates.length)continue;
+      const context=new Date(ts).toISOString().slice(0,10);
+      const n=createNotification(row.id,'recommendation','✨ Tienes perfiles por descubrir','Vuelve a Descubrir cuando te apetezca. No mostramos datos de otros perfiles en la pantalla bloqueada.',{reason:'recommendation',open:'discover'});
+      if(n){logSmartPush(row.id,'recommendation',context,n.id);created++;}
+    }
+  }
+  return {created};
+}
+
 async function sendVerificationEmail(req, user) {
   const token = issueAuthToken(user.id,'verify',EMAIL_VERIFY_HOURS*3600000);
   const link = `${baseUrl(req)}/api/auth/verify?token=${encodeURIComponent(token)}`;
@@ -1904,6 +2035,9 @@ setInterval(()=>processLaunchMailQueue(20).catch(e=>console.warn('Launch mail:',
 setInterval(()=>cleanupLaunchSecurityData(),6*60*60*1000).unref();
 setTimeout(()=>processRetentionEmails(40).catch(e=>console.warn('Retención email:',e.message)),90*1000).unref();
 setInterval(()=>processRetentionEmails(40).catch(e=>console.warn('Retención email:',e.message)),RETENTION_SWEEP_MINUTES*60*1000).unref();
+setTimeout(()=>processSmartPushes(50).catch(e=>console.warn('Push inteligente:',e.message)),120*1000).unref();
+setInterval(()=>processSmartPushes(50).catch(e=>console.warn('Push inteligente:',e.message)),SMART_PUSH_SWEEP_MINUTES*60*1000).unref();
+setInterval(()=>processDeferredPushes(80).catch(e=>console.warn('Push diferido:',e.message)),5*60*1000).unref();
 
 function mimeExt(mime) {
   if (mime === 'image/png') return 'png';
@@ -2257,7 +2391,15 @@ function billingPublicState(userId){
   };
 }
 
-const NOTIFICATION_TYPES = new Set(['match','message','game_invite','game_turn','system']);
+const NOTIFICATION_TYPES = new Set(['match','message','game_invite','game_turn','city_activity','recommendation','reactivation','system']);
+function cleanTimezone(value) {
+  const tz=String(value||'').trim().slice(0,80);
+  try { new Intl.DateTimeFormat('en-GB',{timeZone:tz||'Europe/Madrid'}).format(new Date()); return tz||'Europe/Madrid'; }
+  catch { return 'Europe/Madrid'; }
+}
+function cleanClock(value,fallback) {
+  const v=String(value||'').trim(); return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(v)?v:fallback;
+}
 function notificationPreferences(userId) {
   const row = db.prepare('SELECT * FROM notification_preferences WHERE user_id=?').get(userId);
   return {
@@ -2266,6 +2408,13 @@ function notificationPreferences(userId) {
     gameInvite: row ? row.game_invite !== 0 : true,
     gameTurn: row ? row.game_turn !== 0 : true,
     retentionEmail: row ? row.retention_email !== 0 : true,
+    cityActivity: row ? row.city_activity !== 0 : true,
+    recommendations: row ? row.recommendations !== 0 : true,
+    reactivationPush: row ? row.reactivation_push !== 0 : true,
+    quietHoursEnabled: row ? row.quiet_hours_enabled !== 0 : true,
+    quietStart: cleanClock(row?.quiet_start,'23:00'),
+    quietEnd: cleanClock(row?.quiet_end,'08:00'),
+    timezone: cleanTimezone(row?.timezone||'Europe/Madrid'),
     pushEnabled: row ? row.push_enabled !== 0 : false
   };
 }
@@ -2275,6 +2424,9 @@ function notificationAllowed(userId, type) {
   if (type === 'message') return p.newMessage;
   if (type === 'game_invite') return p.gameInvite;
   if (type === 'game_turn') return p.gameTurn;
+  if (type === 'city_activity') return p.cityActivity;
+  if (type === 'recommendation') return p.recommendations;
+  if (type === 'reactivation') return p.reactivationPush;
   if (type === 'system') return true;
   return false;
 }
@@ -2301,28 +2453,76 @@ function notificationsFor(userId, limit = 60) {
 function unreadNotificationCount(userId) {
   return Number(db.prepare('SELECT COUNT(*) n FROM notifications WHERE user_id=? AND read_at IS NULL').get(userId)?.n || 0);
 }
-async function sendPushForUser(userId, notification) {
-  if (!PUSH_CONFIGURED || !notificationPreferences(userId).pushEnabled) return;
+function localMinutesInTimezone(timezone,ts=now()) {
+  try {
+    const parts=new Intl.DateTimeFormat('en-GB',{timeZone:cleanTimezone(timezone),hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(ts));
+    const hour=Number(parts.find(p=>p.type==='hour')?.value||0), minute=Number(parts.find(p=>p.type==='minute')?.value||0);
+    return hour*60+minute;
+  } catch { const d=new Date(ts); return d.getUTCHours()*60+d.getUTCMinutes(); }
+}
+function clockMinutes(value,fallback='00:00') { const v=cleanClock(value,fallback); const [h,m]=v.split(':').map(Number); return h*60+m; }
+function userInQuietHours(userId,ts=now()) {
+  const p=notificationPreferences(userId); if(!p.quietHoursEnabled)return false;
+  const cur=localMinutesInTimezone(p.timezone,ts), start=clockMinutes(p.quietStart,'23:00'), end=clockMinutes(p.quietEnd,'08:00');
+  if(start===end)return false;
+  return start<end ? cur>=start&&cur<end : cur>=start||cur<end;
+}
+function isSmartPushType(type){return ['city_activity','recommendation','reactivation'].includes(String(type||''));}
+function pushBudgetAvailable(userId,type) {
+  const since=now()-24*3600000;
+  const total=Number(db.prepare("SELECT COUNT(*) n FROM push_delivery_log WHERE user_id=? AND status='sent' AND sent_at>=?").get(userId,since)?.n||0);
+  if(total>=PUSH_DAILY_CAP)return false;
+  if(isSmartPushType(type)){
+    const smart=Number(db.prepare("SELECT COUNT(*) n FROM push_delivery_log WHERE user_id=? AND status='sent' AND sent_at>=? AND kind IN ('city_activity','recommendation','reactivation')").get(userId,since)?.n||0);
+    if(smart>=PUSH_SMART_DAILY_CAP)return false;
+  }
+  return true;
+}
+function upsertPushLog(notification,userId,status,source='event',sentAt=null) {
+  if(!notification?.id)return;
+  const ts=now();
+  db.prepare(`INSERT INTO push_delivery_log(id,notification_id,user_id,kind,source,status,sent_at,created_at)
+    VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(notification_id,user_id) DO UPDATE SET
+      kind=excluded.kind,source=excluded.source,status=excluded.status,sent_at=COALESCE(excluded.sent_at,push_delivery_log.sent_at)`)
+    .run(safeId('pdl'),notification.id,userId,String(notification.type||'system'),source,status,sentAt,ts);
+}
+function queueDeferredPush(userId,notification) {
+  const ts=now();
+  db.prepare(`INSERT INTO deferred_pushes(notification_id,user_id,available_at,expires_at,created_at) VALUES(?,?,?,?,?)
+    ON CONFLICT(notification_id) DO UPDATE SET available_at=excluded.available_at,expires_at=excluded.expires_at`)
+    .run(notification.id,userId,ts+15*60000,ts+12*3600000,ts);
+  upsertPushLog(notification,userId,'deferred','quiet_hours',null);
+}
+async function sendPushForUser(userId, notification, options={}) {
+  if (!PUSH_CONFIGURED || !notificationPreferences(userId).pushEnabled) return {sent:false,reason:'disabled'};
+  if(!notificationAllowed(userId,notification?.type||'system'))return {sent:false,reason:'category_disabled'};
+  if(socketForUser(userId) && !options.forceWhenOnline)return {sent:false,reason:'online'};
+  if(!pushBudgetAvailable(userId,notification?.type)) { upsertPushLog(notification,userId,'skipped','daily_cap',null); return {sent:false,reason:'cap'}; }
+  if(!options.bypassQuiet && userInQuietHours(userId)) { queueDeferredPush(userId,notification); return {sent:false,reason:'quiet',deferred:true}; }
   const subscriptions = db.prepare('SELECT id,endpoint,p256dh,auth FROM push_subscriptions WHERE user_id=?').all(userId);
-  if (!subscriptions.length) return;
+  if (!subscriptions.length) return {sent:false,reason:'no_subscription'};
   const data = notification?.data || {};
   const payload = JSON.stringify({
     title: notification.title,
     body: notification.body,
     tag: `vr-${notification.type}-${notification.id}`,
     notificationId: notification.id,
-    url: `/?notification=${encodeURIComponent(notification.id)}`,
+    url: `/?notification=${encodeURIComponent(notification.id)}&push_open=1`,
     data
   });
+  let success=0;
   for (const sub of subscriptions) {
     try {
-      await webpush.sendNotification({ endpoint:sub.endpoint, keys:{ p256dh:sub.p256dh, auth:sub.auth } }, payload, { TTL: 180 });
+      await webpush.sendNotification({ endpoint:sub.endpoint, keys:{ p256dh:sub.p256dh, auth:sub.auth } }, payload, { TTL: isSmartPushType(notification.type)?3600:900 });
+      success++;
     } catch (e) {
       const code = Number(e?.statusCode || 0);
       if (code === 404 || code === 410) db.prepare('DELETE FROM push_subscriptions WHERE id=?').run(sub.id);
       else console.warn('Web Push falló:', e.message);
     }
   }
+  if(success){ upsertPushLog(notification,userId,'sent',options.source||'event',now()); db.prepare('DELETE FROM deferred_pushes WHERE notification_id=?').run(notification.id); return {sent:true,subscriptions:success}; }
+  upsertPushLog(notification,userId,'failed',options.source||'event',null); return {sent:false,reason:'delivery_failed'};
 }
 function createNotification(userId, type, title, body, data = {}, sourceUser = null) {
   if (!NOTIFICATION_TYPES.has(type) || !notificationAllowed(userId,type)) return null;
@@ -2736,12 +2936,21 @@ app.put('/api/notification-preferences', requireAuth, (req,res) => {
     gameInvite:bool01(req.body?.gameInvite,current.gameInvite),
     gameTurn:bool01(req.body?.gameTurn,current.gameTurn),
     retentionEmail:bool01(req.body?.retentionEmail,current.retentionEmail),
+    cityActivity:bool01(req.body?.cityActivity,current.cityActivity),
+    recommendations:bool01(req.body?.recommendations,current.recommendations),
+    reactivationPush:bool01(req.body?.reactivationPush,current.reactivationPush),
+    quietHoursEnabled:bool01(req.body?.quietHoursEnabled,current.quietHoursEnabled),
+    quietStart:cleanClock(req.body?.quietStart,current.quietStart),
+    quietEnd:cleanClock(req.body?.quietEnd,current.quietEnd),
+    timezone:cleanTimezone(req.body?.timezone||current.timezone),
     pushEnabled:bool01(req.body?.pushEnabled,current.pushEnabled)
   };
-  db.prepare(`INSERT INTO notification_preferences(user_id,new_match,new_message,game_invite,game_turn,retention_email,push_enabled,updated_at)
-    VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET new_match=excluded.new_match,new_message=excluded.new_message,
-    game_invite=excluded.game_invite,game_turn=excluded.game_turn,retention_email=excluded.retention_email,push_enabled=excluded.push_enabled,updated_at=excluded.updated_at`)
-    .run(req.user.id,next.newMatch,next.newMessage,next.gameInvite,next.gameTurn,next.retentionEmail,next.pushEnabled,ts);
+  db.prepare(`INSERT INTO notification_preferences(user_id,new_match,new_message,game_invite,game_turn,retention_email,city_activity,recommendations,reactivation_push,quiet_hours_enabled,quiet_start,quiet_end,timezone,push_enabled,updated_at)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET new_match=excluded.new_match,new_message=excluded.new_message,
+    game_invite=excluded.game_invite,game_turn=excluded.game_turn,retention_email=excluded.retention_email,city_activity=excluded.city_activity,
+    recommendations=excluded.recommendations,reactivation_push=excluded.reactivation_push,quiet_hours_enabled=excluded.quiet_hours_enabled,
+    quiet_start=excluded.quiet_start,quiet_end=excluded.quiet_end,timezone=excluded.timezone,push_enabled=excluded.push_enabled,updated_at=excluded.updated_at`)
+    .run(req.user.id,next.newMatch,next.newMessage,next.gameInvite,next.gameTurn,next.retentionEmail,next.cityActivity,next.recommendations,next.reactivationPush,next.quietHoursEnabled,next.quietStart,next.quietEnd,next.timezone,next.pushEnabled,ts);
   res.json({ok:true,preferences:notificationPreferences(req.user.id),pushConfigured:PUSH_CONFIGURED});
 });
 app.get('/api/push/config', requireAuth, (req,res) => {
@@ -2772,6 +2981,14 @@ app.post('/api/push/unsubscribe', requireAuth, (req,res) => {
   const remaining=Number(db.prepare('SELECT COUNT(*) n FROM push_subscriptions WHERE user_id=?').get(req.user.id)?.n||0);
   db.prepare('UPDATE notification_preferences SET push_enabled=?,updated_at=? WHERE user_id=?').run(remaining?1:0,now(),req.user.id);
   res.json({ok:true,preferences:notificationPreferences(req.user.id)});
+});
+app.post('/api/push/open', requireAuth, (req,res) => {
+  const notificationId=cleanShortText(req.body?.notificationId,80);
+  if(!notificationId)return res.status(400).json({ok:false,error:'Notificación no válida.'});
+  const owned=db.prepare('SELECT 1 FROM notifications WHERE id=? AND user_id=?').get(notificationId,req.user.id);
+  if(!owned)return res.status(404).json({ok:false,error:'Notificación no encontrada.'});
+  db.prepare('UPDATE push_delivery_log SET opened_at=COALESCE(opened_at,?) WHERE notification_id=? AND user_id=?').run(now(),notificationId,req.user.id);
+  res.json({ok:true});
 });
 
 app.put('/api/profile', requireAuth, (req,res) => {
@@ -2927,6 +3144,8 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
     const feedback=db.prepare('SELECT id,kind,message,page,created_at,status,admin_note,updated_at FROM feedback WHERE user_id=? ORDER BY created_at ASC').all(userId);
     const notifications=db.prepare('SELECT id,source_user,type,title,body,data_json,created_at,read_at FROM notifications WHERE user_id=? ORDER BY created_at ASC').all(userId).map(n=>({...n,data:safeJsonObject(n.data_json),data_json:undefined}));
     const retentionEmails=db.prepare('SELECT kind,context_key,sent_at,status FROM retention_email_log WHERE user_id=? ORDER BY sent_at ASC').all(userId);
+    const pushHistory=db.prepare('SELECT notification_id,kind,source,status,sent_at,opened_at,created_at FROM push_delivery_log WHERE user_id=? ORDER BY created_at ASC').all(userId);
+    const pushSubscriptions=db.prepare('SELECT endpoint,created_at,updated_at FROM push_subscriptions WHERE user_id=? ORDER BY created_at ASC').all(userId);
     const verification=verificationState(userId);
     const securityEvents=db.prepare('SELECT kind,severity,metadata_json,created_at FROM security_events WHERE user_id=? ORDER BY created_at ASC').all(userId).map(e=>({...e,metadata:safeJsonObject(e.metadata_json),metadata_json:undefined}));
     const referralStats=memberReferralStats(userId);
@@ -2952,7 +3171,7 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
       creatorAttribution:creatorAttribution?{code:creatorAttribution.code,attributedAt:creatorAttribution.attributed_at}:null,
       acquisition:growthAcquisition,growthEvents,
       communityCity:communityCityForUser(userId),verification,securityEvents,
-      likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,notifications,retentionEmails,gameSessions,matches
+      likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,notifications,retentionEmails,pushHistory,pushSubscriptions,gameSessions,matches
     };
     res.setHeader('Content-Type','application/json; charset=utf-8');
     res.setHeader('Content-Disposition','attachment; filename="vr-match-mis-datos.json"');
@@ -3770,6 +3989,8 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
     referralActive: db.prepare(`SELECT COUNT(*) n FROM user_referral_attributions a JOIN users u ON u.id=a.invitee_user_id JOIN profiles p ON p.user_id=u.id JOIN community_city_memberships cm ON cm.user_id=u.id WHERE a.attributed_at>=? AND u.status='active' AND json_valid(COALESCE(p.photos_json,'[]')) AND json_array_length(COALESCE(p.photos_json,'[]'))>=1 AND EXISTS(SELECT 1 FROM likes l WHERE l.from_user=u.id LIMIT 1)`).get(since).n,
     creatorSignups: db.prepare('SELECT COUNT(*) n FROM creator_attributions WHERE attributed_at>=?').get(since).n,
     retentionEmails: db.prepare("SELECT COUNT(*) n FROM retention_email_log WHERE status='sent' AND sent_at>=?").get(since).n,
+    pushesSent: db.prepare("SELECT COUNT(*) n FROM push_delivery_log WHERE status='sent' AND sent_at>=?").get(since).n,
+    pushesOpened: db.prepare("SELECT COUNT(*) n FROM push_delivery_log WHERE status='sent' AND sent_at>=? AND opened_at IS NOT NULL").get(since).n,
     verifiedTotal: db.prepare('SELECT COUNT(*) n FROM users WHERE email_verified=1').get().n,
     activePlus: db.prepare("SELECT COUNT(*) n FROM plus_memberships WHERE status='active' AND (expires_at IS NULL OR expires_at>?)").get(until).n
   };
@@ -3823,6 +4044,12 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
   const retentionEmails=db.prepare(`SELECT r.kind,COUNT(*) sent,SUM(CASE WHEN u.last_seen_at>r.sent_at THEN 1 ELSE 0 END) activity_after
     FROM retention_email_log r JOIN users u ON u.id=r.user_id WHERE r.status='sent' AND r.sent_at>=? GROUP BY r.kind ORDER BY sent DESC`).all(since)
     .map(r=>({kind:r.kind,sent:Number(r.sent)||0,activityAfter:Number(r.activity_after)||0}));
+  const pushStats=db.prepare(`SELECT p.kind,COUNT(*) sent,SUM(CASE WHEN p.opened_at IS NOT NULL THEN 1 ELSE 0 END) opened,
+      SUM(CASE WHEN u.last_seen_at>p.sent_at THEN 1 ELSE 0 END) activity_after,
+      SUM(CASE WHEN EXISTS(SELECT 1 FROM likes l WHERE l.from_user=p.user_id AND l.created_at>p.sent_at) THEN 1 ELSE 0 END) liked_after,
+      SUM(CASE WHEN EXISTS(SELECT 1 FROM matches m WHERE (m.user1=p.user_id OR m.user2=p.user_id) AND m.created_at>p.sent_at) THEN 1 ELSE 0 END) matched_after
+    FROM push_delivery_log p JOIN users u ON u.id=p.user_id WHERE p.status='sent' AND p.sent_at>=?
+    GROUP BY p.kind ORDER BY sent DESC`).all(since).map(r=>({kind:r.kind,sent:Number(r.sent)||0,opened:Number(r.opened)||0,activityAfter:Number(r.activity_after)||0,likedAfter:Number(r.liked_after)||0,matchedAfter:Number(r.matched_after)||0}));
   const uploads=folderStatsSafe(UPLOAD_DIR), mem=process.memoryUsage();
   const system={
     uptimeSeconds:Math.round(process.uptime()),rssMb:Math.round(mem.rss/1024/1024),heapUsedMb:Math.round(mem.heapUsed/1024/1024),
@@ -3831,7 +4058,7 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
   const recentErrors=db.prepare(`SELECT ce.id,ce.message,ce.source,ce.line,ce.column_no,ce.page,ce.app_version,ce.created_at,u.email,p.name
     FROM client_errors ce LEFT JOIN users u ON u.id=ce.user_id LEFT JOIN profiles p ON p.user_id=ce.user_id
     ORDER BY ce.created_at DESC LIMIT 20`).all();
-  res.json({ok:true,days,metric,funnel,daily,channels,campaigns:campaignPerformance,cities,creators,cityLeaderboard,retentionEmails,system,recentErrors});
+  res.json({ok:true,days,metric,funnel,daily,channels,campaigns:campaignPerformance,cities,creators,cityLeaderboard,retentionEmails,pushStats,system,recentErrors});
 });
 
 app.get('/api/admin/growth/export.csv', requireAuth, requireAdmin, (req,res) => {
@@ -4260,7 +4487,10 @@ app.post('/api/admin/system/maintenance', requireAuth, requireAdmin, rateLimit({
       const errors=db.prepare('DELETE FROM client_errors WHERE created_at<?').run(ts-30*86400000).changes;
       const serverErrors=db.prepare('DELETE FROM server_errors WHERE created_at<?').run(ts-SYSTEM_ERROR_RETENTION_DAYS*86400000).changes;
       const notifications=db.prepare('DELETE FROM notifications WHERE read_at IS NOT NULL AND created_at<?').run(ts-90*86400000).changes;
-      result={clientErrors:errors,serverErrors,notifications};
+      const pushLogs=db.prepare('DELETE FROM push_delivery_log WHERE created_at<?').run(ts-180*86400000).changes;
+      const smartPushLogs=db.prepare('DELETE FROM smart_push_log WHERE created_at<?').run(ts-180*86400000).changes;
+      const deferredPushes=db.prepare('DELETE FROM deferred_pushes WHERE expires_at<?').run(ts).changes;
+      result={clientErrors:errors,serverErrors,notifications,pushLogs,smartPushLogs,deferredPushes};
     } else if(action==='cleanup_orphan_uploads'){
       const files=orphanUploadFiles(); let deleted=0,bytes=0;
       for(const file of files){try{fs.unlinkSync(file.path);deleted++;bytes+=file.bytes||0;}catch{}}
@@ -5081,7 +5311,7 @@ app.use((err,req,res,next)=>{
 function startServer(port=PORT,host='0.0.0.0'){
   return server.listen(port,host,()=>{const ready=productionReadiness();console.log(`V/R Match v${APP_VERSION} escuchando en puerto ${server.address()?.port||port}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | email de match: ${MATCH_EMAIL_ENABLED?'activo':'inactivo'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
     console.log(`Resiliencia: reconexión de partidas ${Math.round(GAME_RECONNECT_GRACE_MS/1000)}s + mantenimiento + backup verificable`);
-    console.log(`Activación de ciudades: tokens hash-only · ${LAUNCH_ACTIVATION_DAYS} días · reenvío protegido`);console.log(`Socket origin: ${(allowedOrigins.length||appBaseOrigin)?'restringido':'ABIERTO (solo desarrollo)'}`);console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas + request-id + errores cliente/servidor + diagnóstico técnico');console.log('Privacidad: sesiones + bloqueados + exportación + selfie de verificación privada');});
+    console.log(`Activación de ciudades: tokens hash-only · ${LAUNCH_ACTIVATION_DAYS} días · reenvío protegido`);console.log(`Socket origin: ${(allowedOrigins.length||appBaseOrigin)?'restringido':'ABIERTO (solo desarrollo)'}`);console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'} | inteligente ${SMART_PUSH_ENABLED?'activo':'inactivo'} | cap ${PUSH_DAILY_CAP}/día`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas + request-id + errores cliente/servidor + diagnóstico técnico');console.log('Privacidad: sesiones + bloqueados + exportación + selfie de verificación privada');});
 }
 if(require.main===module)startServer();
-module.exports={app,server,io,db,startServer,APP_VERSION,productionReadiness,quickCheckDatabase,systemMaintenanceStatus,systemDiagnostics,runBackupSelfTest,runSmtpVerify,recordServerError,activationState};
+module.exports={app,server,io,db,startServer,APP_VERSION,productionReadiness,quickCheckDatabase,systemMaintenanceStatus,systemDiagnostics,runBackupSelfTest,runSmtpVerify,recordServerError,activationState,userInQuietHours,processSmartPushes,processDeferredPushes};

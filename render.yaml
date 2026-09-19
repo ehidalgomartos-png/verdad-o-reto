@@ -44,6 +44,14 @@ services:
         sync: false
       - key: VAPID_SUBJECT
         sync: false
+      - key: VR_SMART_PUSH_ENABLED
+        value: "true"
+      - key: VR_SMART_PUSH_SWEEP_MINUTES
+        value: "30"
+      - key: VR_PUSH_DAILY_CAP
+        value: "8"
+      - key: VR_PUSH_SMART_DAILY_CAP
+        value: "2"
       - key: VR_SYSTEM_ERROR_RETENTION_DAYS
         value: "30"
       - key: VR_HEALTH_MEMORY_WARN_MB

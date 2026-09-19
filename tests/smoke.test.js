@@ -8,7 +8,7 @@ const path = require('node:path');
 const { once } = require('node:events');
 const { io: ioClient } = require('socket.io-client');
 
-const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(),'vrmatch-v1818-test-'));
+const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(),'vrmatch-v1820-test-'));
 process.env.NODE_ENV = 'test';
 process.env.VR_STORAGE_DIR = TEST_DIR;
 process.env.VR_DB_PATH = path.join(TEST_DIR,'data','vrmatch-test.db');
@@ -24,7 +24,7 @@ delete process.env.SMTP_PORT;
 delete process.env.SMTP_FROM;
 
 const appModule = require('../server.js');
-const { server, db, startServer, APP_VERSION, runBackupSelfTest, recordServerError } = appModule;
+const { server, db, startServer, APP_VERSION, runBackupSelfTest, recordServerError, userInQuietHours } = appModule;
 let baseUrl = '';
 
 async function api(route,{method='GET',token,body}={}){
@@ -99,7 +99,7 @@ test('healthz comprueba SQLite, almacenamiento y versión', async()=>{
   assert.equal(res.data.db,true);
   assert.equal(res.data.storage,true);
   assert.equal(res.data.version,APP_VERSION);
-  assert.equal(APP_VERSION,'18.19.0');
+  assert.equal(APP_VERSION,'18.20.0');
   assert.ok(res.headers.get('x-request-id'));
 });
 
@@ -159,6 +159,22 @@ test('flujo crítico: registro → ciudad → perfil → match → mensaje → j
     const activeMatch=db.prepare('SELECT active FROM matches LIMIT 1').get();
     assert.equal(activeMatch.active,0);
   } finally { sa.close(); sb.close(); }
+});
+
+test('preferencias push: categorías, zona horaria y horario silencioso', async()=>{
+  const login=await api('/api/auth/login',{method:'POST',body:{email:'admin@test.local',password:'Clave-Segura-1816'}});
+  assert.equal(login.status,200);
+  const body={newMatch:true,newMessage:true,gameInvite:true,gameTurn:true,retentionEmail:true,cityActivity:false,recommendations:true,reactivationPush:false,quietHoursEnabled:true,quietStart:'00:00',quietEnd:'23:59',timezone:'UTC',pushEnabled:false};
+  const saved=await api('/api/notification-preferences',{method:'PUT',token:login.data.token,body});
+  assert.equal(saved.status,200,saved.data?.error);
+  assert.equal(saved.data.preferences.cityActivity,false);
+  assert.equal(saved.data.preferences.recommendations,true);
+  assert.equal(saved.data.preferences.reactivationPush,false);
+  assert.equal(saved.data.preferences.quietStart,'00:00');
+  assert.equal(saved.data.preferences.timezone,'UTC');
+  assert.equal(userInQuietHours(login.data.user.id,Date.UTC(2026,8,19,12,0,0)),true);
+  assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='push_delivery_log'").get());
+  assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='smart_push_log'").get());
 });
 
 test('referidos atribuyen el alta y la eliminación de cuenta funciona', async()=>{

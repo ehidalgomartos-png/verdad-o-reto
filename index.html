@@ -860,6 +860,13 @@
         <label class="setting-switch compact"><span><b>Invitaciones a jugar</b><small>Rompehielos, Conóceme o Verdad o Reto.</small></span><input id="notifPrefInvite" type="checkbox" checked></label>
         <label class="setting-switch compact"><span><b>Tu turno</b><small>Cuando vuelve a tocarte durante una partida.</small></span><input id="notifPrefTurn" type="checkbox" checked></label>
         <label class="setting-switch compact"><span><b>Recordatorios por email</b><small>Perfil incompleto, mensajes cuando estás fuera, invitaciones a jugar y ayuda para romper el hielo. Sin spam.</small></span><input id="notifPrefRetentionEmail" type="checkbox" checked></label>
+        <label class="setting-switch compact"><span><b>Actividad en mi ciudad</b><small>Avisos agregados cuando tu comunidad local tenga movimiento relevante.</small></span><input id="notifPrefCityActivity" type="checkbox" checked></label>
+        <label class="setting-switch compact"><span><b>Recomendaciones</b><small>Un aviso ocasional cuando tengas perfiles por descubrir. Nunca muestra nombres en la pantalla bloqueada.</small></span><input id="notifPrefRecommendations" type="checkbox" checked></label>
+        <label class="setting-switch compact"><span><b>Reactivación</b><small>Si llevas varios días sin entrar, V/R Match puede recordarte que hay actividad disponible.</small></span><input id="notifPrefReactivation" type="checkbox" checked></label>
+        <div class="notification-quiet-box">
+          <label class="setting-switch compact"><span><b>Horario silencioso</b><small>Los push esperan hasta que termine este horario.</small></span><input id="notifQuietEnabled" type="checkbox" checked onchange="document.getElementById('notifQuietStart').disabled=!this.checked;document.getElementById('notifQuietEnd').disabled=!this.checked"></label>
+          <div class="notification-quiet-times"><label><span>Desde</span><input id="notifQuietStart" class="profile-input" type="time" value="23:00"></label><label><span>Hasta</span><input id="notifQuietEnd" class="profile-input" type="time" value="08:00"></label></div>
+        </div>
         <button class="btn btn-secondary" type="button" onclick="guardarPreferenciasNotificaciones()">Guardar preferencias</button>
       </div>
 
@@ -977,7 +984,7 @@
     let adminSelectedUserId = null;
     let notificationItems = [];
     let notificationUnread = 0;
-    let notificationPreferences = { newMatch:true, newMessage:true, gameInvite:true, gameTurn:true, retentionEmail:true, pushEnabled:false };
+    let notificationPreferences = { newMatch:true, newMessage:true, gameInvite:true, gameTurn:true, retentionEmail:true, cityActivity:true, recommendations:true, reactivationPush:true, quietHoursEnabled:true, quietStart:'23:00', quietEnd:'08:00', timezone:'Europe/Madrid', pushEnabled:false };
     let pushConfigured = false;
     let pushSubscriptionActive = false;
     let notificationBrowserEnabled = localStorage.getItem('vr_browser_notifications') === '1';
@@ -1585,6 +1592,7 @@
     const verificationResult = params.get('verification') || '';
     const billingResult = params.get('billing') || '';
     let pendingNotificationId = params.get('notification') || '';
+    let pendingPushOpen = params.get('push_open') === '1';
     const registerIntent = params.get('register') === '1';
     const incomingCityIntent = String(params.get('city') || '').trim().slice(0,60);
     if(incomingCityIntent) localStorage.setItem('vr_pending_city', incomingCityIntent);
@@ -1836,6 +1844,13 @@
         gameInvite:data.gameInvite !== false,
         gameTurn:data.gameTurn !== false,
         retentionEmail:data.retentionEmail !== false,
+        cityActivity:data.cityActivity !== false,
+        recommendations:data.recommendations !== false,
+        reactivationPush:data.reactivationPush !== false,
+        quietHoursEnabled:data.quietHoursEnabled !== false,
+        quietStart:/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(data.quietStart||''))?String(data.quietStart):'23:00',
+        quietEnd:/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(data.quietEnd||''))?String(data.quietEnd):'08:00',
+        timezone:String(data.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Madrid').slice(0,80),
         pushEnabled:Boolean(data.pushEnabled)
       };
     }
@@ -1854,6 +1869,9 @@
       if(tipo==='message')return '💬';
       if(tipo==='game_invite')return '🎮';
       if(tipo==='game_turn')return '⚡';
+      if(tipo==='city_activity')return '📍';
+      if(tipo==='recommendation')return '✨';
+      if(tipo==='reactivation')return '🔥';
       return '🔔';
     }
     function fechaNotificacion(ts) {
@@ -1879,6 +1897,12 @@
       if($('notifPrefInvite'))$('notifPrefInvite').checked=notificationPreferences.gameInvite;
       if($('notifPrefTurn'))$('notifPrefTurn').checked=notificationPreferences.gameTurn;
       if($('notifPrefRetentionEmail'))$('notifPrefRetentionEmail').checked=notificationPreferences.retentionEmail;
+      if($('notifPrefCityActivity'))$('notifPrefCityActivity').checked=notificationPreferences.cityActivity;
+      if($('notifPrefRecommendations'))$('notifPrefRecommendations').checked=notificationPreferences.recommendations;
+      if($('notifPrefReactivation'))$('notifPrefReactivation').checked=notificationPreferences.reactivationPush;
+      if($('notifQuietEnabled'))$('notifQuietEnabled').checked=notificationPreferences.quietHoursEnabled;
+      if($('notifQuietStart')){$('notifQuietStart').value=notificationPreferences.quietStart;$('notifQuietStart').disabled=!$('notifQuietEnabled')?.checked;}
+      if($('notifQuietEnd')){$('notifQuietEnd').value=notificationPreferences.quietEnd;$('notifQuietEnd').disabled=!$('notifQuietEnabled')?.checked;}
       const status=$('notificationPushStatus'), button=$('notificationPushButton');
       if(!status||!button)return;
       if(!('Notification' in window)) {
@@ -1931,6 +1955,7 @@
       if(pendingNotificationId) {
         const id=pendingNotificationId;
         pendingNotificationId='';
+        if(pendingPushOpen){ pendingPushOpen=false; await api('/api/push/open',{method:'POST',body:{notificationId:id}}).catch(()=>null); }
         history.replaceState({},document.title,location.pathname);
         setTimeout(()=>abrirNotificacion(id),200);
       }
@@ -1972,7 +1997,9 @@
       if(n.type==='game_turn') {
         if(miSala){showScreen('pantallaJuego');mostrarToast('Es tu turno en la partida.','info');}
         else mostrarToast('La partida ya no está activa en este dispositivo.','warn');
+        return;
       }
+      if(['city_activity','recommendation','reactivation'].includes(n.type)) { irADescubrir(); return; }
     }
     async function guardarPreferenciasNotificaciones() {
       const body={
@@ -1981,6 +2008,13 @@
         gameInvite:$('notifPrefInvite').checked,
         gameTurn:$('notifPrefTurn').checked,
         retentionEmail:$('notifPrefRetentionEmail').checked,
+        cityActivity:$('notifPrefCityActivity').checked,
+        recommendations:$('notifPrefRecommendations').checked,
+        reactivationPush:$('notifPrefReactivation').checked,
+        quietHoursEnabled:$('notifQuietEnabled').checked,
+        quietStart:$('notifQuietStart').value||'23:00',
+        quietEnd:$('notifQuietEnd').value||'08:00',
+        timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Madrid',
         pushEnabled:notificationPreferences.pushEnabled
       };
       const res=await api('/api/notification-preferences',{method:'PUT',body});
@@ -2832,9 +2866,9 @@
       const days=Number($('adminMetricsDays').value||7);
       const res=await api(`/api/admin/metrics?days=${encodeURIComponent(days)}`);
       if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudieron cargar.')}</strong></div>`;return;}
-      const m=res.metric||{},f=res.funnel||{},sys=res.system||{},daily=res.daily||[],errors=res.recentErrors||[],channels=res.channels||[],campaigns=res.campaigns||[],cities=res.cities||[],creators=res.creators||[],cityLeaderboard=res.cityLeaderboard||[],retentionEmails=res.retentionEmails||[];
+      const m=res.metric||{},f=res.funnel||{},sys=res.system||{},daily=res.daily||[],errors=res.recentErrors||[],channels=res.channels||[],campaigns=res.campaigns||[],cities=res.cities||[],creators=res.creators||[],cityLeaderboard=res.cityLeaderboard||[],retentionEmails=res.retentionEmails||[],pushStats=res.pushStats||[];
       const visitConv=porcentaje(m.registered,m.visits),startConv=porcentaje(m.registered,m.registrationStarted);
-      const cards=[['Visitas',m.visits||0,'sesiones de entrada'],['Altas',m.registered,'cuentas nuevas'],['Conversión',`${visitConv}%`,'visita → alta'],['Inicio registro',m.registrationStarted||0,`${startConv}% terminan`],['Activos',m.activeUsers,`últimos ${days===1?'24 h':days+' días'}`],['Likes',m.likes,'acciones'],['Matches',m.matches,'creados'],['Mensajes',m.messages,'enviados'],['Partidas',m.gamesStarted,'iniciadas'],['Finalizadas',m.gamesCompleted,'partidas completas'],['Emails retención',m.retentionEmails||0,'avisos enviados'],['Altas ref.',m.referralSignups||0,'atribuidas'],['Ref. activos',m.referralActive||0,'ciudad + foto + like'],['Creadores',m.creatorSignups||0,'altas atribuidas'],['Compartidos',m.referralShares||0,'invitaciones/resultados']];
+      const cards=[['Visitas',m.visits||0,'sesiones de entrada'],['Altas',m.registered,'cuentas nuevas'],['Conversión',`${visitConv}%`,'visita → alta'],['Inicio registro',m.registrationStarted||0,`${startConv}% terminan`],['Activos',m.activeUsers,`últimos ${days===1?'24 h':days+' días'}`],['Likes',m.likes,'acciones'],['Matches',m.matches,'creados'],['Mensajes',m.messages,'enviados'],['Partidas',m.gamesStarted,'iniciadas'],['Finalizadas',m.gamesCompleted,'partidas completas'],['Emails retención',m.retentionEmails||0,'avisos enviados'],['Push enviados',m.pushesSent||0,`${m.pushesOpened||0} abiertos`],['Altas ref.',m.referralSignups||0,'atribuidas'],['Ref. activos',m.referralActive||0,'ciudad + foto + like'],['Creadores',m.creatorSignups||0,'altas atribuidas'],['Compartidos',m.referralShares||0,'invitaciones/resultados']];
       const base=Math.max(1,Number(f.registered)||0);
       const funnel=[['Visitas',f.visits||0,100],['Inician registro',f.registrationStarted||0,porcentaje(f.registrationStarted,f.visits)],['Registro',f.registered||0,porcentaje(f.registered,f.visits)],['Ciudad',f.city||0,porcentaje(f.city,base)],['Perfil',f.profile||0,porcentaje(f.profile,base)],['Perfil listo',f.profileReady||0,porcentaje(f.profileReady,base)],['Primer like',f.liked||0,porcentaje(f.liked,base)],['Match',f.matched||0,porcentaje(f.matched,base)],['Mensaje',f.messaged||0,porcentaje(f.messaged,base)],['Partida',f.played||0,porcentaje(f.played,base)],['Comparte',f.shared||0,porcentaje(f.shared,base)]];
       const maxDaily=Math.max(1,...daily.map(d=>Math.max(Number(d.visits)||0,Number(d.registered)||0,Number(d.matches)||0,Number(d.games)||0)));
@@ -2843,6 +2877,8 @@
       const maxCity=Math.max(1,...cities.map(c=>Number(c.signups)||0));
       const retentionLabels={profile_incomplete:'Perfil incompleto',new_message:'Nuevo mensaje',game_invite:'Invitación a jugar',match_no_chat:'Match sin conversación'};
       const retentionRows=retentionEmails.length?retentionEmails.map(r=>`<tr><td><b>${escapeHtml(retentionLabels[r.kind]||r.kind)}</b></td><td>${Number(r.sent)||0}</td><td>${Number(r.activityAfter)||0}</td></tr>`).join(''):'<tr><td colspan="3">Aún no se han enviado recordatorios de retención.</td></tr>';
+      const pushLabels={match:'Nuevo match',message:'Nuevo mensaje',game_invite:'Invitación a jugar',game_turn:'Turno de juego',city_activity:'Actividad de ciudad',recommendation:'Recomendación',reactivation:'Reactivación',system:'Sistema'};
+      const pushRows=pushStats.length?pushStats.map(r=>{const rate=Number(r.sent)?Math.round(Number(r.opened||0)*1000/Number(r.sent))/10:0;return `<tr><td><b>${escapeHtml(pushLabels[r.kind]||r.kind)}</b></td><td>${Number(r.sent)||0}</td><td>${Number(r.opened)||0} · ${rate}%</td><td>${Number(r.activityAfter)||0}</td><td>${Number(r.likedAfter)||0}</td><td>${Number(r.matchedAfter)||0}</td></tr>`;}).join(''):'<tr><td colspan="6">Aún no hay envíos push medidos.</td></tr>';
       const creatorRows=creators.length?creators.map(c=>`<tr><td><b>${escapeHtml(c.displayName||c.code)}</b><small>${escapeHtml(c.code)} · ${c.active?'activo':'pausado'}</small></td><td>${escapeHtml(c.campaign||'—')}</td><td>${Number(c.visits)||0}</td><td>${Number(c.signups)||0}</td><td>${Number(c.active7d)||0}</td><td>${c.conversion==null?'—':`${Number(c.conversion).toFixed(1)}%`}</td><td><button class="mini-admin-action" onclick="toggleCreatorCode('${escapeHtml(c.code)}',${c.active?'false':'true'})">${c.active?'Pausar':'Activar'}</button></td></tr>`).join(''):'<tr><td colspan="7">Crea un código para medir la primera colaboración.</td></tr>';
       const cityRankRows=cityLeaderboard.length?cityLeaderboard.map(c=>`<div><span><b>#${Number(c.rank)} ${escapeHtml(c.name)}</b><small>+${Number(c.growth)||0} en el periodo · ${Number(c.current)||0} total</small></span><i><em style="width:${Math.max(3,Number(c.percent)||0)}%"></em></i><b>${Number(c.percent)||0}%</b></div>`).join(''):'<div class="empty-state compact"><span>📍</span><strong>Sin actividad por ciudad todavía.</strong></div>';
       box.innerHTML=`<div class="metrics-summary">${cards.map(([label,val,sub])=>`<article><strong>${typeof val==='string'?escapeHtml(val):Number(val)||0}</strong><span>${escapeHtml(label)}</span><small>${escapeHtml(sub)}</small></article>`).join('')}</div>
@@ -2854,6 +2890,7 @@
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Altas por ciudad</strong><small>Nuevas cuentas del periodo según la ciudad elegida.</small></div></div><div class="city-growth-admin">${cities.length?cities.map(c=>`<div><span>${escapeHtml(c.city||'Sin ciudad')}</span><i><em style="width:${Math.max(3,(Number(c.signups)||0)*100/maxCity)}%"></em></i><b>${Number(c.signups)||0}</b></div>`).join(''):'<div class="empty-state compact"><span>📍</span><strong>Aún no hay ciudades en este periodo.</strong></div>'}</div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Actividad diaria</strong><small>Visitas, altas, matches y partidas. Datos agregados.</small></div></div><div class="daily-chart">${daily.map(d=>`<div class="daily-row"><small>${escapeHtml(d.day.slice(5))}</small><div title="Visitas: ${d.visits}"><i class="visit" style="width:${Math.max(2,Number(d.visits)*100/maxDaily)}%"></i></div><div title="Altas: ${d.registered}"><i class="reg" style="width:${Math.max(2,Number(d.registered)*100/maxDaily)}%"></i></div><div title="Matches: ${d.matches}"><i class="match" style="width:${Math.max(2,Number(d.matches)*100/maxDaily)}%"></i></div><div title="Partidas: ${d.games}"><i class="game" style="width:${Math.max(2,Number(d.games)*100/maxDaily)}%"></i></div></div>`).join('')}</div><div class="chart-legend"><span><i class="visit"></i>Visitas</span><span><i class="reg"></i>Altas</span><span><i class="match"></i>Matches</span><span><i class="game"></i>Partidas</span></div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Retención por email</strong><small>Avisos enviados y cuentas con actividad posterior al envío. La actividad posterior no implica causalidad.</small></div></div><div class="growth-table-wrap"><table class="growth-table"><thead><tr><th>Tipo</th><th>Enviados</th><th>Actividad posterior</th></tr></thead><tbody>${retentionRows}</tbody></table></div></section>
+        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Push y reactivación</strong><small>Envíos, aperturas registradas al tocar la notificación y actividad posterior. La actividad posterior no implica causalidad.</small></div></div><div class="growth-table-wrap"><table class="growth-table"><thead><tr><th>Tipo</th><th>Enviados</th><th>Aperturas</th><th>Actividad</th><th>Like después</th><th>Match después</th></tr></thead><tbody>${pushRows}</tbody></table></div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Salud del sistema</strong><small>Diagnóstico técnico de esta instancia. No contiene secretos.</small></div></div><div class="system-grid"><div><b>${sys.onlineUsers||0}</b><span>usuarios online</span></div><div><b>${sys.sockets||0}</b><span>sockets</span></div><div><b>${sys.rssMb||0} MB</b><span>memoria RSS</span></div><div><b>${sys.heapUsedMb||0} MB</b><span>heap usado</span></div><div><b>${bytesLegibles(sys.dbBytes)}</b><span>SQLite</span></div><div><b>${sys.uploadFiles||0}</b><span>archivos · ${bytesLegibles(sys.uploadBytes)}</span></div></div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Errores recientes del cliente</strong><small>Solo mensaje técnico, pantalla y posición. No se guardan chats ni coordenadas.</small></div></div><div class="error-list">${errors.length?errors.map(e=>`<article><div><strong>${escapeHtml(e.message||'Error')}</strong><small>${escapeHtml(adminFecha(e.created_at))}</small></div><p>${escapeHtml(e.name||e.email||'Usuario')} · ${escapeHtml(e.page||'/')} ${e.source?`· ${escapeHtml(e.source)}:${Number(e.line)||0}`:''}</p></article>`).join(''):'<div class="empty-state compact"><span>✓</span><strong>Sin errores registrados</strong></div>'}</div></section>`;
     }
@@ -4709,7 +4746,11 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
     if('serviceWorker' in navigator) {
       registrarServiceWorker();
       navigator.serviceWorker.addEventListener('message',(event)=>{
-        if(event.data?.type==='VR_NOTIFICATION_CLICK'&&event.data.notificationId)abrirNotificacion(String(event.data.notificationId));
+        if(event.data?.type==='VR_NOTIFICATION_CLICK'&&event.data.notificationId){
+          const id=String(event.data.notificationId);
+          api('/api/push/open',{method:'POST',body:{notificationId:id}}).catch(()=>null);
+          abrirNotificacion(id);
+        }
       });
     }
     actualizarEstadoPWA();
