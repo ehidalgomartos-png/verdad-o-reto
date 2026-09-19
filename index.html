@@ -442,6 +442,12 @@
       <div id="adminPaneSystem" class="admin-pane hidden">
         <div class="admin-history-head"><div><strong>Resiliencia y mantenimiento</strong><small>Diagnóstico, limpieza segura y copia manual antes de despliegues importantes.</small></div><button class="btn btn-secondary" type="button" onclick="cargarAdminSystem()">↻ Actualizar</button></div>
         <div id="adminSystem" class="admin-system"><div class="empty-state"><span>🛠</span><strong>Comprueba el sistema</strong></div></div>
+        <div class="admin-backup-card admin-diagnostic-card">
+          <div><span>🩺</span><div><strong>Pruebas de producción</strong><small>Comprueba SMTP real y crea una copia temporal de SQLite que se abre de nuevo y se verifica. Ninguna de estas pruebas modifica perfiles, matches o chats.</small></div></div>
+          <div class="admin-backup-actions"><input id="adminDiagnosticPassword" type="password" aria-label="Contraseña para diagnóstico" minlength="8" maxlength="72" autocomplete="current-password" placeholder="Contraseña admin"><button class="btn btn-secondary" type="button" onclick="probarSmtpAdmin()">Probar SMTP</button><button class="btn btn-secondary" type="button" onclick="probarBackupAdmin()">Probar restauración</button></div>
+        </div>
+        <div class="admin-history-head"><div><strong>Errores recientes del servidor</strong><small>Registro técnico sin bodies, contraseñas, tokens ni contenido de chat.</small></div><button class="btn btn-secondary" type="button" onclick="cargarAdminServerErrors()">↻ Actualizar</button></div>
+        <div id="adminServerErrors" class="admin-history-list"><div class="empty-state"><span>✓</span><strong>Sin cargar</strong></div></div>
         <div class="admin-backup-card">
           <div><span>🧰</span><div><strong>Copia manual de seguridad</strong><small>Incluye SQLite y fotos. Contiene datos sensibles: guárdala de forma privada. Requiere tu contraseña admin.</small></div></div>
           <div class="admin-backup-actions"><input id="adminBackupPassword" type="password" aria-label="Contraseña para copia de seguridad" minlength="8" maxlength="72" autocomplete="current-password" placeholder="Contraseña de tu cuenta"><button id="adminBackupButton" class="btn btn-primary" type="button" onclick="descargarBackupAdmin()">Descargar backup</button></div>
@@ -2433,7 +2439,7 @@
       if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudo comprobar')}</strong></div>`;return;}
       const r=res.readiness||{};
       const launchModeLabel=r.productionMode?'producción':'preparación';
-      const items=[['Modo producción',r.productionMode],['Dominio propio',r.customDomain],['Persistencia de datos',r.persistentStorage],['SMTP',r.smtpConfigured],['Verificación obligatoria',r.emailVerificationRequired],['Administrador',r.adminConfigured],['Funciones V/R+ disponibles',true],['Web Push',r.webPushConfigured]];
+      const items=[['Modo producción',r.productionMode],['Dominio propio',r.customDomain],['Persistencia de datos',r.persistentStorage],['SMTP configurado',r.smtpConfigured],['SMTP probado',r.smtpVerified],['Backup restaurable probado',r.backupRestoreVerified],['Verificación obligatoria',r.emailVerificationRequired],['Administrador',r.adminConfigured],['Funciones V/R+ disponibles',true],['Web Push',r.webPushConfigured]];
       box.innerHTML=`<div class="production-hero ${r.productionReady?'ready':'pending'}"><span>${r.productionReady?'✓':'⚙'}</span><div><strong>${r.productionReady?'Técnicamente listo para lanzamiento':'Preparación de lanzamiento pendiente'}</strong><small>Versión ${escapeHtml(r.version||'')} · modo ${escapeHtml(launchModeLabel)}</small></div></div><div class="production-grid">${items.map(([label,ok])=>`<div><span class="production-dot ${ok?'ok':'pending'}"></span><strong>${escapeHtml(label)}</strong><small>${ok?'Configurado':'Pendiente'}</small></div>`).join('')}</div><div class="production-pending"><strong>Pendientes antes del lanzamiento</strong><ul>${(r.pending||[]).filter(x=>!/premium|pago|cobro|stripe|checkout|suscrip/i.test(String(x))).map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`;
     }
 
@@ -2443,10 +2449,11 @@
       const res=await api('/api/admin/system');
       if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudo comprobar')}</strong></div>`;return;}
       renderAdminSystem(res.system||{});
+      await cargarAdminServerErrors();
     }
     function renderAdminSystem(sys){
       const integrityOk=Boolean(sys.integrity?.ok);
-      const cleanupTotal=(Number(sys.expiredSessions)||0)+(Number(sys.staleAuthTokens)||0)+(Number(sys.oldClientErrors)||0)+(Number(sys.oldReadNotifications)||0)+(Number(sys.orphanUploadFiles)||0);
+      const cleanupTotal=(Number(sys.expiredSessions)||0)+(Number(sys.staleAuthTokens)||0)+(Number(sys.oldClientErrors)||0)+(Number(sys.oldServerErrors)||0)+(Number(sys.oldReadNotifications)||0)+(Number(sys.orphanUploadFiles)||0);
       $('adminSystem').innerHTML=`
         <div class="system-health-hero ${integrityOk?'ok':'warn'}"><span>${integrityOk?'✓':'!'}</span><div><strong>${integrityOk?'SQLite íntegro':'Revisar SQLite'}</strong><small>Versión ${escapeHtml(sys.version||'')} · uptime ${Math.round((Number(sys.uptimeSeconds)||0)/60)} min · almacenamiento ${sys.storagePersistent?'persistente':'temporal'}</small></div></div>
         <div class="system-maintenance-grid">
@@ -2454,9 +2461,11 @@
           <div><b>${Number(sys.uploadFiles)||0}</b><span>fotos guardadas</span><small>${bytesLegibles(sys.uploadBytes)}</small></div>
           <div><b>${Number(sys.activeSessions)||0}</b><span>sesiones activas</span><small>${Number(sys.expiredSessions)||0} caducadas</small></div>
           <div><b>${Number(sys.orphanUploadFiles)||0}</b><span>archivos huérfanos</span><small>${bytesLegibles(sys.orphanUploadBytes)}</small></div>
-          <div><b>${Number(sys.oldClientErrors)||0}</b><span>errores &gt;30 días</span><small>telemetría depurable</small></div>
+          <div><b>${Number(sys.oldClientErrors)||0}</b><span>errores cliente &gt;30 días</span><small>telemetría depurable</small></div>
+          <div><b>${Number(sys.serverErrors24h)||0}</b><span>errores servidor 24 h</span><small>${Number(sys.oldServerErrors)||0} antiguos depurables</small></div>
           <div><b>${Number(sys.oldReadNotifications)||0}</b><span>avisos leídos &gt;90 días</span><small>retención depurable</small></div>
         </div>
+        <div class="system-diagnostic-list">${(sys.diagnostics?.checks||[]).map(c=>`<div class="system-diagnostic-row ${c.ok?'ok':'warn'}"><span>${c.ok?'✓':'!'}</span><div><strong>${escapeHtml(c.label||c.key||'Comprobación')}</strong><small>${escapeHtml(c.detail||'')}</small></div></div>`).join('')}</div>
         <div class="system-maintenance-actions">
           <button type="button" onclick="mantenimientoAdmin('cleanup_expired')">Limpiar sesiones/tokens caducados</button>
           <button type="button" onclick="mantenimientoAdmin('cleanup_telemetry')">Depurar telemetría antigua</button>
@@ -2473,6 +2482,31 @@
       if(!res.ok)return mostrarToast(res.error||'No se pudo completar.','error');
       mostrarToast('Mantenimiento completado.','info'); renderAdminSystem(res.system||{}); await cargarAdminHistory();
     }
+    async function cargarAdminServerErrors(){
+      if(!currentUserAdmin)return;
+      const box=$('adminServerErrors'); if(!box)return;
+      const res=await api('/api/admin/system/errors?limit=16');
+      if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudieron cargar')}</strong></div>`;return;}
+      const rows=res.errors||[];
+      if(!rows.length){box.innerHTML='<div class="empty-state"><span>✓</span><strong>Sin errores de servidor registrados</strong><small>Buena señal. El historial se conserva durante el periodo técnico configurado.</small></div>';return;}
+      box.innerHTML=rows.map(e=>`<div class="admin-history-item server-error-item"><div><strong>${escapeHtml(e.context||'server')}</strong><small>${escapeHtml(e.message||'Error')} · ${fechaCuenta(e.created_at)}</small>${e.path?`<small>${escapeHtml(e.method||'')} ${escapeHtml(e.path)} · req ${escapeHtml(e.request_id||'—')}</small>`:''}</div><span>${escapeHtml(String(e.fingerprint||'').slice(0,8))}</span></div>`).join('');
+    }
+    function diagnosticPassword(){return String($('adminDiagnosticPassword')?.value||'');}
+    async function probarSmtpAdmin(){
+      const password=diagnosticPassword();if(password.length<8)return mostrarToast('Escribe la contraseña de tu cuenta administradora.','warn');
+      mostrarToast('Comprobando SMTP…','info');
+      const res=await api('/api/admin/system/smtp-test',{method:'POST',body:{password}});
+      if(!res.ok)return mostrarToast(res.error||'La prueba SMTP ha fallado.','error');
+      mostrarToast(`Correo técnico enviado a ${res.recipient||'tu cuenta'}.`,'info');$('adminDiagnosticPassword').value='';await cargarAdminSystem();await cargarAdminHistory();
+    }
+    async function probarBackupAdmin(){
+      const password=diagnosticPassword();if(password.length<8)return mostrarToast('Escribe la contraseña de tu cuenta administradora.','warn');
+      mostrarToast('Creando y abriendo una copia temporal de SQLite…','info');
+      const res=await api('/api/admin/system/backup-check',{method:'POST',body:{password}});
+      if(!res.ok)return mostrarToast(res.error||'La prueba de restauración ha fallado.','error');
+      mostrarToast('Backup restaurable: SQLite íntegro y recuentos críticos coinciden.','info');$('adminDiagnosticPassword').value='';await cargarAdminSystem();await cargarAdminHistory();
+    }
+
     async function descargarBackupAdmin(){
       const password=String($('adminBackupPassword').value||'');
       if(password.length<8)return mostrarToast('Escribe la contraseña de tu cuenta administradora.','warn');
@@ -2526,7 +2560,7 @@
       if(adminCurrentTab==='system')await cargarAdminSystem();
     }
     const adminReasonLabels={harassment:'Acoso',fake:'Perfil falso',spam:'Spam / estafa',sexual:'Contenido sexual no consentido',underage:'Posible menor de edad',other:'Otro'};
-    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',suspend:'Cuenta suspendida',reactivate:'Cuenta reactivada',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado',feedback_resolve:'Feedback resuelto',feedback_dismiss:'Feedback descartado',feedback_reopen:'Feedback reabierto',verify_profile:'Perfil verificado',reject_verification:'Verificación rechazada',revoke_verification:'Verificación retirada',system_cleanup_expired:'Limpieza de sesiones/tokens',system_cleanup_telemetry:'Depuración de telemetría',system_cleanup_orphan_uploads:'Limpieza de fotos huérfanas',system_optimize:'Optimización SQLite',system_backup_download:'Backup manual descargado',monetization_paid_enabled:'Premium de pago activado',monetization_launch_free_enabled:'Premium gratis activado',launch_city_unlocked:'Ciudad desbloqueada',launch_city_test_reset:'Ciudad de prueba reiniciada'};
+    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',suspend:'Cuenta suspendida',reactivate:'Cuenta reactivada',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado',feedback_resolve:'Feedback resuelto',feedback_dismiss:'Feedback descartado',feedback_reopen:'Feedback reabierto',verify_profile:'Perfil verificado',reject_verification:'Verificación rechazada',revoke_verification:'Verificación retirada',system_cleanup_expired:'Limpieza de sesiones/tokens',system_cleanup_telemetry:'Depuración de telemetría',system_cleanup_orphan_uploads:'Limpieza de fotos huérfanas',system_optimize:'Optimización SQLite',system_backup_download:'Backup manual descargado',system_backup_restore_test:'Prueba de restauración completada',system_smtp_test:'Prueba SMTP enviada',monetization_paid_enabled:'Premium de pago activado',monetization_launch_free_enabled:'Premium gratis activado',launch_city_unlocked:'Ciudad desbloqueada',launch_city_test_reset:'Ciudad de prueba reiniciada'};
     function adminFecha(ts){return ts?new Date(Number(ts)).toLocaleString('es-ES'):'—';}
     function riesgoLabel(level){return level==='high'?'ALTO':level==='medium'?'MEDIO':level==='low'?'BAJO':'SIN SEÑALES';}
     async function cargarAdminSecurity(){if(!currentUserAdmin)return;const vbox=$('adminVerificationList'),rbox=$('adminRiskList');vbox.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Cargando verificaciones…</strong></div>';rbox.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Calculando señales…</strong></div>';const res=await api(`/api/admin/security?status=${encodeURIComponent($('adminVerificationStatus').value)}`);if(!res.ok){vbox.innerHTML=rbox.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudo cargar.')}</strong></div>`;return;}const rows=res.verifications||[],risk=res.risk||[];vbox.innerHTML=rows.length?rows.map(v=>`<article class="verification-admin-card"><div class="verification-admin-head"><div><strong>${escapeHtml(v.name||v.email||'Usuario')}</strong><small>${escapeHtml(v.email||'')} · ${escapeHtml(v.city||'Sin ciudad')}</small></div><span class="verification-status ${escapeHtml(v.status)}">${escapeHtml(v.status)}</span></div><div id="verificationProof_${escapeHtml(v.id)}" class="verification-proof-box hidden"></div><div class="verification-admin-actions">${v.status==='pending'?`<button class="btn btn-secondary" type="button" onclick="verPruebaVerificacion('${escapeHtml(v.id)}')">👁 Ver selfie</button><button class="btn btn-secondary" type="button" onclick="verAdminUsuario('${escapeHtml(v.user_id)}')">Ver fotos</button><button class="btn btn-primary" type="button" onclick="accionVerificacion('${escapeHtml(v.id)}','approve')">✓ Aprobar</button><button class="btn btn-secondary danger-soft" type="button" onclick="accionVerificacion('${escapeHtml(v.id)}','reject')">Rechazar</button>`:`<button class="btn btn-secondary" type="button" onclick="verAdminUsuario('${escapeHtml(v.user_id)}')">Ver cuenta</button>`}</div><small class="verification-date">Solicitud: ${escapeHtml(adminFecha(v.created_at))}${v.reviewed_at?` · Revisada: ${escapeHtml(adminFecha(v.reviewed_at))}`:''}</small></article>`).join(''):'<div class="empty-state"><span>✓</span><strong>No hay solicitudes con este estado</strong></div>';rbox.innerHTML=risk.length?risk.map(u=>`<button class="risk-admin-card ${escapeHtml(u.risk?.level||'none')}" type="button" onclick="verAdminUsuario('${escapeHtml(u.id)}')"><span class="risk-score">${Number(u.risk?.score)||0}</span><span><b>${escapeHtml(u.name||u.email||'Usuario')}</b><small>${escapeHtml(u.city||'Sin ciudad')} · ${u.profile_verified?'✓ perfil verificado':'sin verificación'}</small><small>${Number(u.risk?.openReports)||0} abiertas · ${Number(u.risk?.blocksReceived)||0} bloqueos recibidos · ${Number(u.risk?.signals)||0} señales</small></span><i>${escapeHtml(riesgoLabel(u.risk?.level))}</i></button>`).join(''):'<div class="empty-state"><span>✓</span><strong>No hay señales de riesgo registradas</strong><small>La ausencia de señales no equivale a una garantía de seguridad.</small></div>';}

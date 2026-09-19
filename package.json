@@ -1,13 +1,16 @@
 {
   "name": "vr-match",
-  "version": "18.15.0",
+  "version": "18.16.0",
   "private": true,
-  "description": "V/R Match dating app - historial seguro de partidas, juego sincronizado, PWA, seguridad, privacidad y métricas de lanzamiento",
+  "description": "V/R Match - calidad de producción, tests automáticos, diagnóstico, backups verificables y observabilidad",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js",
-    "vapid": "web-push generate-vapid-keys --json"
+    "check": "node --check server.js && node --check sw.js && node --check tests/smoke.test.js",
+    "vapid": "web-push generate-vapid-keys --json",
+    "test": "node --test --test-concurrency=1 tests/*.test.js",
+    "test:smoke": "node --test --test-concurrency=1 tests/smoke.test.js",
+    "test:syntax": "node --check server.js && node --check sw.js && node --check tests/smoke.test.js"
   },
   "engines": {
     "node": "22.x"
@@ -18,5 +21,8 @@
     "socket.io": "^4.8.1",
     "nodemailer": "^10.0.8",
     "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.1"
   }
 }

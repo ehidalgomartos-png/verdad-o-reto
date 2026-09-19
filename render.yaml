@@ -44,3 +44,7 @@ services:
         sync: false
       - key: VAPID_SUBJECT
         sync: false
+      - key: VR_SYSTEM_ERROR_RETENTION_DAYS
+        value: "30"
+      - key: VR_HEALTH_MEMORY_WARN_MB
+        value: "768"

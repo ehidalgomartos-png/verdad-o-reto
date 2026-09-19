@@ -30,7 +30,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.15.0';
+const APP_VERSION = '18.16.0';
 const LEGAL_VERSION = '2026-09-18';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -73,6 +73,8 @@ const RETENTION_SWEEP_MINUTES = Math.max(10, Math.min(360, Number(process.env.VR
 const RETENTION_PROFILE_HOURS = Math.max(6, Math.min(168, Number(process.env.VR_RETENTION_PROFILE_HOURS) || 24));
 const RETENTION_MATCH_HOURS = Math.max(6, Math.min(168, Number(process.env.VR_RETENTION_MATCH_HOURS) || 18));
 const RETENTION_MESSAGE_COOLDOWN_HOURS = Math.max(1, Math.min(72, Number(process.env.VR_RETENTION_MESSAGE_COOLDOWN_HOURS) || 6));
+const SYSTEM_ERROR_RETENTION_DAYS = Math.max(7, Math.min(180, Number(process.env.VR_SYSTEM_ERROR_RETENTION_DAYS) || 30));
+const HEALTH_MEMORY_WARN_MB = Math.max(128, Math.min(4096, Number(process.env.VR_HEALTH_MEMORY_WARN_MB) || 768));
 const VAPID_PUBLIC_KEY = String(process.env.VAPID_PUBLIC_KEY || '').trim();
 const VAPID_PRIVATE_KEY = String(process.env.VAPID_PRIVATE_KEY || '').trim();
 const VAPID_SUBJECT = String(process.env.VAPID_SUBJECT || 'mailto:admin@vrmatch.local').trim();
@@ -351,6 +353,20 @@ CREATE TABLE IF NOT EXISTS client_errors (
 );
 CREATE INDEX IF NOT EXISTS idx_client_errors_created ON client_errors(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_client_errors_user ON client_errors(user_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS server_errors (
+  id TEXT PRIMARY KEY,
+  fingerprint TEXT NOT NULL DEFAULT '',
+  context TEXT NOT NULL DEFAULT '',
+  message TEXT NOT NULL,
+  stack TEXT NOT NULL DEFAULT '',
+  method TEXT NOT NULL DEFAULT '',
+  path TEXT NOT NULL DEFAULT '',
+  request_id TEXT NOT NULL DEFAULT '',
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_server_errors_created ON server_errors(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_server_errors_fingerprint ON server_errors(fingerprint, created_at DESC);
 CREATE TABLE IF NOT EXISTS growth_events (
   id TEXT PRIMARY KEY,
   event_name TEXT NOT NULL,
@@ -613,6 +629,49 @@ function setAppSetting(key, value, adminUserId = null) {
     ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at,updated_by=excluded.updated_by`)
     .run(String(key), String(value), now(), adminUserId || null);
 }
+
+// V18.16 · Observabilidad del servidor. Nunca persiste bodies, contraseñas, tokens ni contenido de chat.
+const nativeConsoleError = console.error.bind(console);
+let serverErrorCaptureBusy = false;
+function redactDiagnosticText(value, maxLen=4000) {
+  return String(value ?? '')
+    .replace(/Bearer\s+[A-Za-z0-9._~+\/-]+/gi,'Bearer [REDACTED]')
+    .replace(/(password|pass|token|secret|authorization|cookie)(["'\s:=]+)([^\s,;}{]{3,})/gi,'$1$2[REDACTED]')
+    .replace(/([A-Z0-9._%+-]{1,2})[A-Z0-9._%+-]*(@[A-Z0-9.-]+\.[A-Z]{2,})/gi,'$1***$2')
+    .replace(/\b(?:\d[ -]*?){13,19}\b/g,'[REDACTED_NUMBER]')
+    .slice(0,maxLen);
+}
+function errorFromArgs(args=[]) {
+  const first=args.find(x=>x instanceof Error);
+  if(first)return first;
+  const text=args.map(x=>{
+    if(typeof x==='string')return x;
+    try{return JSON.stringify(x);}catch{return String(x);}
+  }).join(' ');
+  return new Error(text || 'Error de servidor');
+}
+function recordServerError(context, error, meta={}) {
+  try {
+    const err=error instanceof Error?error:new Error(String(error||'Error de servidor'));
+    const message=redactDiagnosticText(err.message||String(error||'Error de servidor'),1000);
+    const stack=redactDiagnosticText(err.stack||'',5000);
+    const fingerprint=crypto.createHash('sha256').update(`${String(context||'server')}|${message}|${String(meta.path||'')}`).digest('hex').slice(0,20);
+    db.prepare(`INSERT INTO server_errors(id,fingerprint,context,message,stack,method,path,request_id,user_id,created_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?)`).run(
+        safeId('serr'),fingerprint,cleanShortText(context||'server',100),message,stack,
+        cleanShortText(meta.method||'',12),cleanShortText(meta.path||'',240),cleanShortText(meta.requestId||'',80),meta.userId||null,now()
+      );
+  } catch (captureError) {
+    nativeConsoleError('No se pudo registrar error de servidor:', captureError?.message || captureError);
+  }
+}
+console.error=(...args)=>{
+  nativeConsoleError(...args);
+  if(serverErrorCaptureBusy)return;
+  serverErrorCaptureBusy=true;
+  try{recordServerError('console.error',errorFromArgs(args));}finally{serverErrorCaptureBusy=false;}
+};
+process.on('uncaughtExceptionMonitor',(err,origin)=>recordServerError(`uncaught:${origin||'unknown'}`,err));
 function monetizationMode() {
   // V18: la monetización pública está desactivada. Las funciones actuales no se paywallean.
   return 'launch_free';
@@ -657,6 +716,12 @@ function broadcastPlusStateAll() {
 
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
+app.use((req,res,next) => {
+  const incoming=String(req.headers['x-request-id']||'').trim();
+  req.requestId=/^[A-Za-z0-9._:-]{8,80}$/.test(incoming)?incoming:crypto.randomBytes(10).toString('hex');
+  res.setHeader('X-Request-Id',req.requestId);
+  next();
+});
 app.use((req,res,next) => {
   res.setHeader('X-Content-Type-Options','nosniff');
   res.setHeader('X-Frame-Options','DENY');
@@ -840,10 +905,81 @@ function systemMaintenanceStatus(){
     expiredSessions:db.prepare('SELECT COUNT(*) n FROM sessions WHERE expires_at<=?').get(ts).n,
     staleAuthTokens:db.prepare('SELECT COUNT(*) n FROM auth_tokens WHERE expires_at<=? OR used_at IS NOT NULL').get(ts).n,
     oldClientErrors:db.prepare('SELECT COUNT(*) n FROM client_errors WHERE created_at<?').get(ts-30*86400000).n,
+    oldServerErrors:db.prepare('SELECT COUNT(*) n FROM server_errors WHERE created_at<?').get(ts-SYSTEM_ERROR_RETENTION_DAYS*86400000).n,
+    serverErrors24h:db.prepare('SELECT COUNT(*) n FROM server_errors WHERE created_at>=?').get(ts-24*60*60*1000).n,
+    diagnostics:systemDiagnostics(),
     oldReadNotifications:db.prepare('SELECT COUNT(*) n FROM notifications WHERE read_at IS NOT NULL AND created_at<?').get(ts-90*86400000).n,
     backupIncludes:['SQLite','uploads','manifest'],
     storagePersistent:path.resolve(STORAGE_DIR)!==path.resolve(ROOT)
   };
+}
+let storageHealthCache={checkedAt:0,result:null};
+function storageWriteCheck(){
+  const testPath=path.join(DATA_DIR,`.health-${process.pid}-${Date.now()}.tmp`);
+  try{fs.writeFileSync(testPath,'ok',{flag:'wx'});fs.unlinkSync(testPath);return {ok:true,message:'lectura/escritura OK'};}
+  catch(e){try{fs.unlinkSync(testPath);}catch{}return {ok:false,message:redactDiagnosticText(e.message,180)};}
+}
+function cachedStorageWriteCheck(ttlMs=60*1000){
+  if(storageHealthCache.result && now()-storageHealthCache.checkedAt<ttlMs)return storageHealthCache.result;
+  const result=storageWriteCheck();storageHealthCache={checkedAt:now(),result};return result;
+}
+function shallowDatabaseCheck(){try{db.prepare('SELECT 1').get();return {ok:true,message:'consulta OK'};}catch(e){return {ok:false,message:redactDiagnosticText(e.message,180)};}}
+function lastSystemCheck(key){
+  try{const raw=appSetting(`system_check_${key}`);return raw?JSON.parse(raw):null;}catch{return null;}
+}
+function saveSystemCheck(key,value,adminUserId=null){
+  const safe={...value,checkedAt:Number(value?.checkedAt)||now()};
+  setAppSetting(`system_check_${key}`,JSON.stringify(safe),adminUserId);
+  return safe;
+}
+async function runSmtpVerify(adminUserId=null){
+  const checkedAt=now();
+  if(!SMTP_CONFIGURED||!mailTransport)return saveSystemCheck('smtp',{ok:false,checkedAt,message:'SMTP no configurado'},adminUserId);
+  try{await mailTransport.verify();return saveSystemCheck('smtp',{ok:true,checkedAt,message:'Conexión y autenticación SMTP correctas'},adminUserId);}
+  catch(e){recordServerError('smtp.verify',e);return saveSystemCheck('smtp',{ok:false,checkedAt,message:redactDiagnosticText(e.message,220)},adminUserId);}
+}
+async function runBackupSelfTest(adminUserId=null){
+  const tmpRoot=fs.mkdtempSync(path.join(os.tmpdir(),'vrmatch-restore-test-'));
+  const copy=path.join(tmpRoot,'restore-test.db'), checkedAt=now();
+  try{
+    await db.backup(copy);
+    const restored=new Database(copy,{readonly:true,fileMustExist:true});
+    let integrity='';
+    try{integrity=String(restored.pragma('quick_check',{simple:true})||'');}finally{}
+    const tables=['users','profiles','matches','messages'];
+    const counts={}; let countsMatch=true;
+    for(const table of tables){
+      const source=Number(db.prepare(`SELECT COUNT(*) n FROM ${table}`).get()?.n||0);
+      const target=Number(restored.prepare(`SELECT COUNT(*) n FROM ${table}`).get()?.n||0);
+      counts[table]={source,target}; if(source!==target)countsMatch=false;
+    }
+    restored.close();
+    const ok=integrity.toLowerCase()==='ok'&&countsMatch;
+    const result=saveSystemCheck('backup_restore',{ok,checkedAt,message:ok?'Backup SQLite restaurable e íntegro':'La copia no superó la comprobación de restauración',integrity,counts},adminUserId);
+    if(adminUserId)logModerationAction(adminUserId,adminUserId,'system_backup_restore_test',result.message,null);
+    return result;
+  }catch(e){
+    recordServerError('backup.restore_test',e,{userId:adminUserId||null});
+    return saveSystemCheck('backup_restore',{ok:false,checkedAt,message:redactDiagnosticText(e.message,220)},adminUserId);
+  }finally{try{fs.rmSync(tmpRoot,{recursive:true,force:true});}catch{}}
+}
+function systemDiagnostics(){
+  const integrity=quickCheckDatabase(), storage=storageWriteCheck(), mem=process.memoryUsage();
+  const recentServerErrors=Number(db.prepare('SELECT COUNT(*) n FROM server_errors WHERE created_at>=?').get(now()-24*60*60*1000)?.n||0);
+  const recentClientErrors=Number(db.prepare('SELECT COUNT(*) n FROM client_errors WHERE created_at>=?').get(now()-24*60*60*1000)?.n||0);
+  const smtp=lastSystemCheck('smtp'), backupRestore=lastSystemCheck('backup_restore');
+  const rssMb=Math.round(mem.rss/1024/1024), heapUsedMb=Math.round(mem.heapUsed/1024/1024);
+  const checks=[
+    {key:'database',label:'SQLite',ok:Boolean(integrity.ok),detail:integrity.message||''},
+    {key:'storage',label:'Almacenamiento lectura/escritura',ok:Boolean(storage.ok),detail:storage.message||''},
+    {key:'persistent',label:'Almacenamiento persistente',ok:path.resolve(STORAGE_DIR)!==path.resolve(ROOT),detail:path.resolve(STORAGE_DIR)!==path.resolve(ROOT)?'Directorio persistente configurado':'Usando el filesystem de la aplicación'},
+    {key:'smtpConfig',label:'SMTP configurado',ok:SMTP_CONFIGURED,detail:SMTP_CONFIGURED?'Variables SMTP presentes':'Faltan variables SMTP'},
+    {key:'smtpTest',label:'Última prueba SMTP',ok:Boolean(smtp?.ok),detail:smtp?.checkedAt?`${smtp.message} · ${new Date(smtp.checkedAt).toISOString()}`:'Aún no ejecutada'},
+    {key:'backupRestore',label:'Última prueba de restauración',ok:Boolean(backupRestore?.ok),detail:backupRestore?.checkedAt?`${backupRestore.message} · ${new Date(backupRestore.checkedAt).toISOString()}`:'Aún no ejecutada'},
+    {key:'memory',label:'Memoria de proceso',ok:rssMb<HEALTH_MEMORY_WARN_MB,detail:`RSS ${rssMb} MB · heap ${heapUsedMb} MB · aviso ${HEALTH_MEMORY_WARN_MB} MB`},
+    {key:'serverErrors',label:'Errores de servidor 24 h',ok:recentServerErrors===0,detail:`${recentServerErrors} servidor · ${recentClientErrors} cliente`}
+  ];
+  return {ok:checks.filter(c=>['database','storage'].includes(c.key)).every(c=>c.ok),checks,rssMb,heapUsedMb,recentServerErrors,recentClientErrors,smtp,backupRestore};
 }
 function tarOctal(value,length){
   const raw=Math.max(0,Math.floor(Number(value)||0)).toString(8);
@@ -3667,7 +3803,11 @@ function productionReadiness() {
   const billingEnabled = billingSwitchEnabled();
   const billingConfiguredNow = billingConfigured();
   const billingLive = Boolean(billingConfiguredNow && STRIPE_MODE === 'live');
-  const coreReady = Boolean(customDomain && persistentStorage && SMTP_CONFIGURED && REQUIRE_EMAIL_VERIFICATION && ADMIN_EMAILS.size > 0 && socketOriginRestricted);
+  const smtpCheck=lastSystemCheck('smtp');
+  const backupRestoreCheck=lastSystemCheck('backup_restore');
+  const smtpVerified=Boolean(smtpCheck?.ok && Number(smtpCheck.checkedAt||0)>now()-30*86400000);
+  const backupRestoreVerified=Boolean(backupRestoreCheck?.ok && Number(backupRestoreCheck.checkedAt||0)>now()-30*86400000);
+  const coreReady = Boolean(customDomain && persistentStorage && SMTP_CONFIGURED && smtpVerified && backupRestoreVerified && REQUIRE_EMAIL_VERIFICATION && ADMIN_EMAILS.size > 0 && socketOriginRestricted);
   return {
     version: APP_VERSION,
     legalVersion: LEGAL_VERSION,
@@ -3677,6 +3817,10 @@ function productionReadiness() {
     customDomain,
     persistentStorage,
     smtpConfigured: SMTP_CONFIGURED,
+    smtpVerified,
+    smtpVerifiedAt:Number(smtpCheck?.checkedAt||0)||null,
+    backupRestoreVerified,
+    backupRestoreVerifiedAt:Number(backupRestoreCheck?.checkedAt||0)||null,
     emailVerificationRequired: REQUIRE_EMAIL_VERIFICATION,
     adminConfigured: ADMIN_EMAILS.size > 0,
     socketOriginRestricted,
@@ -3695,6 +3839,8 @@ function productionReadiness() {
       !persistentStorage ? 'Render de pago + Persistent Disk en /var/data (o almacenamiento administrado)' : null,
       !REQUIRE_EMAIL_VERIFICATION ? 'VR_REQUIRE_EMAIL_VERIFICATION=true' : null,
       !SMTP_CONFIGURED ? 'SMTP profesional con dominio verificado' : null,
+      SMTP_CONFIGURED && !smtpVerified ? 'Ejecutar y superar la prueba SMTP desde Administración → Sistema' : null,
+      !backupRestoreVerified ? 'Ejecutar y superar una prueba de restauración de backup desde Administración → Sistema' : null,
       !socketOriginRestricted ? 'Restringir Socket.IO con VR_APP_BASE_URL o VR_ALLOWED_ORIGINS' : null,
       !launchFree && !STRIPE_PREPARED ? 'Configurar el proveedor de pago antes de ofrecer Premium de pago' : null,
       !launchFree && STRIPE_PREPARED && STRIPE_MODE !== 'live' ? 'Pasar el proveedor de sandbox a producción solo al final' : null,
@@ -3746,6 +3892,38 @@ app.get('/api/admin/system', requireAuth, requireAdmin, (req,res) => {
   catch(e){console.error('Error leyendo estado de sistema:',e.message);res.status(500).json({ok:false,error:'No se pudo comprobar el sistema.'});}
 });
 
+app.get('/api/admin/system/errors', requireAuth, requireAdmin, (req,res) => {
+  const limit=Math.max(1,Math.min(100,Number(req.query.limit)||40));
+  const errors=db.prepare(`SELECT se.id,se.fingerprint,se.context,se.message,se.method,se.path,se.request_id,se.user_id,se.created_at,
+    u.email,COALESCE(p.name,'') name FROM server_errors se
+    LEFT JOIN users u ON u.id=se.user_id LEFT JOIN profiles p ON p.user_id=se.user_id
+    ORDER BY se.created_at DESC LIMIT ?`).all(limit);
+  res.json({ok:true,errors});
+});
+
+app.post('/api/admin/system/smtp-test', requireAuth, requireAdmin, rateLimit({limit:4,windowMs:60*60*1000,key:req=>req.user.id}), async (req,res) => {
+  const password=String(req.body?.password||'');
+  const account=db.prepare('SELECT password_hash,email FROM users WHERE id=?').get(req.user.id);
+  if(!account||!verifyPassword(password,account.password_hash))return res.status(400).json({ok:false,error:'La contraseña de administrador no es correcta.'});
+  if(!SMTP_CONFIGURED||!mailTransport)return res.status(503).json({ok:false,error:'SMTP no está configurado.'});
+  try{
+    const verify=await runSmtpVerify(req.user.id);
+    if(!verify.ok)return res.status(502).json({ok:false,error:'La conexión SMTP no ha superado la prueba.',diagnostic:verify});
+    await sendEmail({to:account.email,subject:'✅ Prueba técnica SMTP · V/R Match',text:`V/R Match ${APP_VERSION}\n\nEl servidor ha enviado correctamente este correo de prueba.\n\nFecha: ${new Date().toISOString()}`,html:vrEmailShell({eyebrow:'DIAGNÓSTICO',title:'SMTP funcionando correctamente',bodyHtml:`<p style="margin:0;color:#eee;">V/R Match <strong>${APP_VERSION}</strong> ha completado la prueba de correo desde el servidor.</p><p style="margin:16px 0 0;color:#a9a5b4;font-size:13px;">${new Date().toISOString()}</p>`,ctaLabel:'Abrir V/R Match',ctaUrl:APP_BASE_URL||retentionBaseUrl(),footerHtml:'Mensaje técnico solicitado por una cuenta administradora.'})});
+    setAppSetting('system_check_smtp_send',JSON.stringify({ok:true,checkedAt:now(),recipient:account.email}),req.user.id);
+    logModerationAction(req.user.id,req.user.id,'system_smtp_test','Prueba SMTP enviada a la cuenta administradora',null);
+    res.json({ok:true,diagnostic:verify,recipient:account.email});
+  }catch(e){recordServerError('smtp.send_test',e,{userId:req.user.id,method:req.method,path:req.path,requestId:req.requestId});res.status(502).json({ok:false,error:'No se pudo enviar el correo de prueba.'});}
+});
+
+app.post('/api/admin/system/backup-check', requireAuth, requireAdmin, rateLimit({limit:4,windowMs:60*60*1000,key:req=>req.user.id}), async (req,res) => {
+  const password=String(req.body?.password||'');
+  const account=db.prepare('SELECT password_hash FROM users WHERE id=?').get(req.user.id);
+  if(!account||!verifyPassword(password,account.password_hash))return res.status(400).json({ok:false,error:'La contraseña de administrador no es correcta.'});
+  const result=await runBackupSelfTest(req.user.id);
+  res.status(result.ok?200:500).json({ok:Boolean(result.ok),result,error:result.ok?undefined:'La prueba de restauración no se ha completado correctamente.'});
+});
+
 app.post('/api/admin/system/maintenance', requireAuth, requireAdmin, rateLimit({limit:20,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
   try{
     const action=String(req.body?.action||''); const ts=now(); let result={};
@@ -3755,8 +3933,9 @@ app.post('/api/admin/system/maintenance', requireAuth, requireAdmin, rateLimit({
       result={sessions,tokens};
     } else if(action==='cleanup_telemetry'){
       const errors=db.prepare('DELETE FROM client_errors WHERE created_at<?').run(ts-30*86400000).changes;
+      const serverErrors=db.prepare('DELETE FROM server_errors WHERE created_at<?').run(ts-SYSTEM_ERROR_RETENTION_DAYS*86400000).changes;
       const notifications=db.prepare('DELETE FROM notifications WHERE read_at IS NOT NULL AND created_at<?').run(ts-90*86400000).changes;
-      result={clientErrors:errors,notifications};
+      result={clientErrors:errors,serverErrors,notifications};
     } else if(action==='cleanup_orphan_uploads'){
       const files=orphanUploadFiles(); let deleted=0,bytes=0;
       for(const file of files){try{fs.unlinkSync(file.path);deleted++;bytes+=file.bytes||0;}catch{}}
@@ -3812,7 +3991,7 @@ app.get('/espera', (req,res) => { res.setHeader('Cache-Control','no-cache, no-st
 app.get('/activar', (req,res) => { res.setHeader('Cache-Control','no-cache, no-store, must-revalidate'); res.sendFile(path.join(PUBLIC_DIR,'activate.html')); });
 app.get('/admin/launch', (req,res) => { res.setHeader('Cache-Control','no-cache, no-store, must-revalidate'); res.sendFile(path.join(PUBLIC_DIR,'admin-launch.html')); });
 
-app.get('/healthz', (req,res) => { try { db.prepare('SELECT 1').get(); res.status(200).json({ok:true,db:true,version:APP_VERSION}); } catch { res.status(503).json({ok:false,db:false}); } });
+app.get('/healthz', (req,res) => { try { const database=shallowDatabaseCheck(); const storage=cachedStorageWriteCheck(); const ok=Boolean(database.ok&&storage.ok); res.status(ok?200:503).json({ok,db:Boolean(database.ok),storage:Boolean(storage.ok),version:APP_VERSION,uptimeSeconds:Math.round(process.uptime())}); } catch(e) { recordServerError('healthz',e,{method:req.method,path:req.path,requestId:req.requestId}); res.status(503).json({ok:false,db:false,storage:false,version:APP_VERSION}); } });
 app.use('/uploads', express.static(UPLOAD_DIR, { fallthrough:false, maxAge:'7d', dotfiles:'deny' }));
 app.get(['/', '/index.html'], (req,res) => { res.setHeader('Cache-Control','no-cache, no-store, must-revalidate'); res.sendFile(path.join(ROOT,'index.html')); });
 app.get('/styles.css', (req,res) => res.sendFile(path.join(ROOT,'styles.css')));
@@ -4568,6 +4747,16 @@ io.on('connection', socket => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', ()=>{const ready=productionReadiness();console.log(`V/R Match v${APP_VERSION} escuchando en puerto ${PORT}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | email de match: ${MATCH_EMAIL_ENABLED?'activo':'inactivo'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
-  console.log(`Resiliencia: reconexión de partidas ${Math.round(GAME_RECONNECT_GRACE_MS/1000)}s + mantenimiento + backup manual`);
-  console.log(`Activación de ciudades: tokens hash-only · ${LAUNCH_ACTIVATION_DAYS} días · reenvío protegido`);console.log(`Socket origin: ${(allowedOrigins.length||appBaseOrigin)?'restringido':'ABIERTO (solo desarrollo)'}`);console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas internas + feedback + diagnóstico cliente');console.log('Privacidad: sesiones + bloqueados + exportación + selfie de verificación privada');});
+app.use((err,req,res,next)=>{
+  recordServerError('express.middleware',err,{method:req.method,path:req.path,requestId:req.requestId,userId:req.user?.id||null});
+  if(res.headersSent)return next(err);
+  res.status(500).json({ok:false,error:'Se ha producido un error interno.',requestId:req.requestId||''});
+});
+
+function startServer(port=PORT,host='0.0.0.0'){
+  return server.listen(port,host,()=>{const ready=productionReadiness();console.log(`V/R Match v${APP_VERSION} escuchando en puerto ${server.address()?.port||port}`);console.log(`Base de datos: ${DB_PATH}`);console.log(`Email SMTP: ${SMTP_CONFIGURED?'configurado':'no configurado'} | email de match: ${MATCH_EMAIL_ENABLED?'activo':'inactivo'} | verificación obligatoria: ${REQUIRE_EMAIL_VERIFICATION}`);console.log(`Admins configurados: ${ADMIN_EMAILS.size} | lanzamiento por ciudades: ${CITY_LAUNCH_ENABLED?'activo':'inactivo'}`);
+    console.log(`Resiliencia: reconexión de partidas ${Math.round(GAME_RECONNECT_GRACE_MS/1000)}s + mantenimiento + backup verificable`);
+    console.log(`Activación de ciudades: tokens hash-only · ${LAUNCH_ACTIVATION_DAYS} días · reenvío protegido`);console.log(`Socket origin: ${(allowedOrigins.length||appBaseOrigin)?'restringido':'ABIERTO (solo desarrollo)'}`);console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas + request-id + errores cliente/servidor + diagnóstico técnico');console.log('Privacidad: sesiones + bloqueados + exportación + selfie de verificación privada');});
+}
+if(require.main===module)startServer();
+module.exports={app,server,io,db,startServer,APP_VERSION,productionReadiness,quickCheckDatabase,systemMaintenanceStatus,systemDiagnostics,runBackupSelfTest,runSmtpVerify,recordServerError};

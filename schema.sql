@@ -169,3 +169,20 @@ CREATE TABLE IF NOT EXISTS security_events (
 );
 CREATE INDEX IF NOT EXISTS idx_security_events_user ON security_events(user_id,created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_security_events_kind ON security_events(kind,created_at DESC);
+
+-- V18.16.0 — observabilidad técnica del servidor
+CREATE TABLE IF NOT EXISTS server_errors (
+  id TEXT PRIMARY KEY,
+  fingerprint TEXT NOT NULL DEFAULT '',
+  context TEXT NOT NULL DEFAULT '',
+  message TEXT NOT NULL,
+  stack TEXT NOT NULL DEFAULT '',
+  method TEXT NOT NULL DEFAULT '',
+  path TEXT NOT NULL DEFAULT '',
+  request_id TEXT NOT NULL DEFAULT '',
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_server_errors_created ON server_errors(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_server_errors_fingerprint ON server_errors(fingerprint,created_at DESC);
+
