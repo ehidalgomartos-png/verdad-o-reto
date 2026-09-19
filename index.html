@@ -249,7 +249,7 @@
           <label class="setting-switch compact"><span><b>Solo correos confirmados</b><small>Reduce perfiles con cuentas pendientes de verificación.</small></span><input id="filterVerifiedOnly" type="checkbox"></label>
           <div class="filter-row">
             <label>Intereses en común<select id="filterSharedInterests" class="profile-select"><option value="0">Sin mínimo</option><option value="1">Al menos 1</option><option value="2">Al menos 2</option><option value="3">Al menos 3</option></select></label>
-            <label>Ordenar por<select id="filterSortMode" class="profile-select"><option value="smart">Compatibilidad</option><option value="distance">Cercanía</option><option value="interests">Intereses comunes</option><option value="recent">Actividad reciente</option></select></label>
+            <label>Ordenar por<select id="filterSortMode" class="profile-select"><option value="smart">Afinidad inteligente</option><option value="distance">Cercanía</option><option value="interests">Intereses comunes</option><option value="recent">Actividad reciente</option></select></label>
           </div>
           <small id="plusFilterLock">Activa V/R+ para usar los filtros avanzados.</small>
         </div>
@@ -316,7 +316,7 @@
         <article><span>↶</span><strong>Rewind</strong><p>Recupera el último perfil que pasaste por error.</p></article>
         <article><span>☷</span><strong>Filtros avanzados</strong><p>Correo confirmado, intereses compartidos y orden inteligente.</p></article>
         <article><span>⚡</span><strong>Boost</strong><p>Sube temporalmente tu perfil en Descubrir durante 30 minutos.</p></article>
-        <article><span>✨</span><strong>Ranking inteligente</strong><p>Prioriza compatibilidad, cercanía, intereses o actividad reciente.</p></article>
+        <article><span>✨</span><strong>Ranking inteligente</strong><p>Ordena por cercanía, intereses, actividad, perfil completo y verificación. No es un test psicológico.</p></article>
       </div>
 
       <div class="plus-boost-card">
@@ -3144,8 +3144,10 @@
       $('datingBio').textContent = p.bio || 'Prefiero que me conozcas jugando.';
       const premiumMeta=$('datingPremiumMeta'); premiumMeta.innerHTML='';
       if(p.boosted){const x=document.createElement('span');x.className='boosted';x.textContent='⚡ Destacado';premiumMeta.appendChild(x);}
-      if(p.profileVerified){const x=document.createElement('span');x.className='profile-verified-chip';x.textContent='✓ Perfil verificado';premiumMeta.appendChild(x);}else if(p.verified){const x=document.createElement('span');x.textContent='✓ Correo confirmado';premiumMeta.appendChild(x);}
-      if(Number(p.sharedInterests)>0){const x=document.createElement('span');x.textContent=`✨ ${Number(p.sharedInterests)} en común`;premiumMeta.appendChild(x);}
+      if(p.affinityLabel){const x=document.createElement('span');x.className='smart-match-chip';x.textContent=`💫 ${p.affinityLabel}`;premiumMeta.appendChild(x);}
+      const reasons=Array.isArray(p.matchReasons)?p.matchReasons:[];
+      reasons.forEach(reason=>{const x=document.createElement('span');x.className=/verificado/i.test(reason)?'profile-verified-chip':'match-reason-chip';x.textContent=/verificado/i.test(reason)?`✓ ${reason}`:(/inter[eé]s/i.test(reason)?`✨ ${reason}`:reason);premiumMeta.appendChild(x);});
+      if(p.profileVerified&&!reasons.some(x=>/verificado/i.test(x))){const x=document.createElement('span');x.className='profile-verified-chip';x.textContent='✓ Perfil verificado';premiumMeta.appendChild(x);}else if(!p.profileVerified&&p.verified){const x=document.createElement('span');x.textContent='✓ Correo confirmado';premiumMeta.appendChild(x);}
       const interestBox = $('datingInterests');
       interestBox.innerHTML = '';
       (Array.isArray(p.intereses) ? p.intereses : []).forEach(item => {

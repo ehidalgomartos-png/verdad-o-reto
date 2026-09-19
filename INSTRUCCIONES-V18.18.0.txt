@@ -1,0 +1,11 @@
+V/R MATCH 18.18.0 — MATCHING INTELIGENTE
+
+1. Haz backup de base de datos y uploads.
+2. Sustituye el código sin borrar data/ ni uploads/.
+3. Reinicia Render.
+4. Comprueba https://vrmatch.es/healthz → versión 18.18.0, db=true y storage=true.
+5. En Descubrir, deja “Afinidad inteligente” como orden y prueba con varios perfiles.
+6. Verifica que edad/género/radio/bloqueos siguen excluyendo perfiles aunque tengan alta afinidad.
+7. Ejecuta npm test o deja que GitHub Actions lo ejecute antes del despliegue.
+
+No requiere nuevas variables de entorno ni migraciones de datos.

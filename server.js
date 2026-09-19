@@ -30,7 +30,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.17.0';
+const APP_VERSION = '18.18.0';
 const LEGAL_VERSION = '2026-09-18';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -1896,6 +1896,71 @@ function sharedInterestsCount(a, b) {
   for (const x of aa) if (bb.has(x)) n++;
   return n;
 }
+
+// V18.18 · Ranking explicable de Descubrir.
+// No intenta inferir personalidad ni atributos sensibles: usa únicamente señales
+// que ya forman parte del producto (preferencias, distancia aproximada, intereses,
+// actividad reciente, calidad del perfil y verificación).
+function sameCity(a,b) {
+  const aa=String(a?.ciudad||'').trim().toLowerCase(), bb=String(b?.ciudad||'').trim().toLowerCase();
+  return Boolean(aa && bb && aa===bb);
+}
+function profileQualityPoints(profile) {
+  const photos=Array.isArray(profile?.fotos)?profile.fotos:[];
+  const bio=String(profile?.bio||'').trim();
+  const interests=Array.isArray(profile?.intereses)?profile.intereses:[];
+  let score=0;
+  if(photos.length>=1)score+=4;
+  if(photos.length>=3)score+=2;
+  if(bio.length>=20)score+=4;
+  if(interests.length>=2)score+=3;
+  if(interests.length>=5)score+=2;
+  return Math.min(15,score);
+}
+function activityRankingPoints(lastSeenAt,ts=now()) {
+  const age=Math.max(0,ts-Number(lastSeenAt||0));
+  const hour=60*60*1000, day=24*hour;
+  if(!Number(lastSeenAt))return 0;
+  if(age<=hour)return 18;
+  if(age<=day)return 16;
+  if(age<=3*day)return 12;
+  if(age<=7*day)return 8;
+  if(age<=30*day)return 4;
+  return 0;
+}
+function distanceRankingPoints(distance,me,candidate) {
+  if(Number.isFinite(distance)) {
+    if(distance<=5)return 25;
+    if(distance<=15)return 22;
+    if(distance<=30)return 18;
+    if(distance<=50)return 14;
+    if(distance<=100)return 9;
+    if(distance<=200)return 4;
+    return 0;
+  }
+  return sameCity(me,candidate)?16:0;
+}
+function smartRankingFor(me,candidate,{distance=null,shared=0,lastSeenAt=0,emailVerified=false,boosted=false}={}) {
+  const ts=now();
+  const sharedPoints=Math.min(4,Math.max(0,Number(shared)||0))*7; // 0..28
+  const distancePoints=distanceRankingPoints(distance,me,candidate); // 0..25
+  const activityPoints=activityRankingPoints(lastSeenAt,ts); // 0..18
+  const qualityPoints=profileQualityPoints(candidate); // 0..15
+  const profileVerificationPoints=candidate?.profileVerified?7:0;
+  const emailVerificationPoints=emailVerified?2:0;
+  const cityPoints=sameCity(me,candidate)?5:0;
+  const affinityScore=Math.max(0,Math.min(100,sharedPoints+distancePoints+activityPoints+qualityPoints+profileVerificationPoints+emailVerificationPoints+cityPoints));
+  const sortScore=affinityScore+(boosted?8:0);
+  const reasons=[];
+  if(shared>0)reasons.push(`${shared} ${shared===1?'interés':'intereses'} en común`);
+  if(Number.isFinite(distance) && distance<=30)reasons.push(distance<1?'Muy cerca de ti':`${publicDistance(distance)} km aprox.`);
+  else if(sameCity(me,candidate))reasons.push('Misma ciudad');
+  if(candidate?.profileVerified)reasons.push('Perfil verificado');
+  if(candidate?.privacy?.showOnline!==false && candidate?.online)reasons.push('Conectado ahora');
+  if(qualityPoints>=13)reasons.push('Perfil completo');
+  const label=affinityScore>=75?'Muy buena afinidad':affinityScore>=55?'Buena afinidad':affinityScore>=35?'Afinidad media':'Por descubrir';
+  return {affinityScore,sortScore,label,reasons:reasons.slice(0,3),components:{sharedPoints,distancePoints,activityPoints,qualityPoints,profileVerificationPoints,emailVerificationPoints,cityPoints}};
+}
 function getPlusSettings(userId) {
   const row = db.prepare('SELECT verified_only,min_shared_interests,sort_mode FROM plus_settings WHERE user_id=?').get(userId);
   return {
@@ -2303,30 +2368,42 @@ function discoverFor(userId) {
       const shared = sharedInterestsCount(me, fullProfile);
       const boost = db.prepare('SELECT active_until FROM plus_boosts WHERE user_id=?').get(row.user_id);
       const boosted = Boolean(Number(boost?.active_until) > ts);
+      const ranking=smartRankingFor(me,fullProfile,{distance,shared,lastSeenAt:row.last_seen_at||row.updated_at,emailVerified:Boolean(row.email_verified),boosted});
       const profile = publicProfile(fullProfile);
       profile.verified = Boolean(row.email_verified);
       profile.sharedInterests = shared;
       profile.boosted = boosted;
+      profile.affinityScore = ranking.affinityScore;
+      profile.affinityLabel = ranking.label;
+      profile.matchReasons = ranking.reasons;
       if (distance !== null) profile.distanceKm = publicDistance(distance);
-      return { row, fullProfile, profile, distance, shared, boosted };
+      return { row, fullProfile, profile, distance, shared, boosted, ranking };
     })
     .filter(item => !excluded.has(item.profile.id) && profileAccepts(me,item.fullProfile) && profileAccepts(item.fullProfile,me))
     .filter(item => !useDistance || (item.distance !== null && item.distance <= radiusKm))
     .filter(item => !plusSettings.verifiedOnly || item.profile.verified)
     .filter(item => item.shared >= plusSettings.minSharedInterests)
     .sort((a,b) => {
-      if (a.boosted !== b.boosted) return a.boosted ? -1 : 1;
       if (plusActive && plusSettings.sortMode === 'interests' && a.shared !== b.shared) return b.shared - a.shared;
-      if (plusActive && plusSettings.sortMode === 'recent') return Number(b.row.last_seen_at || b.row.updated_at || 0) - Number(a.row.last_seen_at || a.row.updated_at || 0);
+      if (plusActive && plusSettings.sortMode === 'recent') {
+        const ar=Number(a.row.last_seen_at||a.row.updated_at||0), br=Number(b.row.last_seen_at||b.row.updated_at||0);
+        if(ar!==br)return br-ar;
+      }
       if (plusActive && plusSettings.sortMode === 'distance') {
         const ad = a.distance ?? Number.POSITIVE_INFINITY, bd = b.distance ?? Number.POSITIVE_INFINITY;
         if (ad !== bd) return ad - bd;
       }
-      if (plusActive && plusSettings.sortMode === 'smart' && a.shared !== b.shared) return b.shared - a.shared;
+      // Smart es el orden por defecto. El Boost suma una ventaja moderada sin
+      // saltarse filtros, bloqueos ni preferencias recíprocas.
+      if (plusSettings.sortMode === 'smart' && a.ranking.sortScore !== b.ranking.sortScore) return b.ranking.sortScore - a.ranking.sortScore;
+      if (a.boosted !== b.boosted) return a.boosted ? -1 : 1;
+      if (a.ranking.affinityScore !== b.ranking.affinityScore) return b.ranking.affinityScore - a.ranking.affinityScore;
       if (useDistance) {
         const ad = a.distance ?? Number.POSITIVE_INFINITY, bd = b.distance ?? Number.POSITIVE_INFINITY;
         if (ad !== bd) return ad - bd;
       }
+      // Los perfiles actualizados recientemente obtienen el desempate para evitar
+      // que el mismo conjunto quede permanentemente arriba.
       return Number(b.row.updated_at || 0) - Number(a.row.updated_at || 0);
     })
     .map(item => item.profile);

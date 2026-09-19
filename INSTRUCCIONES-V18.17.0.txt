@@ -1,0 +1,17 @@
+V/R MATCH 18.17.0 — ONBOARDING Y ACTIVACIÓN
+
+1. Haz copia de seguridad de la base de datos y de uploads.
+2. Sube esta versión sin borrar el almacenamiento persistente.
+3. Reinicia el servicio.
+4. Comprueba https://vrmatch.es/healthz → versión 18.17.0, db=true y storage=true.
+5. Crea una cuenta de prueba nueva.
+6. Comprueba el recorrido: ciudad → perfil → foto → bio/intereses → primer like → match → mensaje.
+7. En Administración → Métricas comprueba que aparece “Perfil listo” dentro del embudo.
+8. Exporta CSV y comprueba las columnas activation_percent, profile_ready y next_step.
+
+No hay variables nuevas obligatorias en Render para esta versión.
+
+TESTS LOCALES:
+  npm install
+  npm run check
+  npm test

@@ -8,7 +8,7 @@ const path = require('node:path');
 const { once } = require('node:events');
 const { io: ioClient } = require('socket.io-client');
 
-const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(),'vrmatch-v1817-test-'));
+const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(),'vrmatch-v1818-test-'));
 process.env.NODE_ENV = 'test';
 process.env.VR_STORAGE_DIR = TEST_DIR;
 process.env.VR_DB_PATH = path.join(TEST_DIR,'data','vrmatch-test.db');
@@ -99,7 +99,7 @@ test('healthz comprueba SQLite, almacenamiento y versión', async()=>{
   assert.equal(res.data.db,true);
   assert.equal(res.data.storage,true);
   assert.equal(res.data.version,APP_VERSION);
-  assert.equal(APP_VERSION,'18.17.0');
+  assert.equal(APP_VERSION,'18.18.0');
   assert.ok(res.headers.get('x-request-id'));
 });
 
@@ -179,6 +179,32 @@ test('referidos atribuyen el alta y la eliminación de cuenta funciona', async()
   const del=await api('/api/account/delete',{method:'POST',token:signup.data.token,body:{password}});
   assert.equal(del.status,200,del.data?.error);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM users WHERE email=?').get(email).n,0);
+});
+
+
+test('matching inteligente ordena por afinidad y explica señales sin saltarse filtros', async()=>{
+  const me=await register('ranking-me@test.local');
+  const high=await register('ranking-high@test.local');
+  const low=await register('ranking-low@test.local');
+  await setCity(me.token,'Valencia');await setCity(high.token,'Valencia');await setCity(low.token,'Castellón');
+  const profileBody=(name,city,intereses)=>({
+    nombre:name,edad:30,gender:'other',ciudad:city,bio:'Perfil suficientemente completo para probar el ranking inteligente de VRMatch.',intereses,
+    fotos:['data:image/png;base64,iVBORw0KGgo='],preferences:{ageMin:18,ageMax:60,lookingFor:'all',city:'',interest:'',radiusKm:50},privacy:{discoverable:true,showOnline:true,allowGameInvites:true}
+  });
+  let r=await api('/api/profile',{method:'PUT',token:me.token,body:profileBody('Ranking Me','Valencia',['cine','viajes','música'])});assert.equal(r.status,200,r.data?.error);
+  r=await api('/api/profile',{method:'PUT',token:high.token,body:profileBody('Ranking High','Valencia',['cine','viajes','música','fotografía'])});assert.equal(r.status,200,r.data?.error);
+  r=await api('/api/profile',{method:'PUT',token:low.token,body:profileBody('Ranking Low','Castellón',['running'])});assert.equal(r.status,200,r.data?.error);
+  db.prepare('UPDATE profiles SET profile_verified=1,profile_verified_at=? WHERE user_id=?').run(Date.now(),high.user.id);
+  const discover=await api('/api/discover',{token:me.token});
+  assert.equal(discover.status,200);
+  const ids=discover.data.profiles.map(x=>x.id);
+  assert.ok(ids.includes(high.user.id));assert.ok(ids.includes(low.user.id));
+  assert.ok(ids.indexOf(high.user.id)<ids.indexOf(low.user.id),'el perfil con más señales de afinidad debe aparecer antes');
+  const hp=discover.data.profiles.find(x=>x.id===high.user.id), lp=discover.data.profiles.find(x=>x.id===low.user.id);
+  assert.ok(Number(hp.affinityScore)>Number(lp.affinityScore));
+  assert.ok(Array.isArray(hp.matchReasons));
+  assert.ok(hp.matchReasons.some(x=>/inter[eé]s|ciudad|verificado/i.test(x)));
+  assert.ok(!('components' in hp),'no se exponen componentes internos del ranking');
 });
 
 test('backup restaurable, errores de servidor y diagnóstico admin', async()=>{

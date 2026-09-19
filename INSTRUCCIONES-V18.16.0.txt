@@ -1,0 +1,19 @@
+V/R MATCH 18.16.0 — CALIDAD Y PRODUCCIÓN
+
+1. Haz copia de seguridad de la base de datos y uploads.
+2. Sube los archivos de esta versión sin borrar el almacenamiento persistente.
+3. Reinicia el servicio.
+4. Comprueba https://vrmatch.es/healthz → versión 18.16.0, db=true y storage=true.
+5. Entra como administrador → Sistema.
+6. Ejecuta "Probar restauración".
+7. Si SMTP está configurado, ejecuta "Probar SMTP" y confirma que llega el correo.
+8. Solo después de verificar SMTP, activa VR_REQUIRE_EMAIL_VERIFICATION=true.
+9. Antes de una campaña grande, descarga además un backup manual y guárdalo fuera de Render.
+
+TESTS LOCALES:
+  npm install
+  npm run check
+  npm test
+
+NOTA:
+Los tests usan una base temporal. No ejecutes scripts de pruebas apuntando manualmente a la base de producción.
