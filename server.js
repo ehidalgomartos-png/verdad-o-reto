@@ -30,7 +30,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.16.0';
+const APP_VERSION = '18.17.0';
 const LEGAL_VERSION = '2026-09-18';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -2201,6 +2201,55 @@ function profileFromRow(row) {
 function getProfile(userId) {
   return profileFromRow(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(userId));
 }
+
+// V18.17 · Estado de activación. Se calcula con datos ya existentes y no requiere
+// guardar un perfil psicológico ni puntuaciones ocultas del usuario.
+function activationState(userId) {
+  const profile=getProfile(userId);
+  const city=communityCityForUser(userId);
+  const photos=Array.isArray(profile?.fotos)?profile.fotos:[];
+  const interests=Array.isArray(profile?.intereses)?profile.intereses:[];
+  const basicProfile=Boolean(profile && String(profile.nombre||'').trim().length>=2 && Number(profile.edad)>=18);
+  const hasPhoto=photos.length>0;
+  const hasAbout=Boolean(profile && String(profile.bio||'').trim().length>=20 && interests.length>=2);
+  const growthRows=db.prepare(`SELECT event_name FROM growth_events WHERE user_id=? AND event_name IN ('first_like','first_match','first_message')`).all(userId);
+  const growthSet=new Set(growthRows.map(r=>r.event_name));
+  const hasLike=growthSet.has('first_like') || Boolean(db.prepare('SELECT 1 FROM likes WHERE from_user=? LIMIT 1').get(userId));
+  const hasMatch=growthSet.has('first_match') || Boolean(db.prepare('SELECT 1 FROM matches WHERE user1=? OR user2=? LIMIT 1').get(userId,userId));
+  const hasMessage=growthSet.has('first_message') || Boolean(db.prepare('SELECT 1 FROM messages WHERE from_user=? LIMIT 1').get(userId));
+  const steps=[
+    {key:'city',label:'Elige tu ciudad',description:'Nos ayuda a enseñarte comunidad y perfiles de tu zona.',complete:Boolean(city),action:'city'},
+    {key:'profile',label:'Crea tu perfil',description:'Nombre, edad y preferencias básicas para empezar.',complete:basicProfile,action:'profile'},
+    {key:'photo',label:'Añade una foto',description:'Los perfiles con foto son mucho más fáciles de reconocer.',complete:hasPhoto,action:'photo'},
+    {key:'about',label:'Cuenta algo de ti',description:'Escribe una bio breve y añade al menos 2 intereses.',complete:hasAbout,action:'about'},
+    {key:'like',label:'Da tu primer like',description:'Explora Descubrir y marca a alguien que te interese.',complete:hasLike,action:'discover'},
+    {key:'match',label:'Consigue tu primer match',description:'El match aparece cuando el interés es mutuo.',complete:hasMatch,action:'discover'},
+    {key:'message',label:'Rompe el hielo',description:'Escribe a un match o invítale a jugar.',complete:hasMessage,action:hasMatch?'matches':'discover'}
+  ];
+  const completed=steps.filter(x=>x.complete).length;
+  const percent=Math.round(completed*100/steps.length);
+  const next=steps.find(x=>!x.complete)||null;
+  let ctaLabel='Todo listo',copy='Tu cuenta ya está activada para descubrir, hacer match y conversar.';
+  if(next){
+    if(next.key==='city'){ctaLabel='Elegir mi ciudad';copy='Empieza por tu zona para que VRMatch pueda personalizar tu experiencia.';}
+    else if(next.key==='profile'){ctaLabel='Crear mi perfil';copy='Completa los datos básicos para poder aparecer en Descubrir.';}
+    else if(next.key==='photo'){ctaLabel='Añadir una foto';copy='Una foto pública hace tu perfil más reconocible y completo.';}
+    else if(next.key==='about'){ctaLabel='Completar mi perfil';copy='Una bio breve y tus intereses dan mejores motivos para empezar conversación.';}
+    else if(next.key==='like'){ctaLabel='Ver perfiles';copy='Ya tienes lo esencial. Ahora descubre personas y da tu primer like.';}
+    else if(next.key==='match'){ctaLabel='Seguir descubriendo';copy='Ya has dado tu primer like. Los matches dependen de interés mutuo.';}
+    else if(next.key==='message'){ctaLabel='Abrir mis matches';copy='Ya tienes un match. Un mensaje o una partida rompe el hielo.';}
+  }
+  const profileReady=Boolean(basicProfile&&hasPhoto&&hasAbout);
+  return {
+    percent,completed,total:steps.length,complete:completed===steps.length,profileReady,steps,nextKey:next?.key||'done',nextAction:next?.action||'done',ctaLabel,copy,
+    city:city?{name:city.name,current:Number(city.current)||0,goal:Number(city.goal)||500,percent:Number(city.percent)||0}:null
+  };
+}
+function maybeRecordProfileReady(userId,profile=getProfile(userId)) {
+  if(!profile)return false;
+  const ready=Array.isArray(profile.fotos)&&profile.fotos.length>0&&String(profile.bio||'').trim().length>=20&&Array.isArray(profile.intereses)&&profile.intereses.length>=2;
+  return ready?recordFirstUserGrowthEvent(userId,'profile_ready',{city:profile.ciudad||''}):false;
+}
 function publicProfile(profile) {
   if (!profile) return null;
   // Minimiza datos compartidos entre usuarios: preferencias, privacidad y
@@ -2448,7 +2497,11 @@ app.post('/api/auth/logout', requireAuth, (req,res) => {
 
 app.get('/api/me', requireAuth, (req,res) => {
   const full=db.prepare('SELECT email_verified,onboarding_completed FROM users WHERE id=?').get(req.user.id);
-  res.json({ ok:true, user:{id:req.user.id,email:req.user.email,emailVerified:Boolean(full?.email_verified),admin:isAdmin(req.user)}, profile:getProfile(req.user.id), communityCity:communityCityForUser(req.user.id), matches:matchesFor(req.user.id), plus:getPlusState(req.user.id), notificationState:notificationState(req.user.id), onboardingCompleted:Boolean(full?.onboarding_completed) });
+  res.json({ ok:true, user:{id:req.user.id,email:req.user.email,emailVerified:Boolean(full?.email_verified),admin:isAdmin(req.user)}, profile:getProfile(req.user.id), communityCity:communityCityForUser(req.user.id), matches:matchesFor(req.user.id), plus:getPlusState(req.user.id), notificationState:notificationState(req.user.id), onboardingCompleted:Boolean(full?.onboarding_completed), activation:activationState(req.user.id) });
+});
+
+app.get('/api/activation/me', requireAuth, rateLimit({limit:180,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  res.json({ok:true,activation:activationState(req.user.id)});
 });
 
 app.post('/api/account/onboarding-complete', requireAuth, (req,res) => {
@@ -2568,8 +2621,9 @@ app.put('/api/profile', requireAuth, (req,res) => {
     cleanupUnusedUploads(userId,[...photos,avatar].filter(x=>String(x).startsWith('/uploads/')));
     const profile = getProfile(userId);
     if(firstProfileSave) recordFirstUserGrowthEvent(userId,'profile_completed',{city:profile?.ciudad||''});
+    maybeRecordProfileReady(userId,profile);
     broadcastDiscovery();
-    res.json({ok:true,profile});
+    res.json({ok:true,profile,activation:activationState(userId)});
   } catch (e) {
     console.error(e); res.status(500).json({ok:false,error:'No se pudo guardar el perfil.'});
   }
@@ -2833,7 +2887,7 @@ app.put('/api/community/me', requireAuth, rateLimit({limit:30,windowMs:60*60*100
   if(!previousCity) recordFirstUserGrowthEvent(req.user.id,'city_selected',{city:city.name});
   if(getProfile(req.user.id)) broadcastDiscovery();
   const total=Number(db.prepare(`SELECT COUNT(*) n FROM community_city_memberships m JOIN users u ON u.id=m.user_id WHERE u.status='active'`).get()?.n||0);
-  res.json({ok:true,city,total});
+  res.json({ok:true,city,total,activation:activationState(req.user.id)});
 });
 
 app.post('/api/growth/event', rateLimit({limit:240,windowMs:60*60*1000,key:req=>req.ip}), (req,res) => {
@@ -3467,6 +3521,7 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
     registered:Number(metric.registered||0),
     city: db.prepare(`SELECT COUNT(*) n FROM users u WHERE ${cohortBase} AND EXISTS(SELECT 1 FROM community_city_memberships c WHERE c.user_id=u.id)`).get(since).n,
     profile: db.prepare(`SELECT COUNT(*) n FROM users u WHERE ${cohortBase} AND EXISTS(SELECT 1 FROM profiles p WHERE p.user_id=u.id)`).get(since).n,
+    profileReady: db.prepare(`SELECT COUNT(*) n FROM users u WHERE ${cohortBase} AND EXISTS(SELECT 1 FROM profiles p WHERE p.user_id=u.id AND TRIM(COALESCE(p.bio,''))<>'' AND LENGTH(TRIM(COALESCE(p.bio,'')))>=20 AND json_valid(COALESCE(p.photos_json,'[]')) AND json_array_length(COALESCE(p.photos_json,'[]'))>=1 AND json_valid(COALESCE(p.interests_json,'[]')) AND json_array_length(COALESCE(p.interests_json,'[]'))>=2)`).get(since).n,
     liked: db.prepare(`SELECT COUNT(*) n FROM users u WHERE ${cohortBase} AND EXISTS(SELECT 1 FROM likes l WHERE l.from_user=u.id)`).get(since).n,
     matched: db.prepare(`SELECT COUNT(*) n FROM users u WHERE ${cohortBase} AND EXISTS(SELECT 1 FROM matches m WHERE m.user1=u.id OR m.user2=u.id)`).get(since).n,
     messaged: db.prepare(`SELECT COUNT(*) n FROM users u WHERE ${cohortBase} AND EXISTS(SELECT 1 FROM messages m WHERE m.from_user=u.id)`).get(since).n,
@@ -3520,12 +3575,21 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
 
 app.get('/api/admin/growth/export.csv', requireAuth, requireAdmin, (req,res) => {
   const days=[1,7,30,90].includes(Number(req.query.days))?Number(req.query.days):30, since=now()-days*86400000;
-  const rows=db.prepare(`SELECT u.created_at registered_at,u.email,COALESCE(p.name,'') name,COALESCE(c.name,p.city,'') city,
-    COALESCE(a.source,'direct') source,COALESCE(a.medium,'none') medium,COALESCE(a.campaign,'') campaign,COALESCE(a.content,'') content,COALESCE(a.term,'') term,COALESCE(a.landing_path,'') landing_path
+  const rawRows=db.prepare(`SELECT u.id user_id,u.created_at registered_at,u.email,COALESCE(p.name,'') name,COALESCE(c.name,p.city,'') city,
+    COALESCE(a.source,'direct') source,COALESCE(a.medium,'none') medium,COALESCE(a.campaign,'') campaign,COALESCE(a.content,'') content,COALESCE(a.term,'') term,COALESCE(a.landing_path,'') landing_path,
+    CASE WHEN cm.user_id IS NOT NULL THEN 1 ELSE 0 END step_city,
+    CASE WHEN p.user_id IS NOT NULL AND LENGTH(TRIM(COALESCE(p.name,'')))>=2 AND COALESCE(p.age,0)>=18 THEN 1 ELSE 0 END step_profile,
+    CASE WHEN json_valid(COALESCE(p.photos_json,'[]')) AND json_array_length(COALESCE(p.photos_json,'[]'))>=1 THEN 1 ELSE 0 END step_photo,
+    CASE WHEN LENGTH(TRIM(COALESCE(p.bio,'')))>=20 AND json_valid(COALESCE(p.interests_json,'[]')) AND json_array_length(COALESCE(p.interests_json,'[]'))>=2 THEN 1 ELSE 0 END step_about,
+    EXISTS(SELECT 1 FROM likes l WHERE l.from_user=u.id LIMIT 1) step_like,
+    EXISTS(SELECT 1 FROM matches mx WHERE mx.user1=u.id OR mx.user2=u.id LIMIT 1) step_match,
+    EXISTS(SELECT 1 FROM messages msg WHERE msg.from_user=u.id LIMIT 1) step_message
     FROM users u LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN growth_acquisition a ON a.user_id=u.id
     LEFT JOIN community_city_memberships cm ON cm.user_id=u.id LEFT JOIN community_cities c ON c.slug=cm.city_slug
     WHERE u.created_at>=? ORDER BY u.created_at DESC`).all(since);
-  const headers=['registered_at','email','name','city','source','medium','campaign','content','term','landing_path'];
+  const stepKeys=['city','profile','photo','about','like','match','message'];
+  const rows=rawRows.map(r=>{const done=stepKeys.filter(k=>Number(r[`step_${k}`])===1).length;const next=stepKeys.find(k=>Number(r[`step_${k}`])!==1)||'done';const out={...r,activation_percent:Math.round(done*100/stepKeys.length),profile_ready:Number(r.step_profile)&&Number(r.step_photo)&&Number(r.step_about)?1:0,next_step:next};delete out.user_id;for(const k of stepKeys)delete out[`step_${k}`];return out;});
+  const headers=['registered_at','email','name','city','activation_percent','profile_ready','next_step','source','medium','campaign','content','term','landing_path'];
   const esc=v=>`"${String(v??'').replaceAll('"','""')}"`;
   const csv=[headers.join(','),...rows.map(r=>headers.map(h=>esc(r[h])).join(','))].join('\n');
   res.type('text/csv; charset=utf-8');res.setHeader('Content-Disposition',`attachment; filename="vrmatch-growth-${days}d.csv"`);res.send('\ufeff'+csv);
@@ -4491,7 +4555,7 @@ io.on('connection', socket => {
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET name=excluded.name,age=excluded.age,gender=excluded.gender,city=excluded.city,bio=excluded.bio,interests_json=excluded.interests_json,avatar=excluded.avatar,photos_json=excluded.photos_json,age_min=excluded.age_min,age_max=excluded.age_max,looking_for=excluded.looking_for,city_pref=excluded.city_pref,interest_pref=excluded.interest_pref,radius_km=excluded.radius_km,updated_at=excluded.updated_at`)
       .run(userId,name,age,cleanGender(data.gender),cleanShortText(data.ciudad,40),cleanShortText(data.bio,180),JSON.stringify(cleanInterests(data.intereses)),avatar,JSON.stringify(photos),ageMin,ageMax,cleanLooking(pref.lookingFor),cleanShortText(pref.city,40),cleanShortText(pref.interest,30),radiusKm,now());
       if(photosChanged){db.prepare('UPDATE profiles SET profile_verified=0,profile_verified_at=NULL,updated_at=? WHERE user_id=?').run(now(),userId);logSecurityEvent(userId,'verification_revoked_photo_change',1);}
-      const np=getProfile(userId); if(firstProfileSave)recordFirstUserGrowthEvent(userId,'profile_completed',{city:np?.ciudad||''}); socket.nombre=np.nombre;socket.avatar=np.avatar;socket.edad=np.edad; done({ok:true,profile:np,verificationRevoked:photosChanged}); broadcastDiscovery();
+      const np=getProfile(userId); if(firstProfileSave)recordFirstUserGrowthEvent(userId,'profile_completed',{city:np?.ciudad||''}); maybeRecordProfileReady(userId,np); socket.nombre=np.nombre;socket.avatar=np.avatar;socket.edad=np.edad; done({ok:true,profile:np,verificationRevoked:photosChanged,activation:activationState(userId)}); broadcastDiscovery();
     }catch(e){console.error(e);done({ok:false,error:'No se pudo guardar el perfil.'});}
   });
 
@@ -4759,4 +4823,4 @@ function startServer(port=PORT,host='0.0.0.0'){
     console.log(`Activación de ciudades: tokens hash-only · ${LAUNCH_ACTIVATION_DAYS} días · reenvío protegido`);console.log(`Socket origin: ${(allowedOrigins.length||appBaseOrigin)?'restringido':'ABIERTO (solo desarrollo)'}`);console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'}`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas + request-id + errores cliente/servidor + diagnóstico técnico');console.log('Privacidad: sesiones + bloqueados + exportación + selfie de verificación privada');});
 }
 if(require.main===module)startServer();
-module.exports={app,server,io,db,startServer,APP_VERSION,productionReadiness,quickCheckDatabase,systemMaintenanceStatus,systemDiagnostics,runBackupSelfTest,runSmtpVerify,recordServerError};
+module.exports={app,server,io,db,startServer,APP_VERSION,productionReadiness,quickCheckDatabase,systemMaintenanceStatus,systemDiagnostics,runBackupSelfTest,runSmtpVerify,recordServerError,activationState};

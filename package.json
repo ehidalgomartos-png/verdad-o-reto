@@ -1,8 +1,8 @@
 {
   "name": "vr-match",
-  "version": "18.16.0",
+  "version": "18.17.0",
   "private": true,
-  "description": "V/R Match - calidad de producción, tests automáticos, diagnóstico, backups verificables y observabilidad",
+  "description": "V/R Match - onboarding guiado, activación hasta primer match y analítica del embudo de primeros minutos",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

@@ -8,7 +8,7 @@ const path = require('node:path');
 const { once } = require('node:events');
 const { io: ioClient } = require('socket.io-client');
 
-const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(),'vrmatch-v1816-test-'));
+const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(),'vrmatch-v1817-test-'));
 process.env.NODE_ENV = 'test';
 process.env.VR_STORAGE_DIR = TEST_DIR;
 process.env.VR_DB_PATH = path.join(TEST_DIR,'data','vrmatch-test.db');
@@ -99,7 +99,7 @@ test('healthz comprueba SQLite, almacenamiento y versión', async()=>{
   assert.equal(res.data.db,true);
   assert.equal(res.data.storage,true);
   assert.equal(res.data.version,APP_VERSION);
-  assert.equal(APP_VERSION,'18.16.0');
+  assert.equal(APP_VERSION,'18.17.0');
   assert.ok(res.headers.get('x-request-id'));
 });
 
@@ -111,14 +111,25 @@ test('flujo crítico: registro → ciudad → perfil → match → mensaje → j
   await setProfile(a.token,{name:'Admin Test',age:31});
   await setProfile(b.token,{name:'Persona B',age:29});
 
+  const activationStart=await api('/api/activation/me',{token:a.token});
+  assert.equal(activationStart.status,200);
+  assert.equal(activationStart.data.activation.steps.find(x=>x.key==='city').complete,true);
+  assert.equal(activationStart.data.activation.steps.find(x=>x.key==='profile').complete,true);
+  assert.equal(activationStart.data.activation.steps.find(x=>x.key==='photo').complete,false);
+  assert.equal(activationStart.data.activation.steps.find(x=>x.key==='like').complete,false);
+
   const sa=await connect(a.token), sb=await connect(b.token);
   try{
     const like1=await emitAck(sa,'dating_like',{oponenteID:b.user.id});
     assert.equal(like1.ok,true);
     assert.equal(like1.match,false);
+    const activationLike=await api('/api/activation/me',{token:a.token});
+    assert.equal(activationLike.data.activation.steps.find(x=>x.key==='like').complete,true);
     const like2=await emitAck(sb,'dating_like',{oponenteID:a.user.id});
     assert.equal(like2.ok,true);
     assert.equal(like2.match,true);
+    const activationMatch=await api('/api/activation/me',{token:a.token});
+    assert.equal(activationMatch.data.activation.steps.find(x=>x.key==='match').complete,true);
 
     const matches=await api('/api/matches',{token:a.token});
     assert.equal(matches.status,200);
@@ -127,6 +138,8 @@ test('flujo crítico: registro → ciudad → perfil → match → mensaje → j
     const message=await emitAck(sa,'dating_chat_send',{oponenteID:b.user.id,texto:'Hola desde el test automático'});
     assert.equal(message.ok,true);
     assert.ok(message.id);
+    const activationMessage=await api('/api/activation/me',{token:a.token});
+    assert.equal(activationMessage.data.activation.steps.find(x=>x.key==='message').complete,true);
 
     const invite=await emitAck(sa,'dating_game_invite',{oponenteID:b.user.id,mazo:'rompehielos'});
     assert.equal(invite.ok,true);

@@ -124,6 +124,12 @@
       <h1>Haz match distinto.</h1>
       <p class="subtitle">Conoce personas, haz match y rompe el hielo jugando en lugar de empezar con el típico “hola”.</p>
       <div class="account-strip"><span id="accountEmail">Cuenta activa</span><div class="account-strip-actions"><button type="button" onclick="abrirCuenta()">Cuenta y seguridad</button><button type="button" class="logout-link" onclick="cerrarSesion()">Cerrar sesión</button></div></div>
+      <section id="activationProfileCard" class="activation-profile-card" aria-live="polite">
+        <div class="activation-card-head"><div><span class="eyebrow">TU INICIO EN VRMATCH</span><strong id="activationProfileTitle">Preparando tu progreso…</strong><small id="activationProfileCopy">Completa lo esencial y llega a tu primera conversación.</small></div><b id="activationProfilePercent">0%</b></div>
+        <div class="activation-progress"><i id="activationProfileBar"></i></div>
+        <div id="activationProfileSteps" class="activation-step-pills"></div>
+        <div class="activation-card-actions"><button id="activationProfileCta" class="btn btn-primary" type="button" onclick="accionActivacion()">Continuar</button><button class="mini-link" type="button" onclick="abrirActivacion()">Ver todos los pasos</button></div>
+      </section>
       <form id="formularioPerfil" class="form-stack" novalidate>
         <div class="profile-avatar-field">
           <label>Fotos del perfil</label>
@@ -185,12 +191,12 @@
         <div class="field">
           <label for="bioUsuario">Sobre ti</label>
           <textarea id="bioUsuario" class="profile-textarea" placeholder="Una frase que dé ganas de conocerte…" maxlength="180"></textarea>
-          <small class="field-hint"><span id="bioCounter">0</span>/180 caracteres.</small>
+          <small class="field-hint"><span id="bioCounter">0</span>/180 caracteres. Con 20 o más completas este paso.</small>
         </div>
         <div class="field">
           <label for="interesesUsuario">Intereses</label>
           <input type="text" id="interesesUsuario" placeholder="Ej. fotografía, viajes, ciclismo" maxlength="140">
-          <small class="field-hint">Sepáralos con comas. Mostraremos hasta 8.</small>
+          <small class="field-hint">Sepáralos con comas. Con 2 o más completas este paso; mostraremos hasta 8.</small>
         </div>
         <div class="profile-preferences-card">
           <div><span class="eyebrow">PREFERENCIAS</span><strong>¿A quién quieres descubrir?</strong></div>
@@ -218,6 +224,12 @@
           <button class="dating-profile-button" type="button" onclick="volverPerfil()" aria-label="Editar perfil"><span id="datingAvatarMini">🙂</span></button>
         </div>
       </div>
+
+      <button id="activationDiscoverCoach" class="activation-discover-coach hidden" type="button" onclick="abrirActivacion()">
+        <span class="activation-coach-progress"><i id="activationDiscoverRing">0%</i></span>
+        <span class="activation-coach-copy"><small id="activationDiscoverEyebrow">TU SIGUIENTE PASO</small><strong id="activationDiscoverTitle">Da tu primer like</strong><em id="activationDiscoverCopy">Tu progreso se actualizará automáticamente.</em></span>
+        <b>→</b>
+      </button>
 
       <div id="datingFilters" class="dating-filters hidden"><p class="filter-note">Estos filtros son rápidos. Tus preferencias permanentes se guardan en Perfil.</p>
         <div class="filter-row">
@@ -249,6 +261,7 @@
           <span>✨</span>
           <strong>No hay más perfiles ahora</strong>
           <small>Cuando haya nuevos perfiles disponibles, aparecerán aquí automáticamente.</small>
+          <div class="dating-empty-actions"><button id="datingEmptyPrimary" class="btn btn-secondary" type="button" onclick="accionDatingEmptyPrimary()">Revisar preferencias</button><button class="btn btn-primary" type="button" onclick="abrirInvitaAmigos()">Invitar a alguien</button></div>
         </div>
         <article id="datingCard" class="dating-card hidden" aria-live="polite">
           <div class="dating-photo" id="datingPhoto">
@@ -691,16 +704,29 @@
 
   <div id="onboardingModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card onboarding-modal-card">
-      <span class="onboarding-badge">V/R MATCH</span>
-      <h3>Haz match. Habla. Juega.</h3>
-      <p class="onboarding-lead">Cuatro ideas antes de empezar para que V/R Match sea más claro, privado y seguro.</p>
+      <span class="onboarding-badge">V/R MATCH · PRIMEROS 5 MINUTOS</span>
+      <h3>Tu primer match empieza aquí.</h3>
+      <p class="onboarding-lead">Ya tienes cuenta y perfil. Ahora solo necesitas descubrir, mostrar interés y romper el hielo cuando sea mutuo.</p>
       <div class="onboarding-grid">
-        <article><span>💕</span><strong>Dating primero</strong><small>Descubre perfiles, haz match y empieza a hablar antes de jugar.</small></article>
-        <article><span>🎮</span><strong>El juego rompe el hielo</strong><small>Las dinámicas viven dentro del chat y requieren aceptación del otro usuario.</small></article>
-        <article><span>📍</span><strong>Tu ubicación es aproximada</strong><small>Solo calculamos distancia. No mostramos coordenadas ni una dirección exacta.</small></article>
-        <article><span>🛡️</span><strong>Tú tienes el control</strong><small>Bloquea, denuncia o pausa tu perfil cuando lo necesites. V/R Match es solo +18.</small></article>
+        <article><span>🔥</span><strong>1 · Descubre</strong><small>Mira fotos, bio e intereses. Pasa si no encaja y guarda tus likes para quien de verdad te interese.</small></article>
+        <article><span>♥</span><strong>2 · Da tu primer like</strong><small>El otro usuario no sabrá que le gustas hasta que el interés sea mutuo.</small></article>
+        <article><span>💕</span><strong>3 · Haz match</strong><small>Cuando ambos os gustéis, aparecerá el match y recibiréis el aviso correspondiente.</small></article>
+        <article><span>🎮</span><strong>4 · Rompe el hielo</strong><small>Escribe un mensaje o propón una partida para evitar el típico “hola”.</small></article>
       </div>
-      <div class="onboarding-actions"><a href="/community.html" target="_blank" rel="noopener" class="mini-link">Ver normas</a><button class="btn btn-primary" type="button" onclick="completarOnboarding()">Empezar</button></div>
+      <div class="onboarding-safety-note">🛡️ Puedes bloquear, denunciar y controlar tu visibilidad cuando quieras. V/R Match es solo +18.</div>
+      <div class="onboarding-actions"><a href="/community.html" target="_blank" rel="noopener" class="mini-link">Ver normas</a><button class="btn btn-primary" type="button" onclick="completarOnboarding()">Ir a descubrir →</button></div>
+    </div>
+  </div>
+
+  <div id="activationModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card activation-modal-card">
+      <button class="modal-close" type="button" aria-label="Cerrar progreso" onclick="cerrarActivacion()">×</button>
+      <span class="eyebrow">TU CAMINO AL PRIMER MATCH</span>
+      <div class="activation-modal-score"><strong id="activationModalPercent">0%</strong><div><h3 id="activationModalTitle">Puesta a punto</h3><p id="activationModalCopy">Completa los pasos para activar tu experiencia.</p></div></div>
+      <div class="activation-progress large"><i id="activationModalBar"></i></div>
+      <div id="activationModalSteps" class="activation-modal-steps"></div>
+      <div id="activationCityHint" class="activation-city-hint hidden"></div>
+      <button id="activationModalCta" class="btn btn-primary btn-xl" type="button" onclick="accionActivacion()"><span>Continuar</span><b>→</b></button>
     </div>
   </div>
 
@@ -943,6 +969,7 @@
     let pointerStartX = 0;
     let pointerDeltaX = 0;
     let pointerDragging = false;
+    let datingEmptyMode = 'empty';
     let adminCurrentTab = 'reports';
     let adminSelectedUserId = null;
     let notificationItems = [];
@@ -956,6 +983,8 @@
     let referralState = null;
     let communityCityState = null;
     let citySelectorReturn = 'profile';
+    let currentActivation = null;
+    let activationRefreshTimer = null;
     let verificationSelfieData = '';
     let profileVerificationState = null;
 
@@ -1640,6 +1669,90 @@
       }
     }
 
+    function activationStepIcon(key){
+      return ({city:'📍',profile:'👤',photo:'📷',about:'✨',like:'♥',match:'💕',message:'💬'})[key]||'✓';
+    }
+    function activationPresentation(state){
+      if(!state||!Array.isArray(state.steps))return state;
+      const completed=state.steps.filter(x=>x.complete).length,total=Math.max(1,state.steps.length),percent=Math.round(completed*100/total),next=state.steps.find(x=>!x.complete)||null;
+      state.completed=completed;state.total=total;state.percent=percent;state.complete=!next;state.nextKey=next?.key||'done';state.nextAction=next?.action||'done';
+      if(!next){state.ctaLabel='Todo listo';state.copy='Tu cuenta ya está activada. Sigue descubriendo, hablando y jugando a tu ritmo.';return state;}
+      const meta={
+        city:['Elegir mi ciudad','Empieza por tu zona para que VRMatch pueda personalizar tu experiencia.'],
+        profile:['Crear mi perfil','Completa los datos básicos para poder aparecer en Descubrir.'],
+        photo:['Añadir una foto','Una foto pública hace tu perfil más reconocible y completo.'],
+        about:['Completar mi perfil','Una bio breve y tus intereses dan mejores motivos para empezar conversación.'],
+        like:['Ver perfiles','Ya tienes lo esencial. Ahora descubre personas y da tu primer like.'],
+        match:['Seguir descubriendo','Ya has dado tu primer like. El match aparecerá cuando el interés sea mutuo.'],
+        message:['Abrir mis matches','Ya tienes un match. Un mensaje o una partida rompe el hielo.']
+      }[next.key]||['Continuar','Completa el siguiente paso para seguir avanzando.'];
+      state.ctaLabel=meta[0];state.copy=meta[1];return state;
+    }
+    function renderActivation(state=currentActivation){
+      if(!state||!Array.isArray(state.steps))return;
+      const view=activationPresentation({...state,steps:state.steps.map(x=>({...x}))});
+      const pct=Math.max(0,Math.min(100,Number(view.percent)||0));
+      const next=view.steps.find(x=>!x.complete)||null;
+      if($('activationProfileCard'))$('activationProfileCard').classList.toggle('hidden',Boolean(view.complete));
+      if($('activationProfilePercent'))$('activationProfilePercent').textContent=`${pct}%`;
+      if($('activationProfileBar'))$('activationProfileBar').style.width=`${pct}%`;
+      if($('activationProfileTitle'))$('activationProfileTitle').textContent=view.complete?'Tu perfil ya está en marcha':`${view.completed} de ${view.total} pasos completados`;
+      if($('activationProfileCopy'))$('activationProfileCopy').textContent=view.copy||'';
+      if($('activationProfileCta'))$('activationProfileCta').textContent=view.ctaLabel||'Continuar';
+      if($('activationProfileSteps'))$('activationProfileSteps').innerHTML=view.steps.map(step=>`<span class="${step.complete?'done':''}" title="${escapeHtml(step.description||'')}"><i>${step.complete?'✓':activationStepIcon(step.key)}</i>${escapeHtml(step.label||'Paso')}</span>`).join('');
+      const coach=$('activationDiscoverCoach');
+      if(coach){
+        coach.classList.toggle('hidden',Boolean(view.complete));
+        if(!view.complete){$('activationDiscoverRing').textContent=`${pct}%`;const ring=$('activationDiscoverRing')?.parentElement;if(ring)ring.style.background=`conic-gradient(#ff2d75 0 ${pct}%,rgba(255,255,255,.07) ${pct}% 100%)`;$('activationDiscoverTitle').textContent=next?.label||'Sigue avanzando';$('activationDiscoverCopy').textContent=view.copy||'';$('activationDiscoverEyebrow').textContent=next?.key==='match'?'MIENTRAS LLEGA EL MATCH':'TU SIGUIENTE PASO';}
+      }
+      if($('activationModalPercent'))$('activationModalPercent').textContent=`${pct}%`;
+      if($('activationModalBar'))$('activationModalBar').style.width=`${pct}%`;
+      if($('activationModalTitle'))$('activationModalTitle').textContent=view.complete?'¡Ya estás en marcha!':(next?.label||'Tu activación');
+      if($('activationModalCopy'))$('activationModalCopy').textContent=view.copy||'';
+      if($('activationModalCta'))$('activationModalCta').querySelector('span').textContent=view.ctaLabel||'Continuar';
+      if($('activationModalSteps'))$('activationModalSteps').innerHTML=view.steps.map((step,index)=>`<div class="activation-modal-step ${step.complete?'done':''}"><span>${step.complete?'✓':activationStepIcon(step.key)}</span><div><b>${index+1}. ${escapeHtml(step.label||'Paso')}</b><small>${escapeHtml(step.description||'')}</small></div><i>${step.complete?'HECHO':'PENDIENTE'}</i></div>`).join('');
+      const cityHint=$('activationCityHint');
+      if(cityHint){const city=view.city;cityHint.classList.toggle('hidden',!city);if(city)cityHint.innerHTML=`<span>🔥</span><div><strong>${escapeHtml(city.name||'Tu ciudad')}</strong><small>${numeroLocal(city.current||0)} personas en la comunidad local · hito ${numeroLocal(city.goal||500)}</small></div>`;}
+    }
+    async function cargarActivacion(force=false){
+      if(!authToken)return null;
+      if(currentActivation&&!force){renderActivation(currentActivation);return currentActivation;}
+      const res=await api('/api/activation/me');
+      if(res.ok&&res.activation){currentActivation=res.activation;renderActivation(currentActivation);return currentActivation;}
+      return currentActivation;
+    }
+    function programarActualizacionActivacion(delay=350){
+      clearTimeout(activationRefreshTimer);activationRefreshTimer=setTimeout(()=>cargarActivacion(true).catch(()=>{}),delay);
+    }
+    function actualizarActivacionLocal(){
+      if(!currentActivation||!Array.isArray(currentActivation.steps))return;
+      const draft={...currentActivation,steps:currentActivation.steps.map(x=>({...x}))};
+      const byKey=Object.fromEntries(draft.steps.map(x=>[x.key,x]));
+      if(byKey.city)byKey.city.complete=Boolean(communityCityState||String($('ciudadUsuario')?.value||'').trim());
+      if(byKey.profile)byKey.profile.complete=String($('nombreUsuario')?.value||'').trim().length>=2&&Number($('edadUsuario')?.value)>=18;
+      if(byKey.photo)byKey.photo.complete=Array.isArray(fotosJugador)&&fotosJugador.length>0;
+      if(byKey.about)byKey.about.complete=String($('bioUsuario')?.value||'').trim().length>=20&&normalizarIntereses($('interesesUsuario')?.value||'').length>=2;
+      renderActivation(draft);
+    }
+    function abrirActivacion(){
+      if(!currentActivation){cargarActivacion(true).then(state=>{if(state)abrirActivacion();else mostrarToast('No se pudo cargar tu progreso.','warn');});return;}
+      renderActivation(currentActivation);$('activationModal').classList.remove('hidden');$('activationModal').setAttribute('aria-hidden','false');
+    }
+    function cerrarActivacion(){$('activationModal').classList.add('hidden');$('activationModal').setAttribute('aria-hidden','true');}
+    function focoActivacion(id){const el=$(id);if(!el)return;setTimeout(()=>{el.scrollIntoView({behavior:'smooth',block:'center'});if(typeof el.focus==='function')el.focus({preventScroll:true});el.classList.add('activation-focus');setTimeout(()=>el.classList.remove('activation-focus'),1600);},80);}
+    function accionActivacion(){
+      const state=currentActivation?activationPresentation({...currentActivation,steps:currentActivation.steps.map(x=>({...x}))}):null;
+      const next=state?.steps?.find(x=>!x.complete)||null;cerrarActivacion();
+      if(!next)return irADescubrir();
+      if(next.key==='city')return abrirSelectorCiudad(false);
+      if(next.key==='profile'){showScreen('pantallaPerfil');return focoActivacion('nombreUsuario');}
+      if(next.key==='photo'){showScreen('pantallaPerfil');return focoActivacion('avatarPreviewButton');}
+      if(next.key==='about'){showScreen('pantallaPerfil');return focoActivacion('bioUsuario');}
+      if(next.key==='like'||next.key==='match'){irADescubrir();setTimeout(()=>{const btn=document.querySelector('.swipe-btn.like');if(btn){btn.classList.add('activation-focus');setTimeout(()=>btn.classList.remove('activation-focus'),1600);}},180);return;}
+      if(next.key==='message')return irAMatches();
+      irADescubrir();
+    }
+
     function numeroLocal(value){
       try{return new Intl.NumberFormat('es-ES').format(Number(value)||0);}catch{return String(Number(value)||0);}
     }
@@ -1683,6 +1796,7 @@
       if(!res.ok)return mostrarToast(res.error||'No se pudo guardar tu ciudad.','error');
       localStorage.removeItem('vr_pending_city');communityCityState=res.city||null;
       ciudadJugador=communityCityState?.name||city;$('ciudadUsuario').value=ciudadJugador;
+      if(res.activation){currentActivation=res.activation;renderActivation(currentActivation);}else programarActualizacionActivacion();
       pintarCrecimientoCiudad(communityCityState);mostrarToast(`Ya formas parte de VRMatch ${ciudadJugador}.`,'success');
     }
     function abrirSelectorCiudad(desdePerfil=false){
@@ -2263,6 +2377,7 @@
       if (result.profile) aplicarPerfilServidor(result.profile);
       if (Array.isArray(result.matches)) datingMatches = result.matches;
       communityCityState=result.communityCity||communityCityState;
+      if(result.activation){currentActivation=result.activation;renderActivation(currentActivation);}else cargarActivacion(true).catch(()=>{});
       conectarSocket();
       cargarNotificaciones().catch(()=>{});
       cargarReferralState(true).catch(()=>{});
@@ -2288,7 +2403,7 @@
     async function completarOnboarding() {
       const res=await api('/api/account/onboarding-complete',{method:'POST',body:{}});
       if(!res.ok)return mostrarToast(res.error||'No se pudo completar el inicio.','error');
-      currentOnboardingCompleted=true; $('onboardingModal').classList.add('hidden'); $('onboardingModal').setAttribute('aria-hidden','true'); mostrarToast('Todo listo. Bienvenido a V/R Match.','info');
+      currentOnboardingCompleted=true; $('onboardingModal').classList.add('hidden'); $('onboardingModal').setAttribute('aria-hidden','true'); irADescubrir(); programarActualizacionActivacion(150); mostrarToast('Empieza por un perfil que de verdad te interese.','info');
     }
 
     async function bootstrapAuth() {
@@ -2306,7 +2421,7 @@
       if (callApi && oldToken) await desvincularPushSesion();
       if (callApi && oldToken) await api('/api/auth/logout', { method:'POST', body:{} });
       if (socket.connected) socket.disconnect();
-      authToken=''; currentUserId=''; currentUserEmail=''; currentUserEmailVerified=false; currentUserAdmin=false; currentOnboardingCompleted=true; currentPlus=normalizarPlus({}); referralState=null; communityCityState=null; citySelectorReturn='profile';
+      authToken=''; currentUserId=''; currentUserEmail=''; currentUserEmailVerified=false; currentUserAdmin=false; currentOnboardingCompleted=true; currentPlus=normalizarPlus({}); referralState=null; communityCityState=null; currentActivation=null; clearTimeout(activationRefreshTimer); citySelectorReturn='profile';
       notificationItems=[];notificationUnread=0;notificationPreferences=normalizarPreferenciasNotificacion({});pushSubscriptionActive=false;
       localStorage.removeItem('vr_auth_token'); localStorage.removeItem('vr_profile');
       datingProfiles=[]; datingMatches=[]; datingPassed=new Set(); datingChats.clear();
@@ -2698,7 +2813,7 @@
       const visitConv=porcentaje(m.registered,m.visits),startConv=porcentaje(m.registered,m.registrationStarted);
       const cards=[['Visitas',m.visits||0,'sesiones de entrada'],['Altas',m.registered,'cuentas nuevas'],['Conversión',`${visitConv}%`,'visita → alta'],['Inicio registro',m.registrationStarted||0,`${startConv}% terminan`],['Activos',m.activeUsers,`últimos ${days===1?'24 h':days+' días'}`],['Likes',m.likes,'acciones'],['Matches',m.matches,'creados'],['Mensajes',m.messages,'enviados'],['Partidas',m.gamesStarted,'iniciadas'],['Finalizadas',m.gamesCompleted,'partidas completas'],['Emails retención',m.retentionEmails||0,'avisos enviados'],['Altas ref.',m.referralSignups||0,'atribuidas'],['Compartidos',m.referralShares||0,'invitaciones/resultados']];
       const base=Math.max(1,Number(f.registered)||0);
-      const funnel=[['Visitas',f.visits||0,100],['Inician registro',f.registrationStarted||0,porcentaje(f.registrationStarted,f.visits)],['Registro',f.registered||0,porcentaje(f.registered,f.visits)],['Ciudad',f.city||0,porcentaje(f.city,base)],['Perfil',f.profile||0,porcentaje(f.profile,base)],['Primer like',f.liked||0,porcentaje(f.liked,base)],['Match',f.matched||0,porcentaje(f.matched,base)],['Mensaje',f.messaged||0,porcentaje(f.messaged,base)],['Partida',f.played||0,porcentaje(f.played,base)],['Comparte',f.shared||0,porcentaje(f.shared,base)]];
+      const funnel=[['Visitas',f.visits||0,100],['Inician registro',f.registrationStarted||0,porcentaje(f.registrationStarted,f.visits)],['Registro',f.registered||0,porcentaje(f.registered,f.visits)],['Ciudad',f.city||0,porcentaje(f.city,base)],['Perfil',f.profile||0,porcentaje(f.profile,base)],['Perfil listo',f.profileReady||0,porcentaje(f.profileReady,base)],['Primer like',f.liked||0,porcentaje(f.liked,base)],['Match',f.matched||0,porcentaje(f.matched,base)],['Mensaje',f.messaged||0,porcentaje(f.messaged,base)],['Partida',f.played||0,porcentaje(f.played,base)],['Comparte',f.shared||0,porcentaje(f.shared,base)]];
       const maxDaily=Math.max(1,...daily.map(d=>Math.max(Number(d.visits)||0,Number(d.registered)||0,Number(d.matches)||0,Number(d.games)||0)));
       const channelRows=channels.length?channels.map(r=>`<tr><td><b>${escapeHtml(r.source||'direct')}</b><small>${escapeHtml(r.medium||'none')}</small></td><td>${Number(r.visits)||0}</td><td>${Number(r.signups)||0}</td><td>${r.conversion==null?'—':`${Number(r.conversion).toFixed(1)}%`}</td></tr>`).join(''):'<tr><td colspan="4">Aún no hay datos de adquisición.</td></tr>';
       const campaignRows=campaigns.length?campaigns.map(r=>`<tr><td><b>${escapeHtml(r.campaign||'(sin campaña)')}</b><small>${escapeHtml(r.source||'direct')} · ${escapeHtml(r.medium||'none')}</small></td><td>${escapeHtml(r.content||'—')}</td><td>${Number(r.visits)||0}</td><td>${Number(r.signups)||0}</td><td>${r.conversion==null?'—':`${Number(r.conversion).toFixed(1)}%`}</td></tr>`).join(''):'<tr><td colspan="5">Añade UTM a tus campañas para ver aquí qué Reel o anuncio convierte.</td></tr>';
@@ -2808,6 +2923,8 @@
     function volverPerfil() {
       if (miSala) return mostrarToast('Sal de la sala antes de volver al perfil.', 'warn');
       showScreen('pantallaPerfil');
+      cargarActivacion(true).catch(()=>{});
+      actualizarActivacionLocal();
     }
 
     function volverMenu() { showScreen('pantallaMazos'); }
@@ -2902,6 +3019,7 @@
       pintarAvatar($('datingAvatarMini'), avatarJugador, nombreJugador || 'Tú');
       registrarDating();
       renderDatingCard();
+      cargarActivacion(true).catch(()=>{});
     }
 
     function irAMatches() {
@@ -2986,6 +3104,13 @@
       renderDatingPhoto();
     }
 
+    function accionDatingEmptyPrimary(){
+      if(datingEmptyMode==='filtered')return limpiarDatingFilters();
+      showScreen('pantallaPerfil');
+      focoActivacion('prefRadiusKm');
+      mostrarToast('Revisa edad, preferencias y radio. La ubicación aproximada permite usar kilómetros.','info');
+    }
+
     function renderDatingCard() {
       const disponible = datingProfiles.find(p => !datingPassed.has(p.id) && !perfilEsMatch(p.id) && perfilCumpleFiltros(p));
       currentDatingProfile = disponible || null;
@@ -2998,8 +3123,10 @@
         empty.classList.remove('hidden');
         actions.classList.add('is-disabled');
         const filtered = datingProfiles.some(p => !datingPassed.has(p.id) && !perfilEsMatch(p.id));
-        empty.querySelector('strong').textContent = filtered ? 'No hay perfiles con estos filtros' : 'No hay más perfiles ahora';
-        empty.querySelector('small').textContent = filtered ? 'Prueba ampliando edad, distancia, ciudad o intereses.' : 'Cuando haya nuevos perfiles disponibles, aparecerán aquí automáticamente.';
+        datingEmptyMode=filtered?'filtered':'empty';
+        empty.querySelector('strong').textContent = filtered ? 'No hay perfiles con estos filtros' : (communityCityState?.name?`VRMatch está creciendo en ${communityCityState.name}`:'No hay más perfiles ahora');
+        empty.querySelector('small').textContent = filtered ? 'Prueba quitando filtros rápidos para volver a ver perfiles disponibles.' : (communityCityState?.name?`Ya sois ${numeroLocal(communityCityState.current||0)} en la comunidad local. Revisa tus preferencias o invita a alguien mientras llegan nuevos perfiles.`:'Cuando haya nuevos perfiles disponibles, aparecerán aquí automáticamente.');
+        if($('datingEmptyPrimary'))$('datingEmptyPrimary').textContent=filtered?'Quitar filtros':'Revisar preferencias';
         return;
       }
       empty.classList.add('hidden');
@@ -3055,6 +3182,7 @@
       $('stampLike').style.opacity = '1';
       socket.emit('dating_like', { oponenteID: p.id }, (res) => {
         if (res && !res.ok) mostrarToast(res.error || 'Ese perfil ya no está disponible.', 'warn');
+        else programarActualizacionActivacion(res?.match?180:350);
       });
       animarSalidaDating('right', () => datingPassed.add(p.id));
     }
@@ -3236,6 +3364,7 @@
       $('chatStarters').classList.add('hidden');
       socket.emit('dating_chat_send', { oponenteID: currentChatMatch.id, texto:text }, (res) => {
         if (!res || !res.ok) mostrarToast((res && res.error) || 'No se pudo enviar el mensaje.', 'warn');
+        else programarActualizacionActivacion(220);
       });
     }
 
@@ -3291,6 +3420,7 @@
 
     socket.on('dating_match', (data = {}) => {
       addOrUpdateMatch(data);
+      programarActualizacionActivacion(180);
       showMatchModal(data);
     });
 
@@ -3471,6 +3601,7 @@
       const res = await api('/api/profile', { method:'PUT', body:payload });
       if (!res.ok) return mostrarToast(res.error || 'No se pudo guardar el perfil.', 'error');
       aplicarPerfilServidor(res.profile);
+      if(res.activation){currentActivation=res.activation;renderActivation(currentActivation);}else programarActualizacionActivacion(160);
       if (socket.connected) registrarDating(); else conectarSocket();
       if (salaInvitacion) inicializarInvitacion(); else irADescubrir();
       if(!currentOnboardingCompleted)setTimeout(abrirOnboarding,220);
@@ -3508,7 +3639,7 @@
       currentPrivacy = { discoverable:saved.privacy?.discoverable!==false, showOnline:saved.privacy?.showOnline!==false, allowGameInvites:saved.privacy?.allowGameInvites!==false };
       $('bioCounter').textContent = String(bioJugador.length);
       $('saludoHeader').textContent = nombreJugador || 'Hola';
-      actualizarPreviewAvatar(); renderProfilePhotoGrid();
+      actualizarPreviewAvatar(); renderProfilePhotoGrid(); actualizarActivacionLocal();
     }
 
     function cargarPerfil(saved=null) {
@@ -4464,6 +4595,7 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
         const add = document.createElement('button'); add.type='button'; add.className='profile-photo-add'; add.innerHTML='<b>＋</b><small>Añadir</small>';
         add.onclick = () => $('inputAvatar').click(); grid.appendChild(add);
       }
+      actualizarActivacionLocal();
     }
 
     async function procesarFotosPerfil(fileList) {
@@ -4530,8 +4662,10 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
       const email = String($('authEmail').value || '').trim().toLowerCase();
       if(pendingVerificationEmail && email !== pendingVerificationEmail) ocultarVerificacionPendiente();
     });
-    $('nombreUsuario').addEventListener('input', () => { $('nombreUsuario').value = limpiarNombre($('nombreUsuario').value); });
-    $('bioUsuario').addEventListener('input', () => { $('bioCounter').textContent = String($('bioUsuario').value.length); });
+    $('nombreUsuario').addEventListener('input', () => { $('nombreUsuario').value = limpiarNombre($('nombreUsuario').value); actualizarActivacionLocal(); });
+    $('edadUsuario').addEventListener('input', actualizarActivacionLocal);
+    $('bioUsuario').addEventListener('input', () => { $('bioCounter').textContent = String($('bioUsuario').value.length); actualizarActivacionLocal(); });
+    $('interesesUsuario').addEventListener('input', actualizarActivacionLocal);
     $('feedbackMessage').addEventListener('input',()=>{$('feedbackCounter').textContent=`${$('feedbackMessage').value.length} / 1200`;});
     $('inputAvatar').addEventListener('change', async (e) => { await procesarFotosPerfil(e.target.files); e.target.value = ''; });
     $('chatForm').addEventListener('submit', (e) => { e.preventDefault(); const input=$('chatInput'); enviarChat(input.value); input.value=''; });
