@@ -361,10 +361,19 @@
         <button type="button" class="danger" onclick="bloquearMatchActual()">⊘ Bloquear y deshacer match</button>
       </div>
       <div id="chatGameTray" class="chat-game-tray hidden">
-        <div><strong>Convierte el chat en juego</strong><small>Los dos tenéis que aceptar.</small></div>
+        <div><strong>Convierte el chat en juego</strong><small>La invitación queda guardada 24 h y ambos podéis verla en la conversación.</small></div>
         <button onclick="invitarJuegoDesdeChat('rompehielos')">🧊 Rompehielos</button>
         <button onclick="invitarJuegoDesdeChat('parejas')">❤️ Conóceme</button>
         <button onclick="invitarJuegoDesdeChat('seccionXX')">🔥 After Dark</button>
+      </div>
+      <div id="chatActionBar" class="chat-action-bar">
+        <button type="button" onclick="lanzarRetoRapido()"><span>⚡</span><b>A o B</b><small>1 pregunta</small></button>
+        <button type="button" onclick="sugerirPreguntaChat()"><span>💬</span><b>Pregunta</b><small>rompehielos</small></button>
+        <button type="button" onclick="toggleChatGameTray()"><span>🎮</span><b>Jugar</b><small>partida</small></button>
+      </div>
+      <div id="chatActiveGame" class="chat-active-game hidden" aria-live="polite">
+        <div><span>🎮</span><strong>Tenéis una partida en curso</strong><small>Podéis volver exactamente a la ronda activa.</small></div>
+        <button type="button" onclick="reanudarJuegoDesdeChat()">Continuar</button>
       </div>
       <div id="chatGameHistory" class="chat-game-history hidden" aria-live="polite">
         <span class="chat-game-history-icon">🎮</span>
@@ -974,6 +983,7 @@
     let currentChatMatch = null;
     const datingChats = new Map();
     const gameHistoryByPartner = new Map();
+    const chatPromptPool = ['¿Qué plan te hace perder la noción del tiempo?','¿Qué pequeña cosa te conquista de alguien?','¿Qué sería para ti una cita perfecta sin gastar mucho?','¿Qué tema podrías hablar durante horas?','¿Qué viaje repetirías mañana mismo?','¿Qué te hace reír casi siempre?'];
     let currentGameMatchId = '';
     let gameReconnectPaused = false;
     let pointerStartX = 0;
@@ -2868,9 +2878,9 @@
       if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudieron cargar.')}</strong></div>`;return;}
       const m=res.metric||{},f=res.funnel||{},sys=res.system||{},daily=res.daily||[],errors=res.recentErrors||[],channels=res.channels||[],campaigns=res.campaigns||[],cities=res.cities||[],creators=res.creators||[],cityLeaderboard=res.cityLeaderboard||[],retentionEmails=res.retentionEmails||[],pushStats=res.pushStats||[];
       const visitConv=porcentaje(m.registered,m.visits),startConv=porcentaje(m.registered,m.registrationStarted);
-      const cards=[['Visitas',m.visits||0,'sesiones de entrada'],['Altas',m.registered,'cuentas nuevas'],['Conversión',`${visitConv}%`,'visita → alta'],['Inicio registro',m.registrationStarted||0,`${startConv}% terminan`],['Activos',m.activeUsers,`últimos ${days===1?'24 h':days+' días'}`],['Likes',m.likes,'acciones'],['Matches',m.matches,'creados'],['Mensajes',m.messages,'enviados'],['Partidas',m.gamesStarted,'iniciadas'],['Finalizadas',m.gamesCompleted,'partidas completas'],['Emails retención',m.retentionEmails||0,'avisos enviados'],['Push enviados',m.pushesSent||0,`${m.pushesOpened||0} abiertos`],['Altas ref.',m.referralSignups||0,'atribuidas'],['Ref. activos',m.referralActive||0,'ciudad + foto + like'],['Creadores',m.creatorSignups||0,'altas atribuidas'],['Compartidos',m.referralShares||0,'invitaciones/resultados']];
+      const cards=[['Visitas',m.visits||0,'sesiones de entrada'],['Altas',m.registered,'cuentas nuevas'],['Conversión',`${visitConv}%`,'visita → alta'],['Inicio registro',m.registrationStarted||0,`${startConv}% terminan`],['Activos',m.activeUsers,`últimos ${days===1?'24 h':days+' días'}`],['Likes',m.likes,'acciones'],['Matches',m.matches,'creados'],['Mensajes',m.messages,'enviados'],['Retos A/B',m.quickChallenges||0,'rompehielos rápidos'],['Invitaciones',m.gameInvites||0,`${m.gameInvitesAccepted||0} aceptadas`],['Partidas',m.gamesStarted,'iniciadas'],['Finalizadas',m.gamesCompleted,'partidas completas'],['Emails retención',m.retentionEmails||0,'avisos enviados'],['Push enviados',m.pushesSent||0,`${m.pushesOpened||0} abiertos`],['Altas ref.',m.referralSignups||0,'atribuidas'],['Ref. activos',m.referralActive||0,'ciudad + foto + like'],['Creadores',m.creatorSignups||0,'altas atribuidas'],['Compartidos',m.referralShares||0,'invitaciones/resultados']];
       const base=Math.max(1,Number(f.registered)||0);
-      const funnel=[['Visitas',f.visits||0,100],['Inician registro',f.registrationStarted||0,porcentaje(f.registrationStarted,f.visits)],['Registro',f.registered||0,porcentaje(f.registered,f.visits)],['Ciudad',f.city||0,porcentaje(f.city,base)],['Perfil',f.profile||0,porcentaje(f.profile,base)],['Perfil listo',f.profileReady||0,porcentaje(f.profileReady,base)],['Primer like',f.liked||0,porcentaje(f.liked,base)],['Match',f.matched||0,porcentaje(f.matched,base)],['Mensaje',f.messaged||0,porcentaje(f.messaged,base)],['Partida',f.played||0,porcentaje(f.played,base)],['Comparte',f.shared||0,porcentaje(f.shared,base)]];
+      const funnel=[['Visitas',f.visits||0,100],['Inician registro',f.registrationStarted||0,porcentaje(f.registrationStarted,f.visits)],['Registro',f.registered||0,porcentaje(f.registered,f.visits)],['Ciudad',f.city||0,porcentaje(f.city,base)],['Perfil',f.profile||0,porcentaje(f.profile,base)],['Perfil listo',f.profileReady||0,porcentaje(f.profileReady,base)],['Primer like',f.liked||0,porcentaje(f.liked,base)],['Match',f.matched||0,porcentaje(f.matched,base)],['Interacción',f.interacted||f.messaged||0,porcentaje(f.interacted||f.messaged,base)],['Partida',f.played||0,porcentaje(f.played,base)],['Comparte',f.shared||0,porcentaje(f.shared,base)]];
       const maxDaily=Math.max(1,...daily.map(d=>Math.max(Number(d.visits)||0,Number(d.registered)||0,Number(d.matches)||0,Number(d.games)||0)));
       const channelRows=channels.length?channels.map(r=>`<tr><td><b>${escapeHtml(r.source||'direct')}</b><small>${escapeHtml(r.medium||'none')}</small></td><td>${Number(r.visits)||0}</td><td>${Number(r.signups)||0}</td><td>${r.conversion==null?'—':`${Number(r.conversion).toFixed(1)}%`}</td></tr>`).join(''):'<tr><td colspan="4">Aún no hay datos de adquisición.</td></tr>';
       const campaignRows=campaigns.length?campaigns.map(r=>`<tr><td><b>${escapeHtml(r.campaign||'(sin campaña)')}</b><small>${escapeHtml(r.source||'direct')} · ${escapeHtml(r.medium||'none')}</small></td><td>${escapeHtml(r.content||'—')}</td><td>${Number(r.visits)||0}</td><td>${Number(r.signups)||0}</td><td>${r.conversion==null?'—':`${Number(r.conversion).toFixed(1)}%`}</td></tr>`).join(''):'<tr><td colspan="5">Añade UTM a tus campañas para ver aquí qué Reel o anuncio convierte.</td></tr>';
@@ -3322,7 +3332,8 @@
       gamePartnerProfile = match;
       socket.emit('dating_game_invite', { oponenteID: match.id, mazo }, (res) => {
         if (!res || !res.ok) return mostrarToast((res && res.error) || 'No se pudo enviar la invitación.', 'warn');
-        mostrarToast(res.offline ? `${match.nombre} no está conectado. Le hemos avisado para que vuelva a V/R Match.` : `Invitación enviada a ${match.nombre}.`, 'info');
+        mostrarToast(res.offline ? `${match.nombre} no está conectado. La invitación queda guardada y le hemos avisado.` : `Invitación a jugar enviada a ${match.nombre}.`, 'info');
+        if(currentChatMatch?.id===match.id){setTimeout(()=>abrirChat(match.id),120);actualizarEstadoJuegoChat(match.id);}
       });
     }
 
@@ -3350,6 +3361,7 @@
       const card=$('chatGameHistory');if(!card)return;
       const partnerId=currentChatMatch?.id||'';const history=partnerId?gameHistoryByPartner.get(partnerId):null;
       const completed=Number(history?.completed||0);
+      if(history?.active)$('chatActiveGame')?.classList.remove('hidden');
       if(!completed){card.classList.add('hidden');return;}
       const totals=history?.totals||{};const recent=Array.isArray(history?.recent)?history.recent:[];const last=recent[0]||null;
       $('chatGameHistoryTitle').textContent=completed===1?'Ya habéis jugado 1 partida':`Ya habéis jugado ${completed} partidas`;
@@ -3374,10 +3386,11 @@
       $('chatStarters').classList.toggle('hidden', chatMessagesFor(match.id).length > 0);
       renderChatGameHistory();
       cargarHistorialJuegoMatch(match.id,{silencioso:true});
+      actualizarEstadoJuegoChat(match.id);
       showScreen('pantallaChat');
       $('chatSafetyTray').classList.add('hidden');
       socket.emit('dating_chat_history', { oponenteID:match.id }, (res) => {
-        if (res && res.ok) datingChats.set(match.id, Array.isArray(res.messages) ? res.messages : []);
+        if (res && res.ok) datingChats.set(match.id, Array.isArray(res.items) ? res.items : (Array.isArray(res.messages) ? res.messages.map(x=>({...x,kind:'message'})) : []));
         renderChat();
         $('chatStarters').classList.toggle('hidden', chatMessagesFor(match.id).length > 0);
       });
@@ -3394,6 +3407,45 @@
       invitarJuego(currentChatMatch.id, mazo);
     }
 
+    function sugerirPreguntaChat() {
+      if(!currentChatMatch)return;
+      const input=$('chatInput');const prompt=chatPromptPool[Math.floor(Math.random()*chatPromptPool.length)];
+      input.value=prompt;input.focus();input.setSelectionRange?.(prompt.length,prompt.length);
+    }
+
+    function lanzarRetoRapido() {
+      if(!currentChatMatch)return;
+      socket.emit('dating_quick_challenge',{oponenteID:currentChatMatch.id},res=>{
+        if(!res?.ok)return mostrarToast(res?.error||'No se pudo lanzar el reto rápido.','warn');
+        mostrarToast('⚡ Reto A o B lanzado. Los dos respondéis sin ver la elección del otro.','success');
+      });
+    }
+
+    function responderRetoRapido(challengeId,choice) {
+      socket.emit('dating_quick_answer',{challengeId,choice},res=>{if(!res?.ok)mostrarToast(res?.error||'No se pudo guardar tu respuesta.','warn');else mostrarToast(res.challenge?.revealed?(res.challenge?.matched?'✨ ¡Habéis coincidido!':'👀 Respuestas distintas. Ahí hay conversación.'):'Respuesta bloqueada. Esperando a tu Match…','success');});
+    }
+
+    function aceptarInvitacionChat(inviteId,fromUser) {
+      const partnerId=fromUser||currentChatMatch?.id;if(!partnerId)return;
+      gamePartnerProfile=datingMatches.find(m=>String(m.id)===String(partnerId))||currentChatMatch||null;
+      socket.emit('dating_game_accept',{oponenteID:partnerId,inviteId},res=>{if(!res?.ok)return mostrarToast(res?.error||'No se pudo iniciar la partida.',res?.offline?'info':'warn');});
+    }
+
+    function rechazarInvitacionChat(inviteId,fromUser) {
+      const partnerId=fromUser||currentChatMatch?.id;if(!partnerId)return;
+      socket.emit('dating_game_reject',{oponenteID:partnerId,inviteId},res=>{if(!res?.ok)mostrarToast(res?.error||'No se pudo rechazar la invitación.','warn');});
+    }
+
+    function actualizarEstadoJuegoChat(partnerId=currentChatMatch?.id) {
+      const card=$('chatActiveGame');if(!card||!partnerId){card?.classList.add('hidden');return;}
+      socket.emit('dating_game_status',{oponenteID:partnerId},res=>{if(currentChatMatch?.id!==partnerId)return;card.classList.toggle('hidden',!res?.ok||!res.active);});
+    }
+
+    function reanudarJuegoDesdeChat() {
+      if(!currentChatMatch)return;
+      socket.emit('dating_game_resume',{oponenteID:currentChatMatch.id},res=>{if(!res?.ok)mostrarToast(res?.error||'No hay una partida activa para reanudar.','warn');});
+    }
+
     function chatMessagesFor(id) {
       if (!datingChats.has(id)) datingChats.set(id, []);
       return datingChats.get(id);
@@ -3408,6 +3460,22 @@
       if (currentChatMatch && currentChatMatch.id === partnerId && !$('pantallaChat').classList.contains('hidden')) renderChat();
     }
 
+    function renderChatEvent(item) {
+      const wrap=document.createElement('article');wrap.className=`chat-event-card chat-event-${item.type||'system'}`;const p=item.payload||{};
+      if(item.type==='quick_challenge'){
+        const mine=p.mine||'',revealed=Boolean(p.revealed);wrap.innerHTML=`<div class="chat-event-kicker">⚡ A O B · RESPUESTAS OCULTAS</div><strong>${escapeHtml(p.prompt||'Reto rápido')}</strong><div class="quick-choice-grid"><button ${mine?'disabled':''} data-choice="a">${escapeHtml(p.a||'A')}</button><button ${mine?'disabled':''} data-choice="b">${escapeHtml(p.b||'B')}</button></div><small class="chat-event-meta">${revealed?(p.matched?'✨ Habéis elegido lo mismo.':'👀 Habéis elegido diferente.'):mine?(p.otherAnswered?'Tu Match ya respondió · toca revelar cuando ambos estén listos.':'Tu respuesta está bloqueada · esperando a tu Match…'):(p.otherAnswered?'Tu Match ya respondió. Te toca.':'Elegid sin ver la respuesta del otro.')}</small>${revealed?`<div class="quick-reveal"><span>Tú: <b>${escapeHtml((mine==='a'?p.a:p.b)||'')}</b></span><span>${escapeHtml(currentChatMatch?.nombre||'Match')}: <b>${escapeHtml((p.other==='a'?p.a:p.b)||'')}</b></span></div>`:''}`;
+        wrap.querySelectorAll('.quick-choice-grid button').forEach(btn=>btn.onclick=()=>responderRetoRapido(p.id,btn.dataset.choice));
+      }else if(item.type==='game_invite'){
+        const status=p.status||'pending',mine=Boolean(p.mine);const labels={pending:'Pendiente',accepted:'Aceptada',declined:'Rechazada',expired:'Caducada',superseded:'Sustituida'};
+        wrap.innerHTML=`<div class="chat-event-kicker">🎮 INVITACIÓN A JUGAR</div><strong>${mine?'Has invitado a jugar a':'Te han invitado a'} ${escapeHtml(p.deckLabel||'Rompehielos')}</strong><small class="chat-event-meta">${escapeHtml(labels[status]||status)}${status==='pending'?' · disponible durante 24 h':''}</small><div class="chat-event-actions"></div>`;
+        const actions=wrap.querySelector('.chat-event-actions');if(p.canAccept){const yes=document.createElement('button');yes.className='primary';yes.textContent='Aceptar y jugar';yes.onclick=()=>aceptarInvitacionChat(p.id,p.fromUser);const no=document.createElement('button');no.textContent='Ahora no';no.onclick=()=>rechazarInvitacionChat(p.id,p.fromUser);actions.append(yes,no);}else if(status==='pending'&&mine){const hint=document.createElement('span');hint.textContent='Esperando a tu Match';actions.append(hint);}
+      }else if(item.type==='game_result'){
+        wrap.innerHTML=`<div class="chat-event-kicker">🏁 PARTIDA TERMINADA</div><strong>${escapeHtml(p.deckLabel||'Partida')} · ${Number(p.turns||0)} turnos</strong><div class="game-result-mini"><span>✨ ${Number(p.coincidences||0)} coincidencias</span><span>🎯 ${Number(p.guessHits||0)} aciertos</span><span>❤️ ${Number(p.reactions||0)} reacciones</span></div><div class="chat-event-actions"><button class="primary">Jugar otra</button></div>`;
+        wrap.querySelector('button').onclick=()=>toggleChatGameTray();
+      }else{wrap.innerHTML=`<strong>${escapeHtml(p.title||'Actividad')}</strong>`;}
+      return wrap;
+    }
+
     function renderChat() {
       const box = $('chatMessages');
       if (!box || !currentChatMatch) return;
@@ -3415,10 +3483,11 @@
       box.innerHTML = '';
       if (!list.length) {
         const intro = document.createElement('div'); intro.className = 'chat-intro';
-        intro.innerHTML = `<span>✨</span><strong>Hiciste match con ${escapeHtml(currentChatMatch.nombre || 'esta persona')}</strong><small>No empieces con el típico “hola”. Usa una idea de abajo o lanza un juego.</small>`;
+        intro.innerHTML = `<span>✨</span><strong>Hiciste match con ${escapeHtml(currentChatMatch.nombre || 'esta persona')}</strong><small>Empieza con una pregunta, un A o B o una partida. V/R Match está hecho para evitar el típico “hola”.</small>`;
         box.appendChild(intro);
       }
       list.forEach(msg => {
+        if(msg.kind==='event'){box.appendChild(renderChatEvent(msg));return;}
         const row = document.createElement('div');
         row.className = `chat-bubble-row ${msg.from === currentUserId ? 'mine' : 'theirs'}`;
         const bubble = document.createElement('div'); bubble.className = 'chat-bubble'; bubble.textContent = msg.text || '';
@@ -3520,6 +3589,19 @@
       }
     });
 
+    socket.on('dating_chat_event',(item={})=>{
+      const partnerId=item.from===currentUserId?currentChatMatch?.id:(item.from||currentChatMatch?.id||'');
+      const matchId=currentChatMatch?.id||partnerId;if(!matchId)return;
+      guardarMensajeChat(matchId,item);if(item.type==='game_invite'||item.type==='game_result')actualizarEstadoJuegoChat(matchId);
+    });
+
+    socket.on('dating_chat_event_update',(item={})=>{
+      for(const [partnerId,list] of datingChats.entries()){
+        const idx=list.findIndex(x=>x.id===item.id);if(idx>=0){list[idx]=item;datingChats.set(partnerId,list);if(currentChatMatch?.id===partnerId)renderChat();return;}
+      }
+      if(currentChatMatch)guardarMensajeChat(currentChatMatch.id,item);
+    });
+
     socket.on('dating_message_removed', (data = {}) => {
       const id=String(data.id||'');
       if(!id)return;
@@ -3537,18 +3619,20 @@
       $('gameInviteModal').setAttribute('aria-hidden','false');
     });
 
-    function rechazarInvitacionJuego() {
+    function rechazarInvitacionJuego(soloCerrar=false) {
+      const data=pendingGameInvite;
       pendingGameInvite = null;
       $('gameInviteModal').classList.add('hidden');
       $('gameInviteModal').setAttribute('aria-hidden','true');
+      if(!soloCerrar&&data?.id&&data?.inviteId)socket.emit('dating_game_reject',{oponenteID:data.id,inviteId:data.inviteId},()=>{});
     }
 
     function aceptarInvitacionJuego() {
       if (!pendingGameInvite) return rechazarInvitacionJuego();
       const data = pendingGameInvite;
       gamePartnerProfile = datingMatches.find(m=>String(m.id)===String(data.id)) || null;
-      rechazarInvitacionJuego();
-      socket.emit('dating_game_accept', { oponenteID: data.id, mazo: data.mazo || 'rompehielos' }, (res) => {
+      rechazarInvitacionJuego(true);
+      socket.emit('dating_game_accept', { oponenteID: data.id, mazo: data.mazo || 'rompehielos', inviteId:data.inviteId||'' }, (res) => {
         if (res && !res.ok) mostrarToast(res.error || 'No se pudo iniciar la partida.', 'error');
       });
     }

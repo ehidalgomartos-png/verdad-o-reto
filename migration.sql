@@ -261,3 +261,49 @@ CREATE TABLE IF NOT EXISTS smart_push_log (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, kind TEXT NOT NULL, context_key TEXT NOT NULL DEFAULT '',
   notification_id TEXT REFERENCES notifications(id) ON DELETE SET NULL, created_at INTEGER NOT NULL, UNIQUE(user_id,kind,context_key)
 );
+
+-- V18.21 · Chat y Juegos 2.0
+CREATE TABLE IF NOT EXISTS game_invitations (
+  id TEXT PRIMARY KEY,
+  match_id TEXT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+  from_user TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  to_user TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  deck TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  responded_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_game_invites_pair ON game_invitations(match_id,status,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_game_invites_to ON game_invitations(to_user,status,expires_at);
+CREATE TABLE IF NOT EXISTS quick_challenges (
+  id TEXT PRIMARY KEY,
+  match_id TEXT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+  created_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  prompt TEXT NOT NULL,
+  option_a TEXT NOT NULL,
+  option_b TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at INTEGER NOT NULL,
+  closed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_quick_challenges_match ON quick_challenges(match_id,created_at DESC);
+CREATE TABLE IF NOT EXISTS quick_challenge_answers (
+  challenge_id TEXT NOT NULL REFERENCES quick_challenges(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  choice TEXT NOT NULL,
+  answered_at INTEGER NOT NULL,
+  PRIMARY KEY(challenge_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS chat_events (
+  id TEXT PRIMARY KEY,
+  match_id TEXT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+  actor_user TEXT REFERENCES users(id) ON DELETE SET NULL,
+  type TEXT NOT NULL,
+  related_id TEXT NOT NULL DEFAULT '',
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chat_events_match ON chat_events(match_id,created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_chat_events_related ON chat_events(type,related_id);
+

@@ -1,8 +1,8 @@
 {
   "name": "vr-match",
-  "version": "18.20.0",
+  "version": "18.21.0",
   "private": true,
-  "description": "V/R Match - push medible, horarios silenciosos y reactivación inteligente",
+  "description": "V/R Match - Chat y Juegos 2.0: rompehielos, retos rápidos e invitaciones persistentes",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

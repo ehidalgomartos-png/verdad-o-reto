@@ -99,7 +99,7 @@ test('healthz comprueba SQLite, almacenamiento y versión', async()=>{
   assert.equal(res.data.db,true);
   assert.equal(res.data.storage,true);
   assert.equal(res.data.version,APP_VERSION);
-  assert.equal(APP_VERSION,'18.20.0');
+  assert.equal(APP_VERSION,'18.21.0');
   assert.ok(res.headers.get('x-request-id'));
 });
 
@@ -276,4 +276,11 @@ test('backup restaurable, errores de servidor y diagnóstico admin', async()=>{
   const smtp=await api('/api/admin/system/smtp-test',{method:'POST',token,body:{password:'Clave-Segura-1816'}});
   assert.equal(smtp.status,503);
   assert.match(smtp.data.error,/SMTP/i);
+});
+
+
+test('V18.21 chat y juegos: tablas y timeline estructurado disponibles',()=>{
+  for(const table of ['game_invitations','quick_challenges','quick_challenge_answers','chat_events']){
+    const row=db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table);assert.equal(row?.name,table);
+  }
 });

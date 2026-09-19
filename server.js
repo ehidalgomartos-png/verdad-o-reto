@@ -30,8 +30,8 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.20.0';
-const LEGAL_VERSION = '2026-09-18';
+const APP_VERSION = '18.21.0';
+const LEGAL_VERSION = '2026-09-19';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -519,6 +519,54 @@ CREATE INDEX IF NOT EXISTS idx_security_events_user ON security_events(user_id,c
 CREATE INDEX IF NOT EXISTS idx_security_events_kind ON security_events(kind,created_at DESC);
 `);
 
+// V18.21 · Chat y Juegos 2.0: invitaciones persistentes, timeline enriquecido y retos A/B.
+db.exec(`
+CREATE TABLE IF NOT EXISTS game_invitations (
+  id TEXT PRIMARY KEY,
+  match_id TEXT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+  from_user TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  to_user TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  deck TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  responded_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_game_invites_pair ON game_invitations(match_id,status,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_game_invites_to ON game_invitations(to_user,status,expires_at);
+CREATE TABLE IF NOT EXISTS quick_challenges (
+  id TEXT PRIMARY KEY,
+  match_id TEXT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+  created_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  prompt TEXT NOT NULL,
+  option_a TEXT NOT NULL,
+  option_b TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at INTEGER NOT NULL,
+  closed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_quick_challenges_match ON quick_challenges(match_id,created_at DESC);
+CREATE TABLE IF NOT EXISTS quick_challenge_answers (
+  challenge_id TEXT NOT NULL REFERENCES quick_challenges(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  choice TEXT NOT NULL,
+  answered_at INTEGER NOT NULL,
+  PRIMARY KEY(challenge_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS chat_events (
+  id TEXT PRIMARY KEY,
+  match_id TEXT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+  actor_user TEXT REFERENCES users(id) ON DELETE SET NULL,
+  type TEXT NOT NULL,
+  related_id TEXT NOT NULL DEFAULT '',
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chat_events_match ON chat_events(match_id,created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_chat_events_related ON chat_events(type,related_id);
+`);
+
+
 db.exec(`
 CREATE TABLE IF NOT EXISTS launch_cities (
   slug TEXT PRIMARY KEY,
@@ -840,13 +888,27 @@ app.use(express.json({ limit: '9mb' }));
 const waitingPlayers = new Map();
 const rooms = new Map();
 const pendingGameInvites = new Map(); // `from:to` -> { from, to, mazo, expiresAt }
-const GAME_INVITE_TTL_MS = 5 * 60 * 1000;
+const GAME_INVITE_TTL_MS = 24 * 60 * 60 * 1000;
 const onlineUsers = new Map(); // userId -> Set(socket.id)
 
 const GAME_TARGET_TURNS = 8;
 const SYNC_ROUND_TTL_MS = 95 * 1000;
 const GAME_RECONNECT_GRACE_MS = Math.max(15000,Math.min(120000,(Number(process.env.VR_GAME_RECONNECT_GRACE_SECONDS)||45)*1000));
 const VALID_SYNC_MODES = new Set(['choice','guess','secret']);
+const CHAT_QUICK_CHALLENGES = [
+  {prompt:'Primera cita improvisada: ¿qué eliges?',a:'Algo tranquilo',b:'Una aventura'},
+  {prompt:'¿Qué te gana antes?',a:'Que me hagan reír',b:'Una conversación profunda'},
+  {prompt:'Plan de domingo ideal',a:'Sofá y peli',b:'Salir sin plan'},
+  {prompt:'Para conocernos mejor',a:'Preguntas directas',b:'Ir descubriendo poco a poco'},
+  {prompt:'Si viajamos mañana',a:'Mar',b:'Montaña'},
+  {prompt:'¿Qué pesa más en un match?',a:'La química',b:'Tener cosas en común'},
+  {prompt:'Una noche libre',a:'Cena larga',b:'Concierto o fiesta'},
+  {prompt:'Cuando te gusta alguien',a:'Lo demuestro',b:'Voy con calma'},
+  {prompt:'Para romper el hielo',a:'Pregunta atrevida',b:'Reto divertido'},
+  {prompt:'¿Qué prefieres recibir?',a:'Un audio espontáneo',b:'Un mensaje bien pensado'},
+  {prompt:'Cita sorpresa',a:'Que me la preparen',b:'Prepararla juntos'},
+  {prompt:'¿Qué recuerdas más de alguien?',a:'Cómo me hizo sentir',b:'Lo que hablamos'}
+];
 const SYNC_GAME_CARDS = {
   rompehielos: {
     choice: [
@@ -2602,11 +2664,11 @@ function activationState(userId) {
   const basicProfile=Boolean(profile && String(profile.nombre||'').trim().length>=2 && Number(profile.edad)>=18);
   const hasPhoto=photos.length>0;
   const hasAbout=Boolean(profile && String(profile.bio||'').trim().length>=20 && interests.length>=2);
-  const growthRows=db.prepare(`SELECT event_name FROM growth_events WHERE user_id=? AND event_name IN ('first_like','first_match','first_message')`).all(userId);
+  const growthRows=db.prepare(`SELECT event_name FROM growth_events WHERE user_id=? AND event_name IN ('first_like','first_match','first_message','first_interaction')`).all(userId);
   const growthSet=new Set(growthRows.map(r=>r.event_name));
   const hasLike=growthSet.has('first_like') || Boolean(db.prepare('SELECT 1 FROM likes WHERE from_user=? LIMIT 1').get(userId));
   const hasMatch=growthSet.has('first_match') || Boolean(db.prepare('SELECT 1 FROM matches WHERE user1=? OR user2=? LIMIT 1').get(userId,userId));
-  const hasMessage=growthSet.has('first_message') || Boolean(db.prepare('SELECT 1 FROM messages WHERE from_user=? LIMIT 1').get(userId));
+  const hasMessage=growthSet.has('first_message') || growthSet.has('first_interaction') || Boolean(db.prepare('SELECT 1 FROM messages WHERE from_user=? LIMIT 1').get(userId)) || Boolean(db.prepare("SELECT 1 FROM chat_events WHERE actor_user=? AND type IN ('game_invite','quick_challenge') LIMIT 1").get(userId));
   const steps=[
     {key:'city',label:'Elige tu ciudad',description:'Nos ayuda a enseñarte comunidad y perfiles de tu zona.',complete:Boolean(city),action:'city'},
     {key:'profile',label:'Crea tu perfil',description:'Nombre, edad y preferencias básicas para empezar.',complete:basicProfile,action:'profile'},
@@ -2734,6 +2796,49 @@ function discoverFor(userId) {
     .map(item => item.profile);
 }
 
+
+function deckPublicLabel(deck){return validDeck(deck)==='parejas'?'Conóceme':(validDeck(deck)==='seccionXX'?'After Dark':'Rompehielos');}
+function chatEventInsert(matchId,actorUser,type,relatedId='',payload={}){
+  const id=safeId('cevt'),ts=now();
+  db.prepare('INSERT INTO chat_events(id,match_id,actor_user,type,related_id,payload_json,created_at) VALUES(?,?,?,?,?,?,?)')
+    .run(id,matchId,actorUser||null,cleanShortText(type,40),cleanShortText(relatedId,100),JSON.stringify(payload||{}),ts);
+  return id;
+}
+function quickChallengePublic(challengeId,viewerId){
+  const row=db.prepare('SELECT * FROM quick_challenges WHERE id=?').get(challengeId);if(!row)return null;
+  const answers=db.prepare('SELECT user_id,choice,answered_at FROM quick_challenge_answers WHERE challenge_id=?').all(challengeId);
+  const mine=answers.find(a=>a.user_id===viewerId)||null,other=answers.find(a=>a.user_id!==viewerId)||null,both=answers.length>=2;
+  return {id:row.id,prompt:row.prompt,a:row.option_a,b:row.option_b,status:row.status,createdAt:row.created_at,
+    mine:mine?.choice||'',otherAnswered:Boolean(other),other:both?(other?.choice||''):'',revealed:both,matched:both?mine?.choice===other?.choice:null};
+}
+function gameInvitationPublic(inviteId,viewerId){
+  const row=db.prepare('SELECT * FROM game_invitations WHERE id=?').get(inviteId);if(!row)return null;
+  let status=row.status;if(status==='pending'&&row.expires_at<=now())status='expired';
+  return {id:row.id,deck:validDeck(row.deck),deckLabel:deckPublicLabel(row.deck),status,fromUser:row.from_user,toUser:row.to_user,
+    mine:row.from_user===viewerId,canAccept:row.to_user===viewerId&&status==='pending',expiresAt:row.expires_at,createdAt:row.created_at};
+}
+function chatEventPublic(row,viewerId){
+  if(!row)return null;const base={id:row.id,kind:'event',type:row.type,from:row.actor_user||'',ts:row.created_at,payload:safeJsonObject(row.payload_json)};
+  if(row.type==='quick_challenge')base.payload=quickChallengePublic(row.related_id,viewerId)||base.payload;
+  if(row.type==='game_invite')base.payload=gameInvitationPublic(row.related_id,viewerId)||base.payload;
+  return base;
+}
+function chatTimelineFor(matchId,viewerId){
+  const messages=db.prepare('SELECT id,from_user AS `from`,text,created_at AS ts FROM messages WHERE match_id=? ORDER BY created_at ASC LIMIT 180').all(matchId)
+    .map(x=>({...x,kind:'message'}));
+  const events=db.prepare('SELECT * FROM chat_events WHERE match_id=? ORDER BY created_at ASC LIMIT 120').all(matchId).map(x=>chatEventPublic(x,viewerId)).filter(Boolean);
+  return [...messages,...events].sort((a,b)=>Number(a.ts||0)-Number(b.ts||0)).slice(-220);
+}
+function chatEventByRelated(matchId,type,relatedId,viewerId){
+  const row=db.prepare('SELECT * FROM chat_events WHERE match_id=? AND type=? AND related_id=? ORDER BY created_at DESC LIMIT 1').get(matchId,type,relatedId);
+  return chatEventPublic(row,viewerId);
+}
+function emitChatRelatedUpdate(match,type,relatedId){
+  if(!match)return;for(const uid of [match.user1,match.user2]){const item=chatEventByRelated(match.id,type,relatedId,uid);if(item)emitToUser(uid,'dating_chat_event_update',item);}
+}
+function activeRoomForPair(userId,partnerId){
+  for(const [roomId,room] of rooms){if(!room?.dating)continue;const ids=roomUserIds(room);if(ids.includes(userId)&&ids.includes(partnerId))return {roomId,room};}return null;
+}
 function matchPartnerRow(match, userId) {
   const partnerId = match.user1 === userId ? match.user2 : match.user1;
   const partnerUser = db.prepare('SELECT status FROM users WHERE id=?').get(partnerId);
@@ -3156,6 +3261,9 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
     const growthEvents=db.prepare('SELECT event_name,source,medium,campaign,content,term,landing_path,page,metadata_json,created_at FROM growth_events WHERE user_id=? ORDER BY created_at ASC').all(userId).map(e=>({...e,metadata:safeJsonObject(e.metadata_json),metadata_json:undefined}));
     const gameSessions=db.prepare(`SELECT id,match_id,user1,user2,deck,started_at,core_completed_at,ended_at,status,finish_reason,total_turns,sync_rounds,coincidences,guess_hits,reactions,personalized_sync,extended,duration_seconds
       FROM game_sessions WHERE user1=? OR user2=? ORDER BY started_at ASC`).all(userId,userId).map(g=>({...g,partner_id:g.user1===userId?g.user2:g.user1,user1:undefined,user2:undefined}));
+    const quickChallenges=db.prepare(`SELECT q.id,q.match_id,q.created_by,q.prompt,q.option_a,q.option_b,q.status,q.created_at,q.closed_at FROM quick_challenges q JOIN matches m ON m.id=q.match_id WHERE m.user1=? OR m.user2=? ORDER BY q.created_at ASC`).all(userId,userId);
+    const quickAnswers=db.prepare('SELECT challenge_id,choice,answered_at FROM quick_challenge_answers WHERE user_id=? ORDER BY answered_at ASC').all(userId);
+    const gameInvitations=db.prepare(`SELECT id,match_id,from_user,to_user,deck,status,created_at,expires_at,responded_at FROM game_invitations WHERE from_user=? OR to_user=? ORDER BY created_at ASC`).all(userId,userId).map(x=>({...x,direction:x.from_user===userId?'sent':'received',from_user:undefined,to_user:undefined}));
     const matches=db.prepare('SELECT * FROM matches WHERE user1=? OR user2=? ORDER BY created_at ASC').all(userId,userId).map(m=>{
       const partnerId=m.user1===userId?m.user2:m.user1;
       const partner=publicProfile(getProfile(partnerId));
@@ -3171,7 +3279,7 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
       creatorAttribution:creatorAttribution?{code:creatorAttribution.code,attributedAt:creatorAttribution.attributed_at}:null,
       acquisition:growthAcquisition,growthEvents,
       communityCity:communityCityForUser(userId),verification,securityEvents,
-      likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,notifications,retentionEmails,pushHistory,pushSubscriptions,gameSessions,matches
+      likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,notifications,retentionEmails,pushHistory,pushSubscriptions,gameSessions,gameInvitations,quickChallenges,quickAnswers,matches
     };
     res.setHeader('Content-Type','application/json; charset=utf-8');
     res.setHeader('Content-Disposition','attachment; filename="vr-match-mis-datos.json"');
@@ -3980,6 +4088,9 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
     messages: db.prepare('SELECT COUNT(*) n FROM messages WHERE created_at>=?').get(since).n,
     gamesStarted: db.prepare('SELECT COUNT(*) n FROM game_sessions WHERE started_at>=?').get(since).n,
     gamesCompleted: db.prepare("SELECT COUNT(*) n FROM game_sessions WHERE status='completed' AND ended_at>=?").get(since).n,
+    quickChallenges: db.prepare('SELECT COUNT(*) n FROM quick_challenges WHERE created_at>=?').get(since).n,
+    gameInvites: db.prepare('SELECT COUNT(*) n FROM game_invitations WHERE created_at>=?').get(since).n,
+    gameInvitesAccepted: db.prepare("SELECT COUNT(*) n FROM game_invitations WHERE status='accepted' AND created_at>=?").get(since).n,
     reports: db.prepare('SELECT COUNT(*) n FROM reports WHERE created_at>=?').get(since).n,
     feedback: db.prepare('SELECT COUNT(*) n FROM feedback WHERE created_at>=?').get(since).n,
     clientErrors: db.prepare('SELECT COUNT(*) n FROM client_errors WHERE created_at>=?').get(since).n,
@@ -4005,6 +4116,7 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
     liked: db.prepare(`SELECT COUNT(*) n FROM users u WHERE ${cohortBase} AND EXISTS(SELECT 1 FROM likes l WHERE l.from_user=u.id)`).get(since).n,
     matched: db.prepare(`SELECT COUNT(*) n FROM users u WHERE ${cohortBase} AND EXISTS(SELECT 1 FROM matches m WHERE m.user1=u.id OR m.user2=u.id)`).get(since).n,
     messaged: db.prepare(`SELECT COUNT(*) n FROM users u WHERE ${cohortBase} AND EXISTS(SELECT 1 FROM messages m WHERE m.from_user=u.id)`).get(since).n,
+    interacted: db.prepare(`SELECT COUNT(*) n FROM users u WHERE ${cohortBase} AND (EXISTS(SELECT 1 FROM messages m WHERE m.from_user=u.id) OR EXISTS(SELECT 1 FROM chat_events ce WHERE ce.actor_user=u.id AND ce.type IN ('game_invite','quick_challenge')))`).get(since).n,
     played: db.prepare(`SELECT COUNT(*) n FROM users u WHERE ${cohortBase} AND EXISTS(SELECT 1 FROM game_sessions g WHERE g.user1=u.id OR g.user2=u.id)`).get(since).n,
     shared: db.prepare(`SELECT COUNT(DISTINCT e.user_id) n FROM user_referral_events e JOIN users u ON u.id=e.user_id WHERE u.created_at>=? AND e.event_type LIKE 'SHARE_%'`).get(since).n
   };
@@ -4631,7 +4743,7 @@ function broadcastLobby() {
 }
 function roomUserIds(room) {
   if(!room)return [];
-  return [...room.players].map(sid=>roomSocket(room,sid)?.userId).filter(Boolean);
+  return [...room.players].map(sid=>room.userIds?.[sid]||roomSocket(room,sid)?.userId).filter(Boolean);
 }
 function gameHistoryStart(room, matchId=null) {
   if(!room?.dating || room.historyId)return room?.historyId||null;
@@ -4668,6 +4780,13 @@ function gameHistoryFinalize(room, reason='finish') {
     completed?'completed':'abandoned',cleanShortText(reason,40)||'finish',ts,ts,Math.max(0,Math.round((ts-started)/1000)),room.historyId
   );
   room.historyFinalized=true;
+  if(completed&&room.matchId&&!db.prepare("SELECT 1 FROM chat_events WHERE match_id=? AND type='game_result' AND related_id=? LIMIT 1").get(room.matchId,room.historyId)){
+    const totalTurns=Object.values(room.game?.turns||{}).reduce((sum,n)=>sum+(Number(n)||0),0);
+    const payload={deck:validDeck(room.mazo),deckLabel:deckPublicLabel(room.mazo),turns:totalTurns,coincidences:Number(room.game?.coincidences||0),guessHits:Number(room.game?.guessHits||0),reactions:Number(room.game?.reactions||0),extended:Boolean(room.game?.extended),durationSeconds:Math.max(0,Math.round((ts-started)/1000))};
+    const eventId=chatEventInsert(room.matchId,null,'game_result',room.historyId,payload);
+    const match=db.prepare('SELECT * FROM matches WHERE id=?').get(room.matchId);
+    if(match){for(const uid of [match.user1,match.user2]){const item=chatEventByRelated(room.matchId,'game_result',room.historyId,uid);if(item)emitToUser(uid,'dating_chat_event',item);}}
+  }
 }
 function gameHistoryForPair(userId, partnerId) {
   const [user1,user2]=pair(userId,partnerId);
@@ -4682,12 +4801,13 @@ function gameHistoryForPair(userId, partnerId) {
     SUM(CASE WHEN status='completed' THEN reactions ELSE 0 END) AS reactions,
     SUM(CASE WHEN status='completed' THEN personalized_sync ELSE 0 END) AS personalized_sync
     FROM game_sessions WHERE user1=? AND user2=?`).get(user1,user2)||{};
-  const recent=db.prepare(`SELECT id,deck,started_at,ended_at,duration_seconds,total_turns,sync_rounds,coincidences,guess_hits,reactions,personalized_sync,extended
-    FROM game_sessions WHERE user1=? AND user2=? AND status='completed' ORDER BY ended_at DESC LIMIT 6`).all(user1,user2);
+  const recent=db.prepare(`SELECT id,deck,status,finish_reason,started_at,ended_at,duration_seconds,total_turns,sync_rounds,coincidences,guess_hits,reactions,personalized_sync,extended
+    FROM game_sessions WHERE user1=? AND user2=? ORDER BY COALESCE(ended_at,started_at) DESC LIMIT 8`).all(user1,user2);
+  const activeRoom=activeRoomForPair(userId,partnerId);
   return {
-    started:Number(aggregate.started||0),completed:Number(aggregate.completed||0),lastPlayedAt:Number(aggregate.last_played_at||0)||null,
+    started:Number(aggregate.started||0),completed:Number(aggregate.completed||0),active:Boolean(activeRoom),lastPlayedAt:Number(aggregate.last_played_at||0)||null,
     totals:{turns:Number(aggregate.total_turns||0),syncRounds:Number(aggregate.sync_rounds||0),coincidences:Number(aggregate.coincidences||0),guessHits:Number(aggregate.guess_hits||0),reactions:Number(aggregate.reactions||0),personalizedSync:Number(aggregate.personalized_sync||0)},
-    recent:recent.map(row=>({id:row.id,deck:validDeck(row.deck),startedAt:row.started_at,endedAt:row.ended_at,durationSeconds:Number(row.duration_seconds||0),turns:Number(row.total_turns||0),syncRounds:Number(row.sync_rounds||0),coincidences:Number(row.coincidences||0),guessHits:Number(row.guess_hits||0),reactions:Number(row.reactions||0),personalizedSync:Number(row.personalized_sync||0),extended:Boolean(row.extended)}))
+    recent:recent.map(row=>({id:row.id,deck:validDeck(row.deck),status:row.status,finishReason:row.finish_reason||'',startedAt:row.started_at,endedAt:row.ended_at,durationSeconds:Number(row.duration_seconds||0),turns:Number(row.total_turns||0),syncRounds:Number(row.sync_rounds||0),coincidences:Number(row.coincidences||0),guessHits:Number(row.guess_hits||0),reactions:Number(row.reactions||0),personalizedSync:Number(row.personalized_sync||0),extended:Boolean(row.extended)}))
   };
 }
 
@@ -5106,9 +5226,9 @@ io.on('connection', socket => {
 
   socket.on('dating_chat_history',(data={},ack)=>{
     const done=typeof ack==='function'?ack:()=>{}; const target=String(data.oponenteID||''); const match=getActiveMatch(userId,target);
-    if(!match)return done({ok:false,error:'Ese match ya no está disponible.',messages:[]});
-    const messages=db.prepare('SELECT * FROM (SELECT id,from_user AS `from`,text,created_at AS ts FROM messages WHERE match_id=? ORDER BY created_at DESC LIMIT 150) ORDER BY ts ASC').all(match.id);
-    done({ok:true,messages});
+    if(!match)return done({ok:false,error:'Ese match ya no está disponible.',messages:[],items:[]});
+    const items=chatTimelineFor(match.id,userId);const messages=items.filter(x=>x.kind==='message');
+    done({ok:true,messages,items});
   });
 
   socket.on('dating_chat_send',(data={},ack)=>{
@@ -5133,29 +5253,89 @@ io.on('connection', socket => {
     done({ok:true,id:message.id});
   });
 
+  socket.on('dating_quick_challenge',(data={},ack)=>{
+    const done=typeof ack==='function'?ack:()=>{};const target=String(data.oponenteID||'');const match=getActiveMatch(userId,target);
+    if(!match||blockedEitherWay(userId,target))return done({ok:false,error:'Ese match ya no está disponible.'});
+    if(!allowAction(`quick:${userId}`,12,60*60*1000))return done({ok:false,error:'Has lanzado bastantes retos rápidos. Espera un poco.'});
+    const preset=CHAT_QUICK_CHALLENGES[Math.floor(Math.random()*CHAT_QUICK_CHALLENGES.length)];const id=safeId('quick'),ts=now();
+    db.prepare('INSERT INTO quick_challenges(id,match_id,created_by,prompt,option_a,option_b,status,created_at) VALUES(?,?,?,?,?,?,?,?)')
+      .run(id,match.id,userId,preset.prompt,preset.a,preset.b,'active',ts);
+    chatEventInsert(match.id,userId,'quick_challenge',id,{prompt:preset.prompt,a:preset.a,b:preset.b});
+    recordFirstUserGrowthEvent(userId,'first_interaction');
+    const actor=publicProfile(getProfile(userId));
+    const notification=createNotification(target,'message','⚡ Reto rápido',`${actor?.nombre||'Tu match'} te ha lanzado un A o B.`,{partnerId:userId,matchId:match.id,quickChallengeId:id},userId);
+    for(const uid of [match.user1,match.user2]){const item=chatEventByRelated(match.id,'quick_challenge',id,uid);if(item)emitToUser(uid,'dating_chat_event',item);}
+    done({ok:true,challenge:quickChallengePublic(id,userId),notificationId:notification?.id||''});
+  });
+
+  socket.on('dating_quick_answer',(data={},ack)=>{
+    const done=typeof ack==='function'?ack:()=>{};const challengeId=String(data.challengeId||'');const choice=['a','b'].includes(String(data.choice||''))?String(data.choice):'';
+    if(!challengeId||!choice)return done({ok:false,error:'Respuesta no válida.'});
+    const q=db.prepare('SELECT * FROM quick_challenges WHERE id=?').get(challengeId);if(!q)return done({ok:false,error:'Ese reto ya no está disponible.'});
+    const match=db.prepare('SELECT * FROM matches WHERE id=? AND active=1').get(q.match_id);if(!match||![match.user1,match.user2].includes(userId)||blockedEitherWay(match.user1,match.user2))return done({ok:false,error:'Ese reto ya no está disponible.'});
+    const inserted=db.prepare('INSERT OR IGNORE INTO quick_challenge_answers(challenge_id,user_id,choice,answered_at) VALUES(?,?,?,?)').run(challengeId,userId,choice,now());
+    if(!inserted.changes)return done({ok:false,error:'Tu respuesta ya estaba bloqueada.'});
+    const count=Number(db.prepare('SELECT COUNT(*) n FROM quick_challenge_answers WHERE challenge_id=?').get(challengeId)?.n||0);if(count>=2)db.prepare("UPDATE quick_challenges SET status='completed',closed_at=? WHERE id=?").run(now(),challengeId);
+    recordFirstUserGrowthEvent(userId,'first_interaction');emitChatRelatedUpdate(match,'quick_challenge',challengeId);
+    done({ok:true,challenge:quickChallengePublic(challengeId,userId)});
+  });
+
+  socket.on('dating_game_status',(data={},ack)=>{
+    const done=typeof ack==='function'?ack:()=>{};const target=String(data.oponenteID||'');if(!getActiveMatch(userId,target))return done({ok:false,error:'Ese match ya no está disponible.'});
+    const active=activeRoomForPair(userId,target);let resume=null;
+    if(active){let sid=[...active.room.players].find(x=>roomUserId(active.room,x)===userId)||'';if(sid&&sid===socket.id)resume=gameResumePayload(active.room,sid);}
+    const pending=db.prepare("SELECT id FROM game_invitations WHERE match_id=? AND status='pending' AND expires_at>? ORDER BY created_at DESC LIMIT 1").get(getActiveMatch(userId,target).id,now());
+    done({ok:true,active:Boolean(active),resume,pendingInvite:pending?gameInvitationPublic(pending.id,userId):null});
+  });
+
+  socket.on('dating_game_resume',(data={},ack)=>{
+    const done=typeof ack==='function'?ack:()=>{};const target=String(data.oponenteID||'');const active=activeRoomForPair(userId,target);
+    if(!active)return done({ok:false,error:'No hay una partida activa con este match.'});
+    let sid=[...active.room.players].find(x=>roomUserId(active.room,x)===userId)||'';
+    if(!sid)return done({ok:false,error:'No se pudo recuperar tu sitio en la partida.'});
+    if(sid!==socket.id){const pending=active.room.reconnects?.[userId];if(pending){resumeRoomForSocket(socket);sid=socket.id;}}
+    const payload=gameResumePayload(active.room,sid);socket.emit('vr_game_resumed',payload);done({ok:true,roomId:active.roomId});
+  });
+
   socket.on('dating_game_invite',(data={},ack)=>{
-    const done=typeof ack==='function'?ack:()=>{}; const target=String(data.oponenteID||''); const opponent=socketForUser(target);
-    if(!getActiveMatch(userId,target)||blockedEitherWay(userId,target))return done({ok:false,error:'Solo puedes jugar con un match activo.'});
+    const done=typeof ack==='function'?ack:()=>{}; const target=String(data.oponenteID||''); const opponent=socketForUser(target);const match=getActiveMatch(userId,target);
+    if(!match||blockedEitherWay(userId,target))return done({ok:false,error:'Solo puedes jugar con un match activo.'});
+    if(!allowAction(`gameinvite:${userId}`,20,60*60*1000))return done({ok:false,error:'Has enviado bastantes invitaciones. Espera un poco.'});
     const targetProfile=getProfile(target); if(targetProfile?.privacy?.allowGameInvites===false)return done({ok:false,error:'Este match ha desactivado las invitaciones a jugar.'});
-    const me=publicProfile(getProfile(userId)); const mazo=validDeck(data.mazo);
-    if(opponent){
-      pendingGameInvites.set(gameInviteKey(userId,target),{from:userId,to:target,mazo,expiresAt:now()+GAME_INVITE_TTL_MS});
-      emitToUser(target,'dating_game_invite',{...me,mazo});
-    }
-    const inviteNotification=createNotification(target,'game_invite','Invitación a jugar',`${me?.nombre||'Tu match'} quiere romper el hielo contigo.`,{partnerId:userId,mazo,expiresAt:opponent?now()+GAME_INVITE_TTL_MS:null,offline:!opponent},userId);
-    if(!opponent && inviteNotification){
-      setImmediate(()=>sendGameInviteEmail(target,me,inviteNotification.id,mazo).catch(e=>console.warn('Email invitación a jugar:',e.message)));
-    }
-    done({ok:true,offline:!opponent});
+    if(activeRoomForPair(userId,target))return done({ok:false,active:true,error:'Ya tenéis una partida en curso. Continúala desde el chat.'});
+    if(socket.room||opponent?.room)return done({ok:false,error:'Uno de los dos ya está en otra partida. Terminadla antes de empezar una nueva.'});
+    const me=publicProfile(getProfile(userId)); const mazo=validDeck(data.mazo),ts=now(),expiresAt=ts+GAME_INVITE_TTL_MS,id=safeId('ginv');
+    const superseded=db.prepare("SELECT id FROM game_invitations WHERE match_id=? AND status='pending'").all(match.id);
+    db.prepare("UPDATE game_invitations SET status='superseded',responded_at=? WHERE match_id=? AND status='pending'").run(ts,match.id);
+    for(const oldInvite of superseded)emitChatRelatedUpdate(match,'game_invite',oldInvite.id);
+    db.prepare('INSERT INTO game_invitations(id,match_id,from_user,to_user,deck,status,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)').run(id,match.id,userId,target,mazo,'pending',ts,expiresAt);
+    chatEventInsert(match.id,userId,'game_invite',id,{deck:mazo,deckLabel:deckPublicLabel(mazo),expiresAt});recordFirstUserGrowthEvent(userId,'first_interaction');
+    if(opponent){pendingGameInvites.set(gameInviteKey(userId,target),{id,from:userId,to:target,mazo,expiresAt});emitToUser(target,'dating_game_invite',{...me,mazo,inviteId:id,expiresAt});}
+    for(const uid of [match.user1,match.user2]){const item=chatEventByRelated(match.id,'game_invite',id,uid);if(item)emitToUser(uid,'dating_chat_event',item);}
+    const inviteNotification=createNotification(target,'game_invite','Invitación a jugar',`${me?.nombre||'Tu match'} quiere jugar a ${deckPublicLabel(mazo)} contigo.`,{partnerId:userId,matchId:match.id,mazo,inviteId:id,expiresAt,offline:!opponent},userId);
+    if(!opponent && inviteNotification)setImmediate(()=>sendGameInviteEmail(target,me,inviteNotification.id,mazo).catch(e=>console.warn('Email invitación a jugar:',e.message)));
+    done({ok:true,offline:!opponent,inviteId:id,expiresAt});
   });
 
   socket.on('dating_game_accept',(data={},ack)=>{
-    const done=typeof ack==='function'?ack:()=>{}; const target=String(data.oponenteID||''); const opponent=socketForUser(target);
-    if(!opponent||!getActiveMatch(userId,target)||blockedEitherWay(userId,target))return done({ok:false,error:'Ese match ya no está disponible.'});
-    const invite=getPendingGameInvite(target,userId);
-    if(!invite)return done({ok:false,error:'La invitación ha caducado o ya no está disponible.'});
-    pendingGameInvites.delete(gameInviteKey(target,userId));
-    const salaID=createDatingRoom(opponent,socket,invite.mazo);done({ok:true,salaID});
+    const done=typeof ack==='function'?ack:()=>{}; const target=String(data.oponenteID||''); const opponent=socketForUser(target);const match=getActiveMatch(userId,target);
+    if(!match||blockedEitherWay(userId,target))return done({ok:false,error:'Ese match ya no está disponible.'});
+    const inviteId=String(data.inviteId||'');
+    const invite=inviteId?db.prepare("SELECT * FROM game_invitations WHERE id=? AND match_id=? AND to_user=?").get(inviteId,match.id,userId):db.prepare("SELECT * FROM game_invitations WHERE match_id=? AND from_user=? AND to_user=? AND status='pending' AND expires_at>? ORDER BY created_at DESC LIMIT 1").get(match.id,target,userId,now());
+    if(!invite||invite.status!=='pending'||invite.expires_at<=now())return done({ok:false,error:'La invitación ha caducado o ya no está disponible.'});
+    const currentRoom=activeRoomForPair(userId,target);if(currentRoom){socket.emit('vr_game_resumed',gameResumePayload(currentRoom.room,socket.id));return done({ok:true,resume:true,roomId:currentRoom.roomId});}
+    if(!opponent){const me=publicProfile(getProfile(userId));createNotification(target,'game_invite','Tu match quiere jugar',`${me?.nombre||'Tu match'} ha abierto tu invitación y quiere jugar.`,{partnerId:userId,matchId:match.id,inviteId:invite.id},userId);return done({ok:false,offline:true,error:'Tu match no está conectado ahora. Le hemos avisado para que vuelva.'});}
+    if(socket.room||opponent.room)return done({ok:false,error:'Uno de los dos está en otra partida ahora mismo.'});
+    db.prepare("UPDATE game_invitations SET status='accepted',responded_at=? WHERE id=?").run(now(),invite.id);pendingGameInvites.delete(gameInviteKey(target,userId));emitChatRelatedUpdate(match,'game_invite',invite.id);
+    recordFirstUserGrowthEvent(userId,'first_interaction');recordFirstUserGrowthEvent(target,'first_interaction');
+    const salaID=createDatingRoom(opponent,socket,invite.deck);done({ok:true,salaID});
+  });
+
+  socket.on('dating_game_reject',(data={},ack)=>{
+    const done=typeof ack==='function'?ack:()=>{};const target=String(data.oponenteID||'');const match=getActiveMatch(userId,target);if(!match)return done({ok:false,error:'Ese match ya no está disponible.'});
+    const inviteId=String(data.inviteId||'');const invite=inviteId?db.prepare("SELECT * FROM game_invitations WHERE id=? AND match_id=? AND to_user=?").get(inviteId,match.id,userId):db.prepare("SELECT * FROM game_invitations WHERE match_id=? AND from_user=? AND to_user=? AND status='pending' ORDER BY created_at DESC LIMIT 1").get(match.id,target,userId);
+    if(!invite||invite.status!=='pending')return done({ok:false,error:'La invitación ya no está pendiente.'});
+    db.prepare("UPDATE game_invitations SET status='declined',responded_at=? WHERE id=?").run(now(),invite.id);pendingGameInvites.delete(gameInviteKey(target,userId));emitChatRelatedUpdate(match,'game_invite',invite.id);done({ok:true});
   });
 
   // Compatibilidad con el modo de juego/lobby original.

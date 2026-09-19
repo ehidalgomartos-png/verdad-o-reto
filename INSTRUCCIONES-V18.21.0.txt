@@ -1,0 +1,10 @@
+V/R MATCH 18.21.0 — CHAT Y JUEGOS 2.0
+
+1. Haz copia de seguridad de la base de datos y uploads.
+2. Sustituye el código por esta versión sin borrar data/ ni uploads/.
+3. No requiere nuevas variables de entorno.
+4. Reinicia Render.
+5. Comprueba https://vrmatch.es/healthz -> 18.21.0.
+6. Realiza PRUEBA-V18.21.md con dos cuentas reales de prueba.
+
+Las tablas nuevas se crean automáticamente al arrancar.
