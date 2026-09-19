@@ -1,8 +1,8 @@
 {
   "name": "vr-match",
-  "version": "18.18.0",
+  "version": "18.19.0",
   "private": true,
-  "description": "V/R Match - matching inteligente explicable, afinidad por señales del producto y orden de perfiles sin inferencias sensibles",
+  "description": "V/R Match - viralidad 2.0 con recompensas de referidos, códigos de creadores y crecimiento por ciudades",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

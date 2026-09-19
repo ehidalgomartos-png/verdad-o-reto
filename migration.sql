@@ -206,3 +206,39 @@ CREATE TABLE IF NOT EXISTS server_errors (
 CREATE INDEX IF NOT EXISTS idx_server_errors_created ON server_errors(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_server_errors_fingerprint ON server_errors(fingerprint,created_at DESC);
 
+
+
+-- V18.19.0 — Viralidad 2.0
+CREATE TABLE IF NOT EXISTS referral_rewards (
+  user_id TEXT NOT NULL,
+  reward_key TEXT NOT NULL,
+  granted_at INTEGER NOT NULL,
+  consumed_at INTEGER,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY(user_id,reward_key)
+);
+CREATE INDEX IF NOT EXISTS idx_referral_rewards_available ON referral_rewards(user_id,consumed_at,granted_at);
+CREATE TABLE IF NOT EXISTS creator_codes (
+  code TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  campaign TEXT NOT NULL DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS creator_events (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  user_id TEXT,
+  session_id TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_creator_events_code ON creator_events(code,event_type,created_at DESC);
+CREATE TABLE IF NOT EXISTS creator_attributions (
+  user_id TEXT PRIMARY KEY,
+  code TEXT NOT NULL,
+  attributed_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_creator_attributions_code ON creator_attributions(code,attributed_at DESC);

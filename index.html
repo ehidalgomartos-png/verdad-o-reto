@@ -757,7 +757,7 @@
       <div class="account-email-card"><div><small>CORREO</small><strong id="settingsEmail">—</strong></div><span id="emailVerifiedBadge" class="security-badge">Pendiente</span></div>
       <button id="resendVerificationButton" class="mini-link account-resend" type="button" onclick="reenviarVerificacion()">Reenviar verificación</button>
       <div class="settings-section profile-verification-section"><strong>Verificación de perfil</strong><div id="profileVerificationState" class="profile-verification-state"><span>🛡️</span><div><b>Comprobando estado…</b><small>La verificación es opcional.</small></div></div><p class="account-legal-copy">Envía una selfie actual con el rostro visible. Solo la revisa moderación, no se publica y se elimina automáticamente al aprobar o rechazar la solicitud.</p><input id="verificationSelfieInput" class="hidden" type="file" accept="image/jpeg,image/png,image/webp" capture="user" onchange="prepararSelfieVerificacion(event)"><img id="verificationSelfiePreview" class="verification-selfie-preview hidden" alt="Vista previa privada de la selfie"><div class="verification-actions"><button id="verificationChooseButton" class="btn btn-secondary" type="button" onclick="$('verificationSelfieInput').click()">📷 Elegir selfie</button><button id="verificationSendButton" class="btn btn-primary hidden" type="button" onclick="enviarSelfieVerificacion()">Enviar a revisión</button></div></div>
-      <div class="settings-section referral-account-section"><strong>Invita a tus amigos</strong><p class="account-legal-copy">Tu enlace personal cuenta las altas que traes a VRMatch. Llega a 3 para desbloquear la insignia de Fundador.</p><button class="btn btn-secondary" type="button" onclick="cerrarCuenta();abrirInvitaAmigos()">🔥 Ver mi enlace de invitación</button></div>
+      <div class="settings-section referral-account-section"><strong>Invita y desbloquea recompensas</strong><p class="account-legal-copy">Tu enlace personal cuenta las altas que traes a VRMatch. Desbloquea insignias y Boost cuando tus invitados empiezan a usar la app.</p><button class="btn btn-secondary" type="button" onclick="cerrarCuenta();abrirInvitaAmigos()">🔥 Ver mi enlace de invitación</button></div>
       <div class="settings-section"><strong>Privacidad</strong><label class="setting-switch"><span><b>Mostrarme en Descubrir</b><small>Desactívalo para pausar temporalmente tu perfil.</small></span><input id="privacyDiscoverable" type="checkbox" checked></label><label class="setting-switch"><span><b>Mostrar estado online</b><small>Oculta el indicador de conexión a otros usuarios.</small></span><input id="privacyShowOnline" type="checkbox" checked></label><label class="setting-switch"><span><b>Permitir invitaciones a jugar</b><small>Tus matches podrán proponerte una partida.</small></span><input id="privacyGameInvites" type="checkbox" checked></label><button class="btn btn-secondary" type="button" onclick="guardarPrivacidad()">Guardar privacidad</button></div>
       <div id="pwaInstallSection" class="settings-section"><strong>Aplicación</strong><div class="pwa-install-card"><div class="pwa-install-icon">V/R</div><div><b>Instalar V/R Match</b><small id="pwaInstallStatus">Añade V/R Match a tu pantalla de inicio y ábrelo como una app.</small></div></div><button id="pwaInstallButton" class="btn btn-secondary" type="button" onclick="instalarPWA()">⇩ Instalar aplicación</button></div>
       <div class="settings-section"><strong>Cambiar contraseña</strong><div class="field"><input id="currentPassword" type="password" aria-label="Contraseña actual" maxlength="72" autocomplete="current-password" placeholder="Contraseña actual"></div><div class="field"><input id="newPassword" type="password" aria-label="Nueva contraseña" maxlength="72" autocomplete="new-password" placeholder="Nueva contraseña · mínimo 8"></div><button class="btn btn-secondary" type="button" onclick="cambiarPasswordCuenta()">Actualizar contraseña</button></div>
@@ -773,21 +773,24 @@
   <div id="inviteFriendsModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card account-modal-card invite-friends-card">
       <button class="modal-close" type="button" aria-label="Cerrar invitaciones" onclick="cerrarInvitaAmigos()">×</button>
-      <span class="eyebrow">CRECE VRMATCH</span><h3>Invita a 3 amigos 🔥</h3>
-      <p>Comparte tu enlace personal. Cada alta válida suma para desbloquear tu insignia de Fundador.</p>
+      <span class="eyebrow">CRECE VRMATCH</span><h3>Invita y sube de nivel 🔥</h3>
+      <p>Comparte tu enlace. Las altas cuentan para tus primeras insignias; desde 5, los premios dependen de invitados activos: ciudad elegida, foto y primer like.</p>
       <div class="referral-progress-card">
         <div class="referral-progress-head"><strong id="referralProgressText">0 de 3 altas</strong><span id="referralRewardBadge">FUNDADOR</span></div>
         <div class="referral-progress-track"><i id="referralProgressBar"></i></div>
         <small id="referralProgressHint">Te faltan 3 altas.</small>
       </div>
+      <div id="referralMilestones" class="referral-milestones"></div>
       <div class="referral-link-box"><small>TU ENLACE</small><strong id="referralLinkText">Preparando enlace…</strong></div>
-      <div class="referral-stats"><div><strong id="referralVisits">0</strong><small>visitas</small></div><div><strong id="referralSignups">0</strong><small>altas</small></div><div><strong id="referralShares">0</strong><small>compartidos</small></div></div>
+      <div class="referral-stats referral-stats-four"><div><strong id="referralVisits">0</strong><small>visitas</small></div><div><strong id="referralSignups">0</strong><small>altas</small></div><div><strong id="referralActive">0</strong><small>activos</small></div><div><strong id="referralShares">0</strong><small>compartidos</small></div></div>
+      <button id="referralBoostButton" class="btn btn-primary hidden" type="button" onclick="activarBoostReferral()">⚡ Usar Boost gratis</button>
+      <div class="referral-city-ranking"><div><strong>Ciudades que más crecen</strong><small>Altas de comunidad de los últimos 7 días.</small></div><div id="referralCityRanking" class="referral-city-list"><small>Cargando…</small></div></div>
       <div class="referral-actions">
         <button class="btn btn-whatsapp" type="button" onclick="compartirInvitacionWhatsApp()">WhatsApp</button>
         <button class="btn btn-secondary" type="button" onclick="compartirInvitacionNativa()">↗ Compartir</button>
         <button class="btn btn-ghost" type="button" onclick="copiarEnlaceReferral()">📋 Copiar enlace</button>
       </div>
-      <small class="referral-privacy-note">Solo contamos visitas, compartidos y altas atribuidas a tu código. No mostramos quién se registró.</small>
+      <small class="referral-privacy-note">Solo mostramos métricas agregadas. No revelamos quién se registró ni quién cuenta como invitado activo.</small>
     </div>
   </div>
 
@@ -1630,6 +1633,12 @@
     const screens = ['pantallaAuth','pantallaCiudad','pantallaPerfil','pantallaDescubrir','pantallaPlus','pantallaMatches','pantallaChat','pantallaAdmin','pantallaMazos','pantallaMenu','pantallaLobby','pantallaJuego'];
 
     const incomingReferralCode = String(params.get('ref') || '').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,24);
+    const incomingCreatorCode = String(params.get('creator') || '').toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,24);
+    if(incomingCreatorCode){
+      if(!authToken)localStorage.setItem('vr_creator_code',incomingCreatorCode);
+      const creatorVisitKey=`vr_creator_visit_${incomingCreatorCode}`;
+      if(!sessionStorage.getItem(creatorVisitKey)){sessionStorage.setItem(creatorVisitKey,'1');fetch('/api/creators/visit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:incomingCreatorCode,sessionId:growthSessionId()})}).catch(()=>{});}
+    }
     if (incomingReferralCode) {
       if(!authToken)localStorage.setItem('vr_member_ref', incomingReferralCode);
       const visitKey=`vr_ref_visit_${incomingReferralCode}`;
@@ -2290,12 +2299,25 @@
       if($('referralLinkText'))$('referralLinkText').textContent=r.url||'';
       if($('referralVisits'))$('referralVisits').textContent=String(r.visits||0);
       if($('referralSignups'))$('referralSignups').textContent=String(r.signups||0);
+      if($('referralActive'))$('referralActive').textContent=String(r.activeReferrals||0);
       if($('referralShares'))$('referralShares').textContent=String(r.shares||0);
       if($('referralProgressText'))$('referralProgressText').textContent=`${Math.min(r.goal||3,r.signups||0)} de ${r.goal||3} altas`;
       if($('referralProgressBar'))$('referralProgressBar').style.width=`${Math.min(100,Math.round((Number(r.signups||0)*100)/Math.max(1,Number(r.goal||3))))}%`;
-      if($('referralProgressHint'))$('referralProgressHint').textContent=r.rewardUnlocked?'🔥 Insignia de Fundador desbloqueada.':`Te faltan ${r.remaining||0} alta${Number(r.remaining||0)===1?'':'s'}.`;
+      if($('referralProgressHint'))$('referralProgressHint').textContent=r.rewardUnlocked?'🔥 Fundador desbloqueado. Sigue hasta 5 activos para ganar un Boost.':`Te faltan ${r.remaining||0} alta${Number(r.remaining||0)===1?'':'s'} para Fundador.`;
       if($('referralRewardBadge'))$('referralRewardBadge').classList.toggle('unlocked',Boolean(r.rewardUnlocked));
-      if($('inviteGrowthPill'))$('inviteGrowthPill').textContent=r.rewardUnlocked?'✓ Fundador':'↗ Invitar';
+      if($('inviteGrowthPill'))$('inviteGrowthPill').textContent=r.badges?.includes('Embajador')?'✓ Embajador':r.rewardUnlocked?'✓ Fundador':'↗ Invitar';
+      if($('referralMilestones'))$('referralMilestones').innerHTML=(r.milestones||[]).map(m=>`<article class="${m.unlocked?'unlocked':''}"><span>${m.unlocked?'✓':'○'}</span><div><b>${escapeHtml(m.label)}</b><small>${m.basis==='active'?`${Number(m.value)||0}/${m.target} invitados activos`:`${Number(m.value)||0}/${m.target} altas`} · ${escapeHtml(m.reward)}</small></div></article>`).join('');
+      if($('referralBoostButton')){$('referralBoostButton').classList.toggle('hidden',Number(r.boostCredits||0)<=0);$('referralBoostButton').textContent=`⚡ Usar Boost gratis${Number(r.boostCredits||0)>1?` · ${Number(r.boostCredits)} disponibles`:''}`;}
+    }
+    async function cargarRankingCiudadesReferral(){
+      const box=$('referralCityRanking');if(!box)return;const res=await api('/api/community/leaderboard?days=7&limit=5');
+      if(!res.ok||!(res.cities||[]).length){box.innerHTML='<small>Aún no hay suficiente actividad.</small>';return;}
+      box.innerHTML=res.cities.map(c=>`<div><b>#${Number(c.rank)} ${escapeHtml(c.name)}</b><span>+${Number(c.growth)||0} · ${Number(c.current)||0} total</span></div>`).join('');
+    }
+    async function activarBoostReferral(){
+      const btn=$('referralBoostButton');if(btn)btn.disabled=true;const res=await api('/api/referrals/boost',{method:'POST',body:{}});if(btn)btn.disabled=false;
+      if(!res.ok)return mostrarToast(res.error||'No se pudo activar el Boost.','warn');
+      referralState=res.referral||referralState;pintarReferralState();mostrarToast('⚡ Boost activo durante 30 minutos.','success');
     }
 
     async function abrirInvitaAmigos() {
@@ -2303,6 +2325,7 @@
       $('inviteFriendsModal').classList.remove('hidden');$('inviteFriendsModal').setAttribute('aria-hidden','false');
       const r=await cargarReferralState(true);
       if(!r)mostrarToast('No se pudo preparar tu enlace de invitación.','warn');
+      void cargarRankingCiudadesReferral();
     }
     function cerrarInvitaAmigos(){$('inviteFriendsModal').classList.add('hidden');$('inviteFriendsModal').setAttribute('aria-hidden','true');}
     function textoInvitacionReferral(){return `Estoy probando VRMatch: haces match y rompes el hielo jugando 🔥 ¿Te apuntas? ${referralState?.url||location.origin}`;}
@@ -2809,9 +2832,9 @@
       const days=Number($('adminMetricsDays').value||7);
       const res=await api(`/api/admin/metrics?days=${encodeURIComponent(days)}`);
       if(!res.ok){box.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudieron cargar.')}</strong></div>`;return;}
-      const m=res.metric||{},f=res.funnel||{},sys=res.system||{},daily=res.daily||[],errors=res.recentErrors||[],channels=res.channels||[],campaigns=res.campaigns||[],cities=res.cities||[],retentionEmails=res.retentionEmails||[];
+      const m=res.metric||{},f=res.funnel||{},sys=res.system||{},daily=res.daily||[],errors=res.recentErrors||[],channels=res.channels||[],campaigns=res.campaigns||[],cities=res.cities||[],creators=res.creators||[],cityLeaderboard=res.cityLeaderboard||[],retentionEmails=res.retentionEmails||[];
       const visitConv=porcentaje(m.registered,m.visits),startConv=porcentaje(m.registered,m.registrationStarted);
-      const cards=[['Visitas',m.visits||0,'sesiones de entrada'],['Altas',m.registered,'cuentas nuevas'],['Conversión',`${visitConv}%`,'visita → alta'],['Inicio registro',m.registrationStarted||0,`${startConv}% terminan`],['Activos',m.activeUsers,`últimos ${days===1?'24 h':days+' días'}`],['Likes',m.likes,'acciones'],['Matches',m.matches,'creados'],['Mensajes',m.messages,'enviados'],['Partidas',m.gamesStarted,'iniciadas'],['Finalizadas',m.gamesCompleted,'partidas completas'],['Emails retención',m.retentionEmails||0,'avisos enviados'],['Altas ref.',m.referralSignups||0,'atribuidas'],['Compartidos',m.referralShares||0,'invitaciones/resultados']];
+      const cards=[['Visitas',m.visits||0,'sesiones de entrada'],['Altas',m.registered,'cuentas nuevas'],['Conversión',`${visitConv}%`,'visita → alta'],['Inicio registro',m.registrationStarted||0,`${startConv}% terminan`],['Activos',m.activeUsers,`últimos ${days===1?'24 h':days+' días'}`],['Likes',m.likes,'acciones'],['Matches',m.matches,'creados'],['Mensajes',m.messages,'enviados'],['Partidas',m.gamesStarted,'iniciadas'],['Finalizadas',m.gamesCompleted,'partidas completas'],['Emails retención',m.retentionEmails||0,'avisos enviados'],['Altas ref.',m.referralSignups||0,'atribuidas'],['Ref. activos',m.referralActive||0,'ciudad + foto + like'],['Creadores',m.creatorSignups||0,'altas atribuidas'],['Compartidos',m.referralShares||0,'invitaciones/resultados']];
       const base=Math.max(1,Number(f.registered)||0);
       const funnel=[['Visitas',f.visits||0,100],['Inician registro',f.registrationStarted||0,porcentaje(f.registrationStarted,f.visits)],['Registro',f.registered||0,porcentaje(f.registered,f.visits)],['Ciudad',f.city||0,porcentaje(f.city,base)],['Perfil',f.profile||0,porcentaje(f.profile,base)],['Perfil listo',f.profileReady||0,porcentaje(f.profileReady,base)],['Primer like',f.liked||0,porcentaje(f.liked,base)],['Match',f.matched||0,porcentaje(f.matched,base)],['Mensaje',f.messaged||0,porcentaje(f.messaged,base)],['Partida',f.played||0,porcentaje(f.played,base)],['Comparte',f.shared||0,porcentaje(f.shared,base)]];
       const maxDaily=Math.max(1,...daily.map(d=>Math.max(Number(d.visits)||0,Number(d.registered)||0,Number(d.matches)||0,Number(d.games)||0)));
@@ -2820,16 +2843,27 @@
       const maxCity=Math.max(1,...cities.map(c=>Number(c.signups)||0));
       const retentionLabels={profile_incomplete:'Perfil incompleto',new_message:'Nuevo mensaje',game_invite:'Invitación a jugar',match_no_chat:'Match sin conversación'};
       const retentionRows=retentionEmails.length?retentionEmails.map(r=>`<tr><td><b>${escapeHtml(retentionLabels[r.kind]||r.kind)}</b></td><td>${Number(r.sent)||0}</td><td>${Number(r.activityAfter)||0}</td></tr>`).join(''):'<tr><td colspan="3">Aún no se han enviado recordatorios de retención.</td></tr>';
+      const creatorRows=creators.length?creators.map(c=>`<tr><td><b>${escapeHtml(c.displayName||c.code)}</b><small>${escapeHtml(c.code)} · ${c.active?'activo':'pausado'}</small></td><td>${escapeHtml(c.campaign||'—')}</td><td>${Number(c.visits)||0}</td><td>${Number(c.signups)||0}</td><td>${Number(c.active7d)||0}</td><td>${c.conversion==null?'—':`${Number(c.conversion).toFixed(1)}%`}</td><td><button class="mini-admin-action" onclick="toggleCreatorCode('${escapeHtml(c.code)}',${c.active?'false':'true'})">${c.active?'Pausar':'Activar'}</button></td></tr>`).join(''):'<tr><td colspan="7">Crea un código para medir la primera colaboración.</td></tr>';
+      const cityRankRows=cityLeaderboard.length?cityLeaderboard.map(c=>`<div><span><b>#${Number(c.rank)} ${escapeHtml(c.name)}</b><small>+${Number(c.growth)||0} en el periodo · ${Number(c.current)||0} total</small></span><i><em style="width:${Math.max(3,Number(c.percent)||0)}%"></em></i><b>${Number(c.percent)||0}%</b></div>`).join(''):'<div class="empty-state compact"><span>📍</span><strong>Sin actividad por ciudad todavía.</strong></div>';
       box.innerHTML=`<div class="metrics-summary">${cards.map(([label,val,sub])=>`<article><strong>${typeof val==='string'?escapeHtml(val):Number(val)||0}</strong><span>${escapeHtml(label)}</span><small>${escapeHtml(sub)}</small></article>`).join('')}</div>
         <section class="metrics-section growth-highlight"><div class="metrics-section-head"><div><strong>Embudo de crecimiento</strong><small>Visita → registro → activación → interacción → viralidad.</small></div><span>${days===1?'24 h':days+' días'}</span></div><div class="funnel-grid">${funnel.map(([label,val,pct])=>`<div><div><b>${escapeHtml(label)}</b><span>${Number(val)||0} · ${Number(pct)||0}%</span></div><i><em style="width:${Math.max(2,Math.min(100,Number(pct)||0))}%"></em></i></div>`).join('')}</div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Canales que traen usuarios</strong><small>Sesiones y registros atribuidos por fuente/medio.</small></div></div><div class="growth-table-wrap"><table class="growth-table"><thead><tr><th>Canal</th><th>Visitas</th><th>Altas</th><th>Conversión</th></tr></thead><tbody>${channelRows}</tbody></table></div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Campañas y contenidos</strong><small>Usa utm_campaign y utm_content. Ej.: campaña LANZAMIENTO_VALENCIA · contenido REEL-023.</small></div></div><div class="growth-table-wrap"><table class="growth-table"><thead><tr><th>Campaña</th><th>Contenido</th><th>Visitas</th><th>Altas</th><th>Conv.</th></tr></thead><tbody>${campaignRows}</tbody></table></div><div class="utm-example"><b>Ejemplo:</b><code>/?register=1&city=Valencia&utm_source=tiktok&utm_medium=organic_social&utm_campaign=LANZAMIENTO_VALENCIA&utm_content=REEL-023</code></div></section>
+        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Códigos de creadores</strong><small>Mide visitas, altas y usuarios activos de cada colaboración sin dar acceso a datos personales.</small></div></div><form class="creator-code-form" onsubmit="crearCreatorCode(event)"><input id="creatorCodeInput" class="profile-input" maxlength="24" placeholder="Código · MARIA23"><input id="creatorNameInput" class="profile-input" maxlength="80" placeholder="Creador / colaborador"><input id="creatorCampaignInput" class="profile-input" maxlength="120" placeholder="Campaña opcional"><button class="btn btn-secondary" type="submit">+ Crear código</button></form><div class="growth-table-wrap"><table class="growth-table"><thead><tr><th>Creador</th><th>Campaña</th><th>Visitas</th><th>Altas</th><th>Activos 7d</th><th>Conv.</th><th></th></tr></thead><tbody>${creatorRows}</tbody></table></div><div class="utm-example"><b>Formato:</b><code>/?register=1&creator=MARIA23&utm_source=creator&utm_medium=collab</code></div></section>
+        <section class="metrics-section"><div class="metrics-section-head"><div><strong>Ranking de crecimiento por ciudades</strong><small>Ordenado por nuevos miembros del periodo; no muestra personas ni perfiles.</small></div></div><div class="city-growth-admin city-growth-rank">${cityRankRows}</div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Altas por ciudad</strong><small>Nuevas cuentas del periodo según la ciudad elegida.</small></div></div><div class="city-growth-admin">${cities.length?cities.map(c=>`<div><span>${escapeHtml(c.city||'Sin ciudad')}</span><i><em style="width:${Math.max(3,(Number(c.signups)||0)*100/maxCity)}%"></em></i><b>${Number(c.signups)||0}</b></div>`).join(''):'<div class="empty-state compact"><span>📍</span><strong>Aún no hay ciudades en este periodo.</strong></div>'}</div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Actividad diaria</strong><small>Visitas, altas, matches y partidas. Datos agregados.</small></div></div><div class="daily-chart">${daily.map(d=>`<div class="daily-row"><small>${escapeHtml(d.day.slice(5))}</small><div title="Visitas: ${d.visits}"><i class="visit" style="width:${Math.max(2,Number(d.visits)*100/maxDaily)}%"></i></div><div title="Altas: ${d.registered}"><i class="reg" style="width:${Math.max(2,Number(d.registered)*100/maxDaily)}%"></i></div><div title="Matches: ${d.matches}"><i class="match" style="width:${Math.max(2,Number(d.matches)*100/maxDaily)}%"></i></div><div title="Partidas: ${d.games}"><i class="game" style="width:${Math.max(2,Number(d.games)*100/maxDaily)}%"></i></div></div>`).join('')}</div><div class="chart-legend"><span><i class="visit"></i>Visitas</span><span><i class="reg"></i>Altas</span><span><i class="match"></i>Matches</span><span><i class="game"></i>Partidas</span></div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Retención por email</strong><small>Avisos enviados y cuentas con actividad posterior al envío. La actividad posterior no implica causalidad.</small></div></div><div class="growth-table-wrap"><table class="growth-table"><thead><tr><th>Tipo</th><th>Enviados</th><th>Actividad posterior</th></tr></thead><tbody>${retentionRows}</tbody></table></div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Salud del sistema</strong><small>Diagnóstico técnico de esta instancia. No contiene secretos.</small></div></div><div class="system-grid"><div><b>${sys.onlineUsers||0}</b><span>usuarios online</span></div><div><b>${sys.sockets||0}</b><span>sockets</span></div><div><b>${sys.rssMb||0} MB</b><span>memoria RSS</span></div><div><b>${sys.heapUsedMb||0} MB</b><span>heap usado</span></div><div><b>${bytesLegibles(sys.dbBytes)}</b><span>SQLite</span></div><div><b>${sys.uploadFiles||0}</b><span>archivos · ${bytesLegibles(sys.uploadBytes)}</span></div></div></section>
         <section class="metrics-section"><div class="metrics-section-head"><div><strong>Errores recientes del cliente</strong><small>Solo mensaje técnico, pantalla y posición. No se guardan chats ni coordenadas.</small></div></div><div class="error-list">${errors.length?errors.map(e=>`<article><div><strong>${escapeHtml(e.message||'Error')}</strong><small>${escapeHtml(adminFecha(e.created_at))}</small></div><p>${escapeHtml(e.name||e.email||'Usuario')} · ${escapeHtml(e.page||'/')} ${e.source?`· ${escapeHtml(e.source)}:${Number(e.line)||0}`:''}</p></article>`).join(''):'<div class="empty-state compact"><span>✓</span><strong>Sin errores registrados</strong></div>'}</div></section>`;
     }
+    async function crearCreatorCode(event){
+      event?.preventDefault();const code=String($('creatorCodeInput')?.value||'').trim(),displayName=String($('creatorNameInput')?.value||'').trim(),campaign=String($('creatorCampaignInput')?.value||'').trim();
+      const res=await api('/api/admin/creator-codes',{method:'POST',body:{code,displayName,campaign}});if(!res.ok)return mostrarToast(res.error||'No se pudo crear el código.','error');
+      if($('creatorCodeInput'))$('creatorCodeInput').value='';if($('creatorNameInput'))$('creatorNameInput').value='';if($('creatorCampaignInput'))$('creatorCampaignInput').value='';
+      mostrarToast(`Código ${res.creator?.code||code} creado.`,'success');await cargarAdminMetrics();
+    }
+    async function toggleCreatorCode(code,active){const res=await api(`/api/admin/creator-codes/${encodeURIComponent(code)}/toggle`,{method:'POST',body:{active}});if(!res.ok)return mostrarToast(res.error||'No se pudo actualizar.','error');await cargarAdminMetrics();}
     function exportarGrowthCsv(){
       if(!currentUserAdmin||!authToken)return;
       const days=Number($('adminMetricsDays').value||30);
@@ -3148,6 +3182,7 @@
       const reasons=Array.isArray(p.matchReasons)?p.matchReasons:[];
       reasons.forEach(reason=>{const x=document.createElement('span');x.className=/verificado/i.test(reason)?'profile-verified-chip':'match-reason-chip';x.textContent=/verificado/i.test(reason)?`✓ ${reason}`:(/inter[eé]s/i.test(reason)?`✨ ${reason}`:reason);premiumMeta.appendChild(x);});
       if(p.profileVerified&&!reasons.some(x=>/verificado/i.test(x))){const x=document.createElement('span');x.className='profile-verified-chip';x.textContent='✓ Perfil verificado';premiumMeta.appendChild(x);}else if(!p.profileVerified&&p.verified){const x=document.createElement('span');x.textContent='✓ Correo confirmado';premiumMeta.appendChild(x);}
+      (Array.isArray(p.viralBadges)?p.viralBadges:[]).slice(-2).forEach(badge=>{const x=document.createElement('span');x.className='viral-profile-badge';x.textContent=badge==='Embajador'?'🔥 Embajador VRMatch':badge==='Fundador'?'✦ Fundador VRMatch':'↗ Pionero VRMatch';premiumMeta.appendChild(x);});
       const interestBox = $('datingInterests');
       interestBox.innerHTML = '';
       (Array.isArray(p.intereses) ? p.intereses : []).forEach(item => {
@@ -4634,7 +4669,7 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
       if (!email || !password) return mostrarToast('Completa correo y contraseña.','warn');
       const endpoint=authMode==='register'?'/api/auth/register':'/api/auth/login';
       const body={email,password};
-      if(authMode==='register'){body.confirmAdult=$('confirmAdult').checked;body.acceptTerms=$('acceptTerms').checked;body.referralCode=localStorage.getItem('vr_member_ref')||'';body.acquisition=growthAcq;if(!body.confirmAdult)return mostrarToast('Confirma que tienes 18 años o más.','warn');if(!body.acceptTerms)return mostrarToast('Acepta las Condiciones y la Privacidad.','warn');}
+      if(authMode==='register'){body.confirmAdult=$('confirmAdult').checked;body.acceptTerms=$('acceptTerms').checked;body.referralCode=localStorage.getItem('vr_member_ref')||'';body.creatorCode=localStorage.getItem('vr_creator_code')||'';body.acquisition=growthAcq;if(!body.confirmAdult)return mostrarToast('Confirma que tienes 18 años o más.','warn');if(!body.acceptTerms)return mostrarToast('Acepta las Condiciones y la Privacidad.','warn');}
       const res=await api(endpoint,{method:'POST',body});
       if (!res.ok) {
         if(res.verificationRequired){
@@ -4645,7 +4680,7 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
         }
         return mostrarToast(res.error || 'No se pudo acceder.','error');
       }
-      localStorage.removeItem('vr_member_ref');
+      localStorage.removeItem('vr_member_ref');localStorage.removeItem('vr_creator_code');
       if (res.verificationRequired && !res.token) {
         cambiarAuthMode('login');
         mostrarVerificacionPendiente(email,Boolean(res.emailSent));
@@ -4688,6 +4723,8 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
       $('publicCommercialIcon').textContent='🔥';
       $('publicCommercialTitle').textContent='Te han invitado a VRMatch';
       $('publicCommercialCopy').textContent='Crea tu cuenta y descubre una forma distinta de hacer match y romper el hielo jugando.';
+    } else if(incomingCreatorCode && !authToken){
+      cambiarAuthMode('register');$('publicCommercialIcon').textContent='✦';$('publicCommercialTitle').textContent='Has llegado desde una colaboración';$('publicCommercialCopy').textContent='Crea tu cuenta y entra directamente en VRMatch. El código solo nos ayuda a medir qué colaboraciones traen comunidad real.';
     }
     if (verificationResult === 'ok') { history.replaceState({},document.title,location.pathname); setTimeout(()=>mostrarToast('Correo verificado correctamente. Ya puedes entrar.','info'),150); }
     if (verificationResult === 'invalid') { history.replaceState({},document.title,location.pathname); setTimeout(()=>mostrarToast('El enlace de verificación no es válido o ha caducado.','warn'),150); }

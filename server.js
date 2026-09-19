@@ -30,7 +30,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.18.0';
+const APP_VERSION = '18.19.0';
 const LEGAL_VERSION = '2026-09-18';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -527,6 +527,41 @@ CREATE TABLE IF NOT EXISTS user_referral_events (
 );
 CREATE INDEX IF NOT EXISTS idx_user_referral_events_code ON user_referral_events(referral_code,created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_referral_events_type ON user_referral_events(event_type,created_at DESC);
+
+-- V18.19 · Recompensas de referidos y atribución de creadores.
+CREATE TABLE IF NOT EXISTS referral_rewards (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reward_key TEXT NOT NULL,
+  granted_at INTEGER NOT NULL,
+  consumed_at INTEGER,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY(user_id,reward_key)
+);
+CREATE INDEX IF NOT EXISTS idx_referral_rewards_available ON referral_rewards(user_id,consumed_at,granted_at);
+CREATE TABLE IF NOT EXISTS creator_codes (
+  code TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  campaign TEXT NOT NULL DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS creator_events (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL REFERENCES creator_codes(code) ON DELETE CASCADE,
+  event_type TEXT NOT NULL,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  session_id TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_creator_events_code ON creator_events(code,event_type,created_at DESC);
+CREATE TABLE IF NOT EXISTS creator_attributions (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  code TEXT NOT NULL REFERENCES creator_codes(code),
+  attributed_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_creator_attributions_code ON creator_attributions(code,attributed_at DESC);
 
 CREATE TABLE IF NOT EXISTS community_cities (
   slug TEXT PRIMARY KEY,
@@ -1404,6 +1439,22 @@ function communityCitiesStats(limit=100) {
       return {...row,current,goal,percent:Math.min(100,Math.round(current*100/goal)),remaining:Math.max(0,goal-current)};
     });
 }
+function communityCityLeaderboard(days=7,limit=10){
+  const safeDays=[1,7,30,90].includes(Number(days))?Number(days):7;
+  const since=now()-safeDays*86400000;
+  return db.prepare(`SELECT c.slug,c.name,c.target_users goal,
+      COUNT(CASE WHEN u.status='active' THEN 1 END) current,
+      SUM(CASE WHEN u.status='active' AND m.joined_at>=? THEN 1 ELSE 0 END) growth
+    FROM community_cities c
+    LEFT JOIN community_city_memberships m ON m.city_slug=c.slug
+    LEFT JOIN users u ON u.id=m.user_id
+    GROUP BY c.slug
+    HAVING COUNT(CASE WHEN u.status='active' THEN 1 END)>0
+    ORDER BY growth DESC,current DESC,c.name ASC LIMIT ?`).all(since,Math.max(1,Math.min(50,Number(limit)||10))).map((r,i)=>({
+      rank:i+1,slug:r.slug,name:r.name,current:Number(r.current)||0,growth:Number(r.growth)||0,goal:Math.max(1,Number(r.goal)||COMMUNITY_DEFAULT_TARGET),
+      percent:Math.min(100,Math.round((Number(r.current)||0)*100/Math.max(1,Number(r.goal)||COMMUNITY_DEFAULT_TARGET)))
+    }));
+}
 function communityCityForUser(userId) {
   const row=db.prepare(`SELECT m.user_id,m.city_slug,m.joined_at,m.updated_at,c.name,c.target_users
     FROM community_city_memberships m JOIN community_cities c ON c.slug=m.city_slug WHERE m.user_id=?`).get(userId);
@@ -1421,6 +1472,7 @@ function setCommunityCityForUser(userId, name) {
     .run(userId,city.slug,existing?.joined_at||ts,ts);
   const profile=db.prepare('SELECT user_id FROM profiles WHERE user_id=?').get(userId);
   if(profile) db.prepare('UPDATE profiles SET city=?,updated_at=? WHERE user_id=?').run(city.name,ts,userId);
+  refreshReferrerRewardsForInvitee(userId);
   return communityCityForUser(userId);
 }
 function migrateProfilesToCommunityCities() {
@@ -1608,15 +1660,87 @@ function ensureMemberReferral(userId) {
   db.prepare('INSERT INTO user_referrals(user_id,referral_code,created_at) VALUES(?,?,?)').run(userId,code,ts);
   return {user_id:userId,referral_code:code,created_at:ts};
 }
+function referralActiveCount(userId) {
+  return Number(db.prepare(`SELECT COUNT(*) n
+    FROM user_referral_attributions a
+    JOIN users u ON u.id=a.invitee_user_id AND u.status='active'
+    JOIN community_city_memberships cm ON cm.user_id=u.id
+    JOIN profiles p ON p.user_id=u.id
+    WHERE a.referrer_user_id=?
+      AND json_valid(COALESCE(p.photos_json,'[]')) AND json_array_length(COALESCE(p.photos_json,'[]'))>=1
+      AND EXISTS(SELECT 1 FROM likes l WHERE l.from_user=u.id LIMIT 1)`).get(userId)?.n||0);
+}
+function referralBadgesForUser(userId) {
+  const rows=db.prepare(`SELECT reward_key FROM referral_rewards WHERE user_id=? AND reward_key IN ('badge_pioneer','badge_founder','badge_ambassador') ORDER BY granted_at ASC`).all(userId);
+  const labels={badge_pioneer:'Pionero',badge_founder:'Fundador',badge_ambassador:'Embajador'};
+  return rows.map(r=>labels[r.reward_key]).filter(Boolean);
+}
+function referralBoostCredits(userId) {
+  return Number(db.prepare("SELECT COUNT(*) n FROM referral_rewards WHERE user_id=? AND reward_key LIKE 'boost_credit_%' AND consumed_at IS NULL").get(userId)?.n||0);
+}
+function grantReferralReward(userId,rewardKey,metadata={}) {
+  const result=db.prepare(`INSERT OR IGNORE INTO referral_rewards(user_id,reward_key,granted_at,consumed_at,metadata_json) VALUES(?,?,?,NULL,?)`)
+    .run(userId,rewardKey,now(),JSON.stringify(metadata||{}));
+  return Boolean(result.changes);
+}
+function syncReferralRewards(userId) {
+  if(!userId || !db.prepare("SELECT 1 FROM users WHERE id=? AND status='active'").get(userId))return null;
+  const signups=Number(db.prepare('SELECT COUNT(*) n FROM user_referral_attributions WHERE referrer_user_id=?').get(userId)?.n||0);
+  const active=referralActiveCount(userId);
+  if(signups>=1)grantReferralReward(userId,'badge_pioneer',{threshold:1,basis:'signup'});
+  if(signups>=3)grantReferralReward(userId,'badge_founder',{threshold:3,basis:'signup'});
+  if(active>=5)grantReferralReward(userId,'boost_credit_5',{threshold:5,basis:'active'});
+  if(active>=10){
+    grantReferralReward(userId,'badge_ambassador',{threshold:10,basis:'active'});
+    grantReferralReward(userId,'boost_credit_10a',{threshold:10,basis:'active'});
+    grantReferralReward(userId,'boost_credit_10b',{threshold:10,basis:'active'});
+    grantReferralReward(userId,'boost_credit_10c',{threshold:10,basis:'active'});
+  }
+  return {signups,activeReferrals:active,boostCredits:referralBoostCredits(userId),badges:referralBadgesForUser(userId)};
+}
+function refreshReferrerRewardsForInvitee(inviteeUserId) {
+  const row=db.prepare('SELECT referrer_user_id FROM user_referral_attributions WHERE invitee_user_id=?').get(inviteeUserId);
+  return row?.referrer_user_id?syncReferralRewards(row.referrer_user_id):null;
+}
 function memberReferralStats(userId) {
   const row=ensureMemberReferral(userId);
   if (!row) return null;
   const code=row.referral_code;
   const visits=Number(db.prepare("SELECT COUNT(*) n FROM user_referral_events WHERE referral_code=? AND event_type='VISIT'").get(code)?.n||0);
   const shares=Number(db.prepare("SELECT COUNT(*) n FROM user_referral_events WHERE referral_code=? AND event_type LIKE 'SHARE_%'").get(code)?.n||0);
-  const signups=Number(db.prepare('SELECT COUNT(*) n FROM user_referral_attributions WHERE referrer_user_id=?').get(userId)?.n||0);
+  const reward=syncReferralRewards(userId)||{signups:0,activeReferrals:0,boostCredits:0,badges:[]};
+  const milestones=[
+    {key:'pioneer',label:'Pionero',target:1,basis:'signups',value:reward.signups,reward:'Insignia Pionero',unlocked:reward.signups>=1},
+    {key:'founder',label:'Fundador',target:3,basis:'signups',value:reward.signups,reward:'Insignia Fundador',unlocked:reward.signups>=3},
+    {key:'boost',label:'Impulso',target:5,basis:'active',value:reward.activeReferrals,reward:'1 Boost gratis',unlocked:reward.activeReferrals>=5},
+    {key:'ambassador',label:'Embajador',target:10,basis:'active',value:reward.activeReferrals,reward:'Insignia Embajador + 3 Boost',unlocked:reward.activeReferrals>=10}
+  ];
+  const nextMilestone=milestones.find(m=>!m.unlocked)||null;
   const goal=3;
-  return {code,visits,shares,signups,goal,remaining:Math.max(0,goal-signups),rewardUnlocked:signups>=goal};
+  return {code,visits,shares,signups:reward.signups,activeReferrals:reward.activeReferrals,boostCredits:reward.boostCredits,badges:reward.badges,milestones,nextMilestone,goal,remaining:Math.max(0,goal-reward.signups),rewardUnlocked:reward.signups>=goal};
+}
+function normalizeCreatorCode(value){return cleanShortText(value,32).toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,24);}
+function creatorCodeRow(rawCode,activeOnly=true){
+  const code=normalizeCreatorCode(rawCode);if(!code)return null;
+  return db.prepare(`SELECT code,display_name,campaign,active,created_at,updated_at FROM creator_codes WHERE code=?${activeOnly?' AND active=1':''}`).get(code)||null;
+}
+function attributeCreator(userId,rawCode){
+  const creator=creatorCodeRow(rawCode,true);if(!userId||!creator)return null;
+  if(db.prepare('SELECT 1 FROM creator_attributions WHERE user_id=?').get(userId))return null;
+  const ts=now();
+  db.prepare('INSERT INTO creator_attributions(user_id,code,attributed_at) VALUES(?,?,?)').run(userId,creator.code,ts);
+  db.prepare('INSERT INTO creator_events(id,code,event_type,user_id,session_id,created_at) VALUES(?,?,?,?,?,?)').run(safeId('crev'),creator.code,'SIGNUP',userId,'',ts);
+  return creator;
+}
+function creatorPerformance(days=30){
+  const since=now()-Math.max(1,Math.min(365,Number(days)||30))*86400000,activeSince=now()-7*86400000;
+  return db.prepare(`SELECT c.code,c.display_name displayName,c.campaign,c.active,
+      (SELECT COUNT(*) FROM creator_events e WHERE e.code=c.code AND e.event_type='VISIT' AND e.created_at>=?) visits,
+      (SELECT COUNT(*) FROM creator_attributions a WHERE a.code=c.code AND a.attributed_at>=?) signups,
+      (SELECT COUNT(*) FROM creator_attributions a JOIN users u ON u.id=a.user_id WHERE a.code=c.code AND u.status='active' AND u.last_seen_at>=?) active7d,
+      (SELECT COUNT(*) FROM creator_attributions a JOIN profiles p ON p.user_id=a.user_id WHERE a.code=c.code AND EXISTS(SELECT 1 FROM likes l WHERE l.from_user=a.user_id LIMIT 1)) activated
+    FROM creator_codes c ORDER BY signups DESC,visits DESC,c.created_at DESC`).all(since,since,activeSince)
+    .map(r=>({...r,active:Boolean(r.active),visits:Number(r.visits)||0,signups:Number(r.signups)||0,active7d:Number(r.active7d)||0,activated:Number(r.activated)||0,conversion:Number(r.visits)?Math.round(Number(r.signups)*1000/Number(r.visits))/10:null}));
 }
 function attributeMemberReferral(inviteeUserId, rawCode) {
   const code=normalizeMemberReferralCode(rawCode);
@@ -1630,6 +1754,7 @@ function attributeMemberReferral(inviteeUserId, rawCode) {
     .run(inviteeUserId,owner.user_id,owner.referral_code,ts);
   db.prepare('INSERT INTO user_referral_events(id,referral_code,event_type,user_id,created_at) VALUES(?,?,?,?,?)')
     .run(safeId('uref'),owner.referral_code,'SIGNUP',inviteeUserId,ts);
+  syncReferralRewards(owner.user_id);
   return {referrerUserId:owner.user_id,code:owner.referral_code};
 }
 function issueLaunchActivation(waitlistUserId, days = LAUNCH_ACTIVATION_DAYS) {
@@ -2320,7 +2445,7 @@ function publicProfile(profile) {
   // Minimiza datos compartidos entre usuarios: preferencias, privacidad y
   // metadatos internos de ubicación permanecen solo en el servidor/cuenta propia.
   const { preferences, privacy, location, profileVerifiedAt, ...safe } = profile;
-  return safe;
+  return {...safe,viralBadges:referralBadgesForUser(profile.id)};
 }
 function profileAccepts(profile, candidate) {
   if (!profile || !candidate) return false;
@@ -2490,6 +2615,7 @@ app.post('/api/auth/register', rateLimit({limit:8,windowMs:60*60*1000,key:req=>r
     const confirmAdult = req.body?.confirmAdult === true;
     const acceptTerms = req.body?.acceptTerms === true;
     const referralCode = normalizeMemberReferralCode(req.body?.referralCode);
+    const creatorCode = normalizeCreatorCode(req.body?.creatorCode);
     const acquisition = normalizeGrowthAcquisition(req.body?.acquisition || {});
     if (!confirmAdult) return res.status(400).json({ok:false,error:'Debes confirmar que tienes 18 años o más.'});
     if (!acceptTerms) return res.status(400).json({ok:false,error:'Debes aceptar las condiciones de uso y la política de privacidad.'});
@@ -2502,6 +2628,7 @@ app.post('/api/auth/register', rateLimit({limit:8,windowMs:60*60*1000,key:req=>r
     db.prepare('INSERT INTO users(id,email,password_hash,created_at,last_seen_at,email_verified,onboarding_completed) VALUES(?,?,?,?,?,0,0)').run(id,email,passwordHash,ts,ts);
     ensureMemberReferral(id);
     if (referralCode) attributeMemberReferral(id,referralCode);
+    if (creatorCode) attributeCreator(id,creatorCode);
     saveGrowthAcquisition(id,acquisition);
     recordGrowthEvent('registration_completed',{sessionId:acquisition.sessionId,userId:id,acquisition,page:acquisition.landingPath||'/'});
     db.prepare('INSERT INTO legal_acceptances(id,user_id,legal_version,adult_confirmed,terms_accepted,accepted_at) VALUES(?,?,?,?,?,?)')
@@ -2699,6 +2826,7 @@ app.put('/api/profile', requireAuth, (req,res) => {
     const profile = getProfile(userId);
     if(firstProfileSave) recordFirstUserGrowthEvent(userId,'profile_completed',{city:profile?.ciudad||''});
     maybeRecordProfileReady(userId,profile);
+    refreshReferrerRewardsForInvitee(userId);
     broadcastDiscovery();
     res.json({ok:true,profile,activation:activationState(userId)});
   } catch (e) {
@@ -2803,6 +2931,8 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
     const securityEvents=db.prepare('SELECT kind,severity,metadata_json,created_at FROM security_events WHERE user_id=? ORDER BY created_at ASC').all(userId).map(e=>({...e,metadata:safeJsonObject(e.metadata_json),metadata_json:undefined}));
     const referralStats=memberReferralStats(userId);
     const referralAttribution=db.prepare('SELECT referral_code,attributed_at FROM user_referral_attributions WHERE invitee_user_id=?').get(userId)||null;
+    const creatorAttribution=db.prepare('SELECT code,attributed_at FROM creator_attributions WHERE user_id=?').get(userId)||null;
+    const referralRewards=db.prepare('SELECT reward_key,granted_at,consumed_at FROM referral_rewards WHERE user_id=? ORDER BY granted_at ASC').all(userId);
     const growthAcquisition=growthAcquisitionForUser(userId);
     const growthEvents=db.prepare('SELECT event_name,source,medium,campaign,content,term,landing_path,page,metadata_json,created_at FROM growth_events WHERE user_id=? ORDER BY created_at ASC').all(userId).map(e=>({...e,metadata:safeJsonObject(e.metadata_json),metadata_json:undefined}));
     const gameSessions=db.prepare(`SELECT id,match_id,user1,user2,deck,started_at,core_completed_at,ended_at,status,finish_reason,total_turns,sync_rounds,coincidences,guess_hits,reactions,personalized_sync,extended,duration_seconds
@@ -2818,7 +2948,8 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
       account:{id:user.id,email:user.email,status:user.status,createdAt:user.created_at,lastSeenAt:user.last_seen_at,emailVerified:Boolean(user.email_verified),emailVerifiedAt:user.email_verified_at||null,onboardingCompleted:Boolean(user.onboarding_completed)},
       profile: profile ? {...profile,storedLocation:profileRow&&hasStoredLocation(profileRow)?{lat:Number(profileRow.location_lat),lng:Number(profileRow.location_lng),updatedAt:profileRow.location_updated_at}:null}:null,
       plus:getPlusState(userId),notificationPreferences:notificationPreferences(userId),legalAcceptances:legal,
-      referrals:{...referralStats,referredBy:referralAttribution?{referralCode:referralAttribution.referral_code,attributedAt:referralAttribution.attributed_at}:null},
+      referrals:{...referralStats,referredBy:referralAttribution?{referralCode:referralAttribution.referral_code,attributedAt:referralAttribution.attributed_at}:null,rewards:referralRewards},
+      creatorAttribution:creatorAttribution?{code:creatorAttribution.code,attributedAt:creatorAttribution.attributed_at}:null,
       acquisition:growthAcquisition,growthEvents,
       communityCity:communityCityForUser(userId),verification,securityEvents,
       likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,notifications,retentionEmails,gameSessions,matches
@@ -2952,6 +3083,10 @@ app.get('/api/community/cities', rateLimit({limit:180,windowMs:60*60*1000,key:re
   const total=Number(db.prepare(`SELECT COUNT(*) n FROM community_city_memberships m JOIN users u ON u.id=m.user_id WHERE u.status='active'`).get()?.n||0);
   res.json({ok:true,total,cities});
 });
+app.get('/api/community/leaderboard', rateLimit({limit:180,windowMs:60*60*1000,key:req=>req.ip}), (req,res) => {
+  const days=[1,7,30,90].includes(Number(req.query.days))?Number(req.query.days):7;
+  res.json({ok:true,days,cities:communityCityLeaderboard(days,Number(req.query.limit)||10)});
+});
 app.get('/api/community/me', requireAuth, rateLimit({limit:120,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
   res.json({ok:true,city:communityCityForUser(req.user.id)});
 });
@@ -2975,6 +3110,18 @@ app.post('/api/growth/event', rateLimit({limit:240,windowMs:60*60*1000,key:req=>
   if(!acquisition.sessionId)return res.status(400).json({ok:false,error:'Sesión analítica requerida.'});
   recordGrowthEvent(eventName,{sessionId:acquisition.sessionId,userId:authUser?.id||null,acquisition,page:req.body?.page||'/',metadata:req.body?.metadata||{}});
   res.json({ok:true});
+});
+
+app.post('/api/creators/visit', rateLimit({limit:120,windowMs:60*60*1000,key:req=>req.ip}), (req,res) => {
+  const creator=creatorCodeRow(req.body?.code,true);
+  if(!creator)return res.status(404).json({ok:false,error:'Código de creador no disponible.'});
+  const sessionId=cleanGrowthValue(req.body?.sessionId,80);
+  if(sessionId){
+    const duplicate=db.prepare("SELECT 1 FROM creator_events WHERE code=? AND event_type='VISIT' AND session_id=? LIMIT 1").get(creator.code,sessionId);
+    if(duplicate)return res.json({ok:true,creator:{code:creator.code,displayName:creator.display_name}});
+  }
+  db.prepare('INSERT INTO creator_events(id,code,event_type,user_id,session_id,created_at) VALUES(?,?,?,?,?,?)').run(safeId('crev'),creator.code,'VISIT',null,sessionId,now());
+  res.json({ok:true,creator:{code:creator.code,displayName:creator.display_name,campaign:creator.campaign}});
 });
 
 app.post('/api/referrals/visit', rateLimit({limit:120,windowMs:60*60*1000,key:req=>req.ip}), (req,res) => {
@@ -3001,6 +3148,20 @@ app.post('/api/referrals/share', requireAuth, rateLimit({limit:120,windowMs:60*6
   const a=growthAcquisitionForUser(req.user.id)||{};
   recordGrowthEvent(source==='game_result'?'share_game_result':'share_invite',{userId:req.user.id,sessionId:a.session_id||'',acquisition:{sessionId:a.session_id||'',source:a.source,medium:a.medium,campaign:a.campaign,content:a.content,term:a.term,referrer:a.referrer,landingPath:a.landing_path},metadata:{source}});
   res.json({ok:true,referral:memberReferralStats(req.user.id)});
+});
+
+app.post('/api/referrals/boost', requireAuth, rateLimit({limit:12,windowMs:24*60*60*1000,key:req=>req.user.id}), (req,res) => {
+  syncReferralRewards(req.user.id);
+  const active=plusBoostState(req.user.id);
+  if(active.active)return res.status(409).json({ok:false,error:'Ya tienes un Boost activo.',referral:memberReferralStats(req.user.id)});
+  const credit=db.prepare("SELECT reward_key FROM referral_rewards WHERE user_id=? AND reward_key LIKE 'boost_credit_%' AND consumed_at IS NULL ORDER BY granted_at ASC LIMIT 1").get(req.user.id);
+  if(!credit)return res.status(409).json({ok:false,error:'No tienes Boost de referidos disponible.',referral:memberReferralStats(req.user.id)});
+  const ts=now(),activeUntil=ts+30*60*1000;
+  const used=db.prepare('UPDATE referral_rewards SET consumed_at=? WHERE user_id=? AND reward_key=? AND consumed_at IS NULL').run(ts,req.user.id,credit.reward_key);
+  if(!used.changes)return res.status(409).json({ok:false,error:'Ese premio ya fue utilizado.'});
+  db.prepare(`INSERT INTO plus_boosts(user_id,active_until,last_used_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET active_until=excluded.active_until,last_used_at=excluded.last_used_at`).run(req.user.id,activeUntil,ts);
+  broadcastDiscovery();
+  res.json({ok:true,activeUntil,referral:memberReferralStats(req.user.id)});
 });
 
 // ---- LANZAMIENTO POR CIUDADES · API PÚBLICA ----
@@ -3554,6 +3715,25 @@ app.get('/api/admin/launch/cities/:slug/export.csv', requireAuth, requireAdmin, 
   res.send('\ufeff'+csv);
 });
 
+app.get('/api/admin/creator-codes', requireAuth, requireAdmin, (req,res) => {
+  const days=[1,7,30,90].includes(Number(req.query.days))?Number(req.query.days):30;
+  res.json({ok:true,days,creators:creatorPerformance(days)});
+});
+app.post('/api/admin/creator-codes', requireAuth, requireAdmin, rateLimit({limit:40,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  const code=normalizeCreatorCode(req.body?.code),displayName=cleanShortText(req.body?.displayName,80),campaign=cleanShortText(req.body?.campaign,120);
+  if(code.length<3)return res.status(400).json({ok:false,error:'El código debe tener al menos 3 caracteres.'});
+  if(displayName.length<2)return res.status(400).json({ok:false,error:'Escribe el nombre del creador o colaborador.'});
+  if(db.prepare('SELECT 1 FROM creator_codes WHERE code=?').get(code))return res.status(409).json({ok:false,error:'Ese código ya existe.'});
+  const ts=now();db.prepare('INSERT INTO creator_codes(code,display_name,campaign,active,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').run(code,displayName,campaign,1,req.user.id,ts,ts);
+  res.status(201).json({ok:true,creator:creatorCodeRow(code,false),url:`${baseUrl(req)}/?register=1&creator=${encodeURIComponent(code)}&utm_source=creator&utm_medium=collab&utm_campaign=${encodeURIComponent(campaign||code)}`});
+});
+app.post('/api/admin/creator-codes/:code/toggle', requireAuth, requireAdmin, (req,res) => {
+  const code=normalizeCreatorCode(req.params.code),row=creatorCodeRow(code,false);
+  if(!row)return res.status(404).json({ok:false,error:'Código no encontrado.'});
+  const active=req.body?.active===true?1:0;db.prepare('UPDATE creator_codes SET active=?,updated_at=? WHERE code=?').run(active,now(),code);
+  res.json({ok:true,creator:creatorCodeRow(code,false)});
+});
+
 app.get('/api/admin/stats', requireAuth, requireAdmin, (req,res) => {
   const since24 = now() - 24*60*60*1000;
   const stats = {
@@ -3587,6 +3767,8 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
     referralVisits: db.prepare("SELECT COUNT(*) n FROM user_referral_events WHERE event_type='VISIT' AND created_at>=?").get(since).n,
     referralShares: db.prepare("SELECT COUNT(*) n FROM user_referral_events WHERE event_type LIKE 'SHARE_%' AND created_at>=?").get(since).n,
     referralSignups: db.prepare('SELECT COUNT(*) n FROM user_referral_attributions WHERE attributed_at>=?').get(since).n,
+    referralActive: db.prepare(`SELECT COUNT(*) n FROM user_referral_attributions a JOIN users u ON u.id=a.invitee_user_id JOIN profiles p ON p.user_id=u.id JOIN community_city_memberships cm ON cm.user_id=u.id WHERE a.attributed_at>=? AND u.status='active' AND json_valid(COALESCE(p.photos_json,'[]')) AND json_array_length(COALESCE(p.photos_json,'[]'))>=1 AND EXISTS(SELECT 1 FROM likes l WHERE l.from_user=u.id LIMIT 1)`).get(since).n,
+    creatorSignups: db.prepare('SELECT COUNT(*) n FROM creator_attributions WHERE attributed_at>=?').get(since).n,
     retentionEmails: db.prepare("SELECT COUNT(*) n FROM retention_email_log WHERE status='sent' AND sent_at>=?").get(since).n,
     verifiedTotal: db.prepare('SELECT COUNT(*) n FROM users WHERE email_verified=1').get().n,
     activePlus: db.prepare("SELECT COUNT(*) n FROM plus_memberships WHERE status='active' AND (expires_at IS NULL OR expires_at>?)").get(until).n
@@ -3636,6 +3818,8 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
   const cvMap=new Map(campaignVisits.map(r=>[`${r.source}|${r.medium}|${r.campaign}|${r.content}`,Number(r.visits)||0]));
   const campaignPerformance=campaigns.map(r=>{const visits=cvMap.get(`${r.source}|${r.medium}|${r.campaign}|${r.content}`)||0;return {...r,visits,conversion:visits?Math.round(r.signups*1000/visits)/10:null};}).sort((a,b)=>b.signups-a.signups||b.visits-a.visits).slice(0,25);
   const cities=db.prepare(`SELECT c.name city,COUNT(*) signups FROM users u JOIN community_city_memberships m ON m.user_id=u.id JOIN community_cities c ON c.slug=m.city_slug WHERE u.created_at>=? GROUP BY c.slug,c.name ORDER BY signups DESC LIMIT 15`).all(since).map(r=>({city:r.city,signups:Number(r.signups)||0}));
+  const creators=creatorPerformance(days);
+  const cityLeaderboard=communityCityLeaderboard(days,15);
   const retentionEmails=db.prepare(`SELECT r.kind,COUNT(*) sent,SUM(CASE WHEN u.last_seen_at>r.sent_at THEN 1 ELSE 0 END) activity_after
     FROM retention_email_log r JOIN users u ON u.id=r.user_id WHERE r.status='sent' AND r.sent_at>=? GROUP BY r.kind ORDER BY sent DESC`).all(since)
     .map(r=>({kind:r.kind,sent:Number(r.sent)||0,activityAfter:Number(r.activity_after)||0}));
@@ -3647,7 +3831,7 @@ app.get('/api/admin/metrics', requireAuth, requireAdmin, (req,res) => {
   const recentErrors=db.prepare(`SELECT ce.id,ce.message,ce.source,ce.line,ce.column_no,ce.page,ce.app_version,ce.created_at,u.email,p.name
     FROM client_errors ce LEFT JOIN users u ON u.id=ce.user_id LEFT JOIN profiles p ON p.user_id=ce.user_id
     ORDER BY ce.created_at DESC LIMIT 20`).all();
-  res.json({ok:true,days,metric,funnel,daily,channels,campaigns:campaignPerformance,cities,retentionEmails,system,recentErrors});
+  res.json({ok:true,days,metric,funnel,daily,channels,campaigns:campaignPerformance,cities,creators,cityLeaderboard,retentionEmails,system,recentErrors});
 });
 
 app.get('/api/admin/growth/export.csv', requireAuth, requireAdmin, (req,res) => {
@@ -4669,7 +4853,7 @@ io.on('connection', socket => {
     if(likes24h>=dailyLikeLimit){logSecurityEvent(userId,'like_daily_limit',2,{limit:dailyLikeLimit});return done({ok:false,error:'Has alcanzado el límite de seguridad de likes de hoy. Vuelve a intentarlo más tarde.'});}
     if(blockedEitherWay(userId,target))return done({ok:false,error:'Ese perfil no está disponible.'});
     const likeInsert=db.prepare('INSERT OR IGNORE INTO likes(from_user,to_user,created_at) VALUES(?,?,?)').run(userId,target,now());
-    if(likeInsert.changes)recordFirstUserGrowthEvent(userId,'first_like');
+    if(likeInsert.changes){recordFirstUserGrowthEvent(userId,'first_like');refreshReferrerRewardsForInvitee(userId);}
     const reciprocal=Boolean(db.prepare('SELECT 1 FROM likes WHERE from_user=? AND to_user=?').get(target,userId));
     let match=null;
     if(reciprocal){

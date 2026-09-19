@@ -1,0 +1,12 @@
+V/R MATCH 18.19.0 — VIRALIDAD 2.0
+
+1. Haz copia de seguridad de la base de datos y de uploads.
+2. Sustituye el código sin borrar data/ ni uploads/.
+3. Reinicia Render.
+4. Comprueba /healthz -> version 18.19.0, db=true, storage=true.
+5. Prueba un referido: cuenta A comparte enlace, B se registra.
+6. Para que B cuente como 'activo': elige ciudad, añade foto y da un like.
+7. En Administración > Métricas crea un código de creador de prueba (por ejemplo TESTCREATOR) y abre /?register=1&creator=TESTCREATOR.
+8. Verifica que visitas y altas aparecen agregadas y que no se muestra la identidad del usuario atribuido.
+
+No hay nuevas variables de entorno obligatorias.

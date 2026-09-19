@@ -99,7 +99,7 @@ test('healthz comprueba SQLite, almacenamiento y versión', async()=>{
   assert.equal(res.data.db,true);
   assert.equal(res.data.storage,true);
   assert.equal(res.data.version,APP_VERSION);
-  assert.equal(APP_VERSION,'18.18.0');
+  assert.equal(APP_VERSION,'18.19.0');
   assert.ok(res.headers.get('x-request-id'));
 });
 
@@ -205,6 +205,38 @@ test('matching inteligente ordena por afinidad y explica señales sin saltarse f
   assert.ok(Array.isArray(hp.matchReasons));
   assert.ok(hp.matchReasons.some(x=>/inter[eé]s|ciudad|verificado/i.test(x)));
   assert.ok(!('components' in hp),'no se exponen componentes internos del ranking');
+});
+
+
+test('viralidad 2.0: códigos de creador, ranking de ciudades y recompensa de Boost', async()=>{
+  const login=await api('/api/auth/login',{method:'POST',body:{email:'admin@test.local',password:'Clave-Segura-1816'}});
+  assert.equal(login.status,200);const adminToken=login.data.token;
+  const creator=await api('/api/admin/creator-codes',{method:'POST',token:adminToken,body:{code:'TESTCREATOR',displayName:'Creator Test',campaign:'AUTOMATIC_TEST'}});
+  assert.equal(creator.status,201,creator.data?.error);
+  const visit=await api('/api/creators/visit',{method:'POST',body:{code:'TESTCREATOR',sessionId:'creator-test-session'}});
+  assert.equal(visit.status,200);
+  const cr=await register('creator-attributed@test.local');
+  // La ayuda register() no añade creatorCode; la atribución se prueba con una segunda cuenta explícita.
+  const attributed=await api('/api/auth/register',{method:'POST',body:{email:'creator-two@test.local',password:'Clave-Segura-1816',confirmAdult:true,acceptTerms:true,creatorCode:'TESTCREATOR',acquisition:{sessionId:'creator-two'}}});
+  assert.equal(attributed.status,200,attributed.data?.error);
+  const stats=await api('/api/admin/creator-codes?days=30',{token:adminToken});
+  assert.equal(stats.status,200);const row=stats.data.creators.find(x=>x.code==='TESTCREATOR');assert.ok(row);assert.ok(row.visits>=1);assert.ok(row.signups>=1);
+  const board=await api('/api/community/leaderboard?days=7');assert.equal(board.status,200);assert.ok(Array.isArray(board.data.cities));
+
+  const ref=await api('/api/referrals/me',{token:adminToken});assert.equal(ref.status,200);const code=ref.data.referral.code;
+  // Se insertan cinco invitados activos directamente en la BD de test para no consumir
+  // el rate-limit público de registro mientras comprobamos la concesión idempotente del premio.
+  const adminId=login.data.user.id,ts=Date.now();
+  for(let i=0;i<5;i++){
+    const id=`viral-active-${i}`;
+    db.prepare('INSERT INTO users(id,email,password_hash,created_at,last_seen_at,status) VALUES(?,?,?,?,?,?)').run(id,`active-ref-${i}@test.local`,'test-hash',ts+i,ts+i,'active');
+    db.prepare("INSERT INTO profiles(user_id,name,age,city,bio,interests_json,photos_json,updated_at) VALUES(?,?,?,?,?,?,?,?)").run(id,`Activo ${i}`,25+i,'Valencia','Perfil activo de prueba','[\"cine\",\"viajes\"]','[\"/uploads/test.jpg\"]',ts+i);
+    db.prepare('INSERT INTO community_city_memberships(user_id,city_slug,joined_at,updated_at) VALUES(?,?,?,?)').run(id,'valencia',ts+i,ts+i);
+    db.prepare('INSERT INTO likes(from_user,to_user,created_at) VALUES(?,?,?)').run(id,cr.user.id,ts+i);
+    db.prepare('INSERT INTO user_referral_attributions(invitee_user_id,referrer_user_id,referral_code,attributed_at) VALUES(?,?,?,?)').run(id,adminId,code,ts+i);
+  }
+  const rewarded=await api('/api/referrals/me',{token:adminToken});assert.equal(rewarded.status,200);assert.ok(rewarded.data.referral.activeReferrals>=5);assert.ok(rewarded.data.referral.boostCredits>=1);
+  const boost=await api('/api/referrals/boost',{method:'POST',token:adminToken,body:{}});assert.equal(boost.status,200,boost.data?.error);assert.ok(boost.data.activeUntil>Date.now());assert.equal(boost.data.referral.boostCredits,rewarded.data.referral.boostCredits-1);
 });
 
 test('backup restaurable, errores de servidor y diagnóstico admin', async()=>{
