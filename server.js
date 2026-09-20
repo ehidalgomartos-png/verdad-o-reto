@@ -30,7 +30,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.21.1';
+const APP_VERSION = '18.21.2';
 const LEGAL_VERSION = '2026-09-19';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -73,6 +73,8 @@ const RETENTION_SWEEP_MINUTES = Math.max(10, Math.min(360, Number(process.env.VR
 const RETENTION_PROFILE_HOURS = Math.max(6, Math.min(168, Number(process.env.VR_RETENTION_PROFILE_HOURS) || 24));
 const RETENTION_MATCH_HOURS = Math.max(6, Math.min(168, Number(process.env.VR_RETENTION_MATCH_HOURS) || 18));
 const RETENTION_MESSAGE_COOLDOWN_HOURS = Math.max(1, Math.min(72, Number(process.env.VR_RETENTION_MESSAGE_COOLDOWN_HOURS) || 6));
+const NEWSLETTER_BATCH_SIZE = Math.max(5, Math.min(100, Number(process.env.VR_NEWSLETTER_BATCH_SIZE) || 20));
+const NEWSLETTER_INTERVAL_SECONDS = Math.max(20, Math.min(600, Number(process.env.VR_NEWSLETTER_INTERVAL_SECONDS) || 60));
 const SMART_PUSH_ENABLED = String(process.env.VR_SMART_PUSH_ENABLED || 'true').toLowerCase() !== 'false';
 const SMART_PUSH_SWEEP_MINUTES = Math.max(10, Math.min(360, Number(process.env.VR_SMART_PUSH_SWEEP_MINUTES) || 30));
 const PUSH_DAILY_CAP = Math.max(2, Math.min(30, Number(process.env.VR_PUSH_DAILY_CAP) || 8));
@@ -307,6 +309,41 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
   push_enabled INTEGER NOT NULL DEFAULT 0,
   updated_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS newsletter_campaigns (
+  id TEXT PRIMARY KEY,
+  subject TEXT NOT NULL,
+  preheader TEXT NOT NULL DEFAULT '',
+  eyebrow TEXT NOT NULL DEFAULT 'NOVEDADES',
+  title TEXT NOT NULL,
+  body_text TEXT NOT NULL,
+  cta_label TEXT NOT NULL DEFAULT '',
+  cta_url TEXT NOT NULL DEFAULT '',
+  audience_city TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'queued',
+  created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL,
+  started_at INTEGER,
+  completed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_newsletter_campaign_status ON newsletter_campaigns(status,created_at DESC);
+CREATE TABLE IF NOT EXISTS newsletter_queue (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES newsletter_campaigns(id) ON DELETE CASCADE,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  sent_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_newsletter_queue_status ON newsletter_queue(status,created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_newsletter_queue_campaign ON newsletter_queue(campaign_id,status);
+CREATE TABLE IF NOT EXISTS newsletter_unsubscribe_tokens (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  token TEXT NOT NULL UNIQUE,
+  created_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS notifications (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -452,6 +489,7 @@ CREATE INDEX IF NOT EXISTS idx_game_sessions_match_started ON game_sessions(matc
 CREATE INDEX IF NOT EXISTS idx_game_sessions_status_started ON game_sessions(status,started_at DESC);
 `);
 ensureColumn('notification_preferences', 'retention_email', 'INTEGER NOT NULL DEFAULT 1');
+ensureColumn('notification_preferences', 'newsletter_email', 'INTEGER NOT NULL DEFAULT 1');
 ensureColumn('notification_preferences', 'city_activity', 'INTEGER NOT NULL DEFAULT 1');
 ensureColumn('notification_preferences', 'recommendations', 'INTEGER NOT NULL DEFAULT 1');
 ensureColumn('notification_preferences', 'reactivation_push', 'INTEGER NOT NULL DEFAULT 1');
@@ -1353,6 +1391,86 @@ async function sendNewMatchEmail(recipientUserId, actorProfile, notificationId='
   const text=`${recipientName ? `Hola ${recipientName},\n\n` : ''}${actorName} ha hecho match contigo en V/R Match.\n\nEl interés es mutuo. Ya podéis hablar y romper el hielo jugando.\n\nVer mi match: ${matchUrl}\n\nPuedes desactivar los avisos de Nuevo match desde el centro de notificaciones de V/R Match.`;
   return sendEmail({to:recipient.email,subject:`💗 ${actorName} ha hecho match contigo | V/R Match`,text,html});
 }
+
+
+function cleanNewsletterBody(value,max=5000) {
+  return String(value??'').replace(/\r/g,'').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g,'').trim().slice(0,max);
+}
+function safeNewsletterUrl(value) {
+  const raw=String(value||'').trim(); if(!raw)return '';
+  try {
+    const base=new URL(APP_BASE_URL||`http://localhost:${PORT}`),url=new URL(raw,base);
+    if(url.origin!==base.origin)return '';
+    return url.toString();
+  } catch { return ''; }
+}
+function newsletterPayload(input={}) {
+  return {
+    subject:cleanShortText(input.subject,120),
+    preheader:cleanShortText(input.preheader,180),
+    eyebrow:cleanShortText(input.eyebrow||'NOVEDADES',40)||'NOVEDADES',
+    title:cleanShortText(input.title,140),
+    bodyText:cleanNewsletterBody(input.bodyText,5000),
+    ctaLabel:cleanShortText(input.ctaLabel,60),
+    ctaUrl:safeNewsletterUrl(input.ctaUrl),
+    audienceCity:cleanShortText(input.audienceCity,80)
+  };
+}
+function newsletterTokenForUser(userId) {
+  const existing=db.prepare('SELECT token FROM newsletter_unsubscribe_tokens WHERE user_id=?').get(userId);
+  if(existing?.token)return existing.token;
+  const token=crypto.randomBytes(24).toString('base64url');
+  db.prepare('INSERT INTO newsletter_unsubscribe_tokens(user_id,token,created_at) VALUES(?,?,?)').run(userId,token,now());
+  return token;
+}
+function newsletterUnsubscribeUrl(userId) {
+  const base=APP_BASE_URL||`http://localhost:${PORT}`;
+  return `${base}/newsletter/unsubscribe?token=${encodeURIComponent(newsletterTokenForUser(userId))}`;
+}
+function newsletterBodyHtml(text='') {
+  const paragraphs=String(text||'').split(/\n{2,}/).map(x=>x.trim()).filter(Boolean);
+  return paragraphs.map(p=>`<p style="margin:0 0 16px;color:#e9e7ef;font-size:16px;line-height:1.7;">${escapeEmailHtml(p).replace(/\n/g,'<br>')}</p>`).join('');
+}
+function renderNewsletterEmail(campaign,unsubscribeUrl='',isTest=false) {
+  const body=newsletterBodyHtml(campaign.body_text||campaign.bodyText||'');
+  const footer=`${isTest?'<strong style="color:#ff78ab">ENVÍO DE PRUEBA</strong><br>':''}Recibes este correo por tu cuenta de V/R Match. ${unsubscribeUrl?`<a href="${escapeEmailHtml(unsubscribeUrl)}" style="color:#ff78ab;text-decoration:underline">Dejar de recibir novedades</a>`:'Puedes desactivar las novedades desde Notificaciones.'}`;
+  return vrEmailShell({preheader:campaign.preheader||'',eyebrow:campaign.eyebrow||'NOVEDADES',title:campaign.title||'',bodyHtml:body,ctaLabel:campaign.cta_label||campaign.ctaLabel||'',ctaUrl:campaign.cta_url||campaign.ctaUrl||'',footerHtml:footer});
+}
+function newsletterEligibleUsers(city='') {
+  const c=cleanShortText(city,80);
+  const sql=`SELECT u.id,u.email,p.name,p.city FROM users u LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN notification_preferences np ON np.user_id=u.id
+    WHERE u.status='active' AND u.email_verified=1 AND COALESCE(np.newsletter_email,1)<>0 ${c?'AND LOWER(COALESCE(p.city,\'\'))=LOWER(?)':''} ORDER BY u.created_at ASC`;
+  return c?db.prepare(sql).all(c):db.prepare(sql).all();
+}
+let newsletterWorkerRunning=false;
+async function processNewsletterQueue(limit=NEWSLETTER_BATCH_SIZE) {
+  if(newsletterWorkerRunning)return {sent:0,errors:0,busy:true};
+  if(!SMTP_CONFIGURED)return {sent:0,errors:0,skipped:true,reason:'SMTP no configurado'};
+  newsletterWorkerRunning=true; let sent=0,errors=0,cancelled=0;
+  try {
+    const rows=db.prepare(`SELECT q.*,c.subject,c.preheader,c.eyebrow,c.title,c.body_text,c.cta_label,c.cta_url,c.status campaign_status
+      FROM newsletter_queue q JOIN newsletter_campaigns c ON c.id=q.campaign_id
+      WHERE q.status IN ('pending','error') AND q.attempts<4 AND c.status IN ('queued','sending') ORDER BY q.created_at ASC LIMIT ?`).all(Math.max(1,Math.min(100,Number(limit)||NEWSLETTER_BATCH_SIZE)));
+    for(const row of rows){
+      try{
+        const user=row.user_id?db.prepare(`SELECT u.id,u.email,u.status,u.email_verified,COALESCE(np.newsletter_email,1) newsletter_email FROM users u LEFT JOIN notification_preferences np ON np.user_id=u.id WHERE u.id=?`).get(row.user_id):null;
+        if(!user||user.status!=='active'||!user.email_verified||Number(user.newsletter_email)===0){db.prepare("UPDATE newsletter_queue SET status='cancelled',last_error='' WHERE id=?").run(row.id);cancelled++;continue;}
+        db.prepare("UPDATE newsletter_campaigns SET status='sending',started_at=COALESCE(started_at,?) WHERE id=?").run(now(),row.campaign_id);
+        const unsubscribeUrl=newsletterUnsubscribeUrl(user.id);
+        await sendEmail({to:user.email,subject:row.subject,text:`${row.title}\n\n${row.body_text}${row.cta_url?`\n\n${row.cta_url}`:''}\n\nDejar de recibir novedades: ${unsubscribeUrl}`,html:renderNewsletterEmail(row,unsubscribeUrl,false)});
+        db.prepare("UPDATE newsletter_queue SET status='sent',attempts=attempts+1,last_error='',sent_at=? WHERE id=?").run(now(),row.id);sent++;
+      }catch(e){errors++;db.prepare("UPDATE newsletter_queue SET status='error',attempts=attempts+1,last_error=? WHERE id=?").run(redactDiagnosticText(e.message,220),row.id);recordServerError('newsletter.send',e,{campaignId:row.campaign_id});}
+      await new Promise(r=>setTimeout(r,180));
+    }
+    const touched=[...new Set(rows.map(r=>r.campaign_id))];
+    for(const id of touched){
+      const pending=Number(db.prepare("SELECT COUNT(*) n FROM newsletter_queue WHERE campaign_id=? AND status IN ('pending','error') AND attempts<4").get(id)?.n||0);
+      if(!pending)db.prepare("UPDATE newsletter_campaigns SET status='completed',completed_at=COALESCE(completed_at,?) WHERE id=? AND status<>'cancelled'").run(now(),id);
+    }
+    return {sent,errors,cancelled};
+  } finally { newsletterWorkerRunning=false; }
+}
+setInterval(()=>processNewsletterQueue().catch(e=>recordServerError('newsletter.worker',e)),NEWSLETTER_INTERVAL_SECONDS*1000).unref();
 
 function retentionEmailWasSent(userId, kind, contextKey='', withinMs=null) {
   const row=db.prepare('SELECT sent_at FROM retention_email_log WHERE user_id=? AND kind=? AND context_key=? AND status=\'sent\' ORDER BY sent_at DESC LIMIT 1').get(userId,kind,String(contextKey||''));
@@ -2471,6 +2589,7 @@ function notificationPreferences(userId) {
     gameInvite: row ? row.game_invite !== 0 : true,
     gameTurn: row ? row.game_turn !== 0 : true,
     retentionEmail: row ? row.retention_email !== 0 : true,
+    newsletterEmail: row ? row.newsletter_email !== 0 : true,
     cityActivity: row ? row.city_activity !== 0 : true,
     recommendations: row ? row.recommendations !== 0 : true,
     reactivationPush: row ? row.reactivation_push !== 0 : true,
@@ -3043,6 +3162,7 @@ app.put('/api/notification-preferences', requireAuth, (req,res) => {
     gameInvite:bool01(req.body?.gameInvite,current.gameInvite),
     gameTurn:bool01(req.body?.gameTurn,current.gameTurn),
     retentionEmail:bool01(req.body?.retentionEmail,current.retentionEmail),
+    newsletterEmail:bool01(req.body?.newsletterEmail,current.newsletterEmail),
     cityActivity:bool01(req.body?.cityActivity,current.cityActivity),
     recommendations:bool01(req.body?.recommendations,current.recommendations),
     reactivationPush:bool01(req.body?.reactivationPush,current.reactivationPush),
@@ -3052,12 +3172,12 @@ app.put('/api/notification-preferences', requireAuth, (req,res) => {
     timezone:cleanTimezone(req.body?.timezone||current.timezone),
     pushEnabled:bool01(req.body?.pushEnabled,current.pushEnabled)
   };
-  db.prepare(`INSERT INTO notification_preferences(user_id,new_match,new_message,game_invite,game_turn,retention_email,city_activity,recommendations,reactivation_push,quiet_hours_enabled,quiet_start,quiet_end,timezone,push_enabled,updated_at)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET new_match=excluded.new_match,new_message=excluded.new_message,
-    game_invite=excluded.game_invite,game_turn=excluded.game_turn,retention_email=excluded.retention_email,city_activity=excluded.city_activity,
+  db.prepare(`INSERT INTO notification_preferences(user_id,new_match,new_message,game_invite,game_turn,retention_email,newsletter_email,city_activity,recommendations,reactivation_push,quiet_hours_enabled,quiet_start,quiet_end,timezone,push_enabled,updated_at)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET new_match=excluded.new_match,new_message=excluded.new_message,
+    game_invite=excluded.game_invite,game_turn=excluded.game_turn,retention_email=excluded.retention_email,newsletter_email=excluded.newsletter_email,city_activity=excluded.city_activity,
     recommendations=excluded.recommendations,reactivation_push=excluded.reactivation_push,quiet_hours_enabled=excluded.quiet_hours_enabled,
     quiet_start=excluded.quiet_start,quiet_end=excluded.quiet_end,timezone=excluded.timezone,push_enabled=excluded.push_enabled,updated_at=excluded.updated_at`)
-    .run(req.user.id,next.newMatch,next.newMessage,next.gameInvite,next.gameTurn,next.retentionEmail,next.cityActivity,next.recommendations,next.reactivationPush,next.quietHoursEnabled,next.quietStart,next.quietEnd,next.timezone,next.pushEnabled,ts);
+    .run(req.user.id,next.newMatch,next.newMessage,next.gameInvite,next.gameTurn,next.retentionEmail,next.newsletterEmail,next.cityActivity,next.recommendations,next.reactivationPush,next.quietHoursEnabled,next.quietStart,next.quietEnd,next.timezone,next.pushEnabled,ts);
   res.json({ok:true,preferences:notificationPreferences(req.user.id),pushConfigured:PUSH_CONFIGURED});
 });
 app.get('/api/push/config', requireAuth, (req,res) => {
@@ -3251,6 +3371,7 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
     const feedback=db.prepare('SELECT id,kind,message,page,created_at,status,admin_note,updated_at FROM feedback WHERE user_id=? ORDER BY created_at ASC').all(userId);
     const notifications=db.prepare('SELECT id,source_user,type,title,body,data_json,created_at,read_at FROM notifications WHERE user_id=? ORDER BY created_at ASC').all(userId).map(n=>({...n,data:safeJsonObject(n.data_json),data_json:undefined}));
     const retentionEmails=db.prepare('SELECT kind,context_key,sent_at,status FROM retention_email_log WHERE user_id=? ORDER BY sent_at ASC').all(userId);
+    const newsletterEmails=db.prepare(`SELECT q.status,q.created_at,q.sent_at,c.subject,c.title,c.audience_city FROM newsletter_queue q JOIN newsletter_campaigns c ON c.id=q.campaign_id WHERE q.user_id=? ORDER BY q.created_at ASC`).all(userId);
     const pushHistory=db.prepare('SELECT notification_id,kind,source,status,sent_at,opened_at,created_at FROM push_delivery_log WHERE user_id=? ORDER BY created_at ASC').all(userId);
     const pushSubscriptions=db.prepare('SELECT endpoint,created_at,updated_at FROM push_subscriptions WHERE user_id=? ORDER BY created_at ASC').all(userId);
     const verification=verificationState(userId);
@@ -3281,7 +3402,7 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
       creatorAttribution:creatorAttribution?{code:creatorAttribution.code,attributedAt:creatorAttribution.attributed_at}:null,
       acquisition:growthAcquisition,growthEvents,
       communityCity:communityCityForUser(userId),verification,securityEvents,
-      likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,notifications,retentionEmails,pushHistory,pushSubscriptions,gameSessions,gameInvitations,quickChallenges,quickAnswers,matches
+      likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,notifications,retentionEmails,newsletterEmails,pushHistory,pushSubscriptions,gameSessions,gameInvitations,quickChallenges,quickAnswers,matches
     };
     res.setHeader('Content-Type','application/json; charset=utf-8');
     res.setHeader('Content-Disposition','attachment; filename="vr-match-mis-datos.json"');
@@ -4340,6 +4461,77 @@ app.post('/api/admin/reports/:id/action', requireAuth, requireAdmin, (req,res) =
   res.json({ok:true,status,userStatus:db.prepare('SELECT status FROM users WHERE id=?').get(report.reported)?.status||null});
 });
 
+
+app.get('/newsletter/unsubscribe', (req,res) => {
+  const token=String(req.query.token||'').trim();
+  const row=token?db.prepare(`SELECT t.user_id,u.email FROM newsletter_unsubscribe_tokens t JOIN users u ON u.id=t.user_id WHERE t.token=?`).get(token):null;
+  if(!row)return res.status(404).type('html').send('<!doctype html><html lang="es"><meta charset="utf-8"><body style="font-family:Arial;background:#09090d;color:white;padding:40px"><h1>Enlace no válido</h1><p>Este enlace de preferencias no está disponible.</p><a style="color:#ff4f88" href="/">Volver a V/R Match</a></body></html>');
+  res.setHeader('Cache-Control','no-store');
+  res.type('html').send(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Novedades · V/R Match</title></head><body style="margin:0;background:#09090d;color:#f8f7fb;font-family:Arial,sans-serif"><main style="max-width:560px;margin:70px auto;padding:28px"><div style="color:#ff4f88;font-weight:900;letter-spacing:.15em">V/R MATCH</div><h1>¿Dejar de recibir novedades?</h1><p style="color:#b8b6c2;line-height:1.6">Seguirás recibiendo los avisos imprescindibles de seguridad o de tu cuenta. Solo desactivaremos los emails de novedades y mejoras de V/R Match.</p><form method="post" action="/newsletter/unsubscribe"><input type="hidden" name="token" value="${escapeEmailHtml(token)}"><button style="border:0;border-radius:12px;background:#ff2f78;color:white;font-weight:900;padding:14px 18px;cursor:pointer" type="submit">Sí, desactivar novedades</button></form><p style="margin-top:24px"><a style="color:#ff78ab" href="/">Cancelar y volver</a></p></main></body></html>`);
+});
+app.post('/newsletter/unsubscribe', express.urlencoded({extended:false}), (req,res) => {
+  const token=String(req.body?.token||'').trim();
+  const row=token?db.prepare('SELECT user_id FROM newsletter_unsubscribe_tokens WHERE token=?').get(token):null;
+  if(!row)return res.status(404).type('html').send('<!doctype html><html lang="es"><meta charset="utf-8"><body style="font-family:Arial;background:#09090d;color:white;padding:40px"><h1>Enlace no válido</h1></body></html>');
+  const ts=now();
+  db.prepare(`INSERT INTO notification_preferences(user_id,newsletter_email,updated_at) VALUES(?,0,?) ON CONFLICT(user_id) DO UPDATE SET newsletter_email=0,updated_at=excluded.updated_at`).run(row.user_id,ts);
+  db.prepare("UPDATE newsletter_queue SET status='cancelled',last_error='' WHERE user_id=? AND status IN ('pending','error')").run(row.user_id);
+  res.setHeader('Cache-Control','no-store');
+  res.type('html').send('<!doctype html><html lang="es"><meta charset="utf-8"><body style="margin:0;background:#09090d;color:#f8f7fb;font-family:Arial,sans-serif"><main style="max-width:560px;margin:70px auto;padding:28px"><div style="color:#ff4f88;font-weight:900;letter-spacing:.15em">V/R MATCH</div><h1>Novedades desactivadas</h1><p style="color:#b8b6c2">Puedes volver a activarlas cuando quieras desde Notificaciones.</p><a style="color:#ff78ab" href="/">Volver a V/R Match</a></main></body></html>');
+});
+
+app.get('/api/admin/newsletters', requireAuth, requireAdmin, (req,res) => {
+  const city=cleanShortText(req.query.city,80);
+  const campaigns=db.prepare(`SELECT c.*,
+    (SELECT COUNT(*) FROM newsletter_queue q WHERE q.campaign_id=c.id) total,
+    (SELECT COUNT(*) FROM newsletter_queue q WHERE q.campaign_id=c.id AND q.status='sent') sent,
+    (SELECT COUNT(*) FROM newsletter_queue q WHERE q.campaign_id=c.id AND q.status='error') errors,
+    (SELECT COUNT(*) FROM newsletter_queue q WHERE q.campaign_id=c.id AND q.status='cancelled') cancelled
+    FROM newsletter_campaigns c ORDER BY c.created_at DESC LIMIT 30`).all();
+  const eligible=newsletterEligibleUsers(city).length;
+  res.json({ok:true,smtpConfigured:SMTP_CONFIGURED,eligible,city,campaigns});
+});
+app.post('/api/admin/newsletters/test', requireAuth, requireAdmin, rateLimit({limit:12,windowMs:60*60*1000,key:req=>req.user.id}), async (req,res) => {
+  if(!SMTP_CONFIGURED)return res.status(503).json({ok:false,error:'SMTP no está configurado.'});
+  const p=newsletterPayload(req.body||{});
+  if(!p.subject||!p.title||p.bodyText.length<10)return res.status(400).json({ok:false,error:'Completa asunto, título y contenido.'});
+  const account=db.prepare('SELECT email FROM users WHERE id=?').get(req.user.id);
+  if(!account?.email)return res.status(400).json({ok:false,error:'Tu cuenta administradora no tiene email.'});
+  await sendEmail({to:account.email,subject:`[PRUEBA] ${p.subject}`,text:`${p.title}\n\n${p.bodyText}${p.ctaUrl?`\n\n${p.ctaUrl}`:''}`,html:renderNewsletterEmail({subject:p.subject,preheader:p.preheader,eyebrow:p.eyebrow,title:p.title,body_text:p.bodyText,cta_label:p.ctaLabel,cta_url:p.ctaUrl},'',true)});
+  logModerationAction(req.user.id,req.user.id,'newsletter_test',p.subject,null);
+  res.json({ok:true,email:account.email});
+});
+app.post('/api/admin/newsletters/send', requireAuth, requireAdmin, rateLimit({limit:6,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  if(!SMTP_CONFIGURED)return res.status(503).json({ok:false,error:'SMTP no está configurado.'});
+  if(String(req.body?.confirm||'').trim().toUpperCase()!=='ENVIAR')return res.status(400).json({ok:false,error:'Confirma el envío escribiendo ENVIAR.'});
+  const p=newsletterPayload(req.body||{});
+  if(!p.subject||!p.title||p.bodyText.length<10)return res.status(400).json({ok:false,error:'Completa asunto, título y contenido.'});
+  const users=newsletterEligibleUsers(p.audienceCity);
+  if(!users.length)return res.status(409).json({ok:false,error:'No hay destinatarios elegibles para este envío.'});
+  const id=safeId('nl'),ts=now();
+  const tx=db.transaction(()=>{
+    db.prepare(`INSERT INTO newsletter_campaigns(id,subject,preheader,eyebrow,title,body_text,cta_label,cta_url,audience_city,status,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,'queued',?,?)`).run(id,p.subject,p.preheader,p.eyebrow,p.title,p.bodyText,p.ctaLabel,p.ctaUrl,p.audienceCity,req.user.id,ts);
+    const ins=db.prepare(`INSERT INTO newsletter_queue(id,campaign_id,user_id,status,attempts,last_error,created_at) VALUES(?,?,?,'pending',0,'',?)`);
+    for(const u of users)ins.run(safeId('nlq'),id,u.id,ts);
+  }); tx();
+  logModerationAction(req.user.id,req.user.id,'newsletter_queued',`${p.subject} · ${users.length} destinatarios${p.audienceCity?` · ${p.audienceCity}`:''}`,null);
+  setImmediate(()=>processNewsletterQueue().catch(e=>recordServerError('newsletter.manual_start',e,{campaignId:id})));
+  res.json({ok:true,id,queued:users.length});
+});
+app.post('/api/admin/newsletters/:id/process', requireAuth, requireAdmin, rateLimit({limit:30,windowMs:60*60*1000,key:req=>req.user.id}), async (req,res) => {
+  const id=String(req.params.id||''); const c=db.prepare('SELECT id,status FROM newsletter_campaigns WHERE id=?').get(id);
+  if(!c)return res.status(404).json({ok:false,error:'Campaña no encontrada.'});
+  if(c.status==='cancelled'||c.status==='completed')return res.status(409).json({ok:false,error:'Esta campaña ya no tiene envíos pendientes.'});
+  res.json({ok:true,...await processNewsletterQueue(NEWSLETTER_BATCH_SIZE)});
+});
+app.post('/api/admin/newsletters/:id/cancel', requireAuth, requireAdmin, (req,res) => {
+  const id=String(req.params.id||''); const c=db.prepare('SELECT id,status FROM newsletter_campaigns WHERE id=?').get(id);
+  if(!c)return res.status(404).json({ok:false,error:'Campaña no encontrada.'});
+  db.transaction(()=>{db.prepare("UPDATE newsletter_campaigns SET status='cancelled',completed_at=? WHERE id=?").run(now(),id);db.prepare("UPDATE newsletter_queue SET status='cancelled',last_error='' WHERE campaign_id=? AND status IN ('pending','error')").run(id);})();
+  logModerationAction(req.user.id,req.user.id,'newsletter_cancelled',id,null);
+  res.json({ok:true});
+});
+
 app.get('/api/admin/users', requireAuth, requireAdmin, (req,res) => {
   const q = cleanShortText(req.query.q,80).toLowerCase();
   const status = ['active','suspended','all'].includes(String(req.query.status||'all')) ? String(req.query.status||'all') : 'all';
@@ -4405,14 +4597,40 @@ app.post('/api/admin/users/:id/action', requireAuth, requireAdmin, (req,res) => 
   if (!user) return res.status(404).json({ok:false,error:'Usuario no encontrado.'});
   const action = String(req.body?.action||'');
   const note = cleanShortText(req.body?.note,500);
-  if (target === req.user.id && action === 'suspend') return res.status(400).json({ok:false,error:'No puedes suspender tu propia cuenta administradora.'});
-  if (!['suspend','reactivate','hide_profile','show_profile','clear_photos','clear_bio','grant_plus_30d','revoke_plus','revoke_verification'].includes(action)) return res.status(400).json({ok:false,error:'Acción no válida.'});
+  if (target === req.user.id && ['suspend','delete_profile','delete_account'].includes(action)) return res.status(400).json({ok:false,error:'No puedes aplicar esa acción destructiva a tu propia cuenta administradora.'});
+  if (!['suspend','reactivate','hide_profile','show_profile','clear_photos','clear_bio','delete_profile','delete_account','grant_plus_30d','revoke_plus','revoke_verification'].includes(action)) return res.status(400).json({ok:false,error:'Acción no válida.'});
   if (action === 'suspend') suspendUser(target);
   if (action === 'reactivate') reactivateUser(target);
   if (action === 'hide_profile') db.prepare('UPDATE profiles SET discoverable=0,updated_at=? WHERE user_id=?').run(now(),target);
   if (action === 'show_profile') db.prepare('UPDATE profiles SET discoverable=1,updated_at=? WHERE user_id=?').run(now(),target);
   if (action === 'clear_photos') clearProfilePhotos(target);
   if (action === 'clear_bio') db.prepare("UPDATE profiles SET bio='',updated_at=? WHERE user_id=?").run(now(),target);
+  if (action === 'delete_profile') {
+    deleteUserUploads(target); deleteVerificationFilesForUser(target);
+    db.transaction(()=>{
+      db.prepare('DELETE FROM profile_verification_requests WHERE user_id=?').run(target);
+      db.prepare('DELETE FROM game_sessions WHERE user1=? OR user2=?').run(target,target);
+      db.prepare('DELETE FROM matches WHERE user1=? OR user2=?').run(target,target);
+      db.prepare('DELETE FROM likes WHERE from_user=? OR to_user=?').run(target,target);
+      db.prepare('DELETE FROM passes WHERE from_user=? OR to_user=?').run(target,target);
+      db.prepare('DELETE FROM community_city_memberships WHERE user_id=?').run(target);
+      db.prepare('DELETE FROM profiles WHERE user_id=?').run(target);
+      db.prepare('UPDATE users SET onboarding_completed=0 WHERE id=?').run(target);
+    })();
+    disconnectUserSockets(target,'profile_deleted_by_admin',{});
+  }
+  if (action === 'delete_account') {
+    const sub=billingSubscriptionForUser(target);
+    if(sub && ['active','trialing','past_due'].includes(sub.status))return res.status(409).json({ok:false,error:'Esta cuenta tiene una suscripción vinculada. Cancélala antes de eliminar definitivamente la cuenta.'});
+    const referralRow=db.prepare('SELECT referral_code FROM user_referrals WHERE user_id=?').get(target);
+    db.prepare('DELETE FROM growth_events WHERE user_id=?').run(target);
+    if(referralRow?.referral_code){
+      db.prepare('DELETE FROM user_referral_events WHERE referral_code=? OR user_id=?').run(referralRow.referral_code,target);
+      db.prepare("UPDATE user_referral_attributions SET referrer_user_id=NULL,referral_code='DELETED' WHERE referrer_user_id=?").run(target);
+    } else db.prepare('DELETE FROM user_referral_events WHERE user_id=?').run(target);
+    disconnectUserSockets(target,'account_deleted_by_admin',{}); deleteUserUploads(target); deleteVerificationFilesForUser(target);
+    db.prepare('DELETE FROM users WHERE id=?').run(target); onlineUsers.delete(target);
+  }
   if (action === 'revoke_verification') db.prepare('UPDATE profiles SET profile_verified=0,profile_verified_at=NULL,updated_at=? WHERE user_id=?').run(now(),target);
   if (action === 'grant_plus_30d') grantPlus(target,30,'admin');
   if (action === 'revoke_plus') revokePlus(target);
@@ -4422,7 +4640,7 @@ app.post('/api/admin/users/:id/action', requireAuth, requireAdmin, (req,res) => 
     emitToUser(target,'dating_profiles',discoverFor(target));
   }
   broadcastDiscovery(); emitMatches(target);
-  res.json({ok:true,userStatus:db.prepare('SELECT status FROM users WHERE id=?').get(target)?.status||null});
+  res.json({ok:true,deleted:action==='delete_account',profileDeleted:action==='delete_profile',userStatus:db.prepare('SELECT status FROM users WHERE id=?').get(target)?.status||null});
 });
 
 app.post('/api/admin/messages/:id/delete', requireAuth, requireAdmin, (req,res) => {

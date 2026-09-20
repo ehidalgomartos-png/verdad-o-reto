@@ -1,0 +1,11 @@
+VRMatch V18.21.2
+
+Actualiza el código sin borrar data/ ni uploads/. No requiere nuevas variables obligatorias. Reutiliza el SMTP existente.
+
+Novedades: Administración -> Novedades.
+1) Redacta o carga la plantilla.
+2) Envíate una prueba.
+3) Revisa destinatarios.
+4) Confirma el envío escribiendo ENVIAR.
+
+El worker procesa la cola automáticamente. Opcionalmente puedes ajustar VR_NEWSLETTER_BATCH_SIZE y VR_NEWSLETTER_INTERVAL_SECONDS.

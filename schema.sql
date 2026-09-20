@@ -290,3 +290,17 @@ CREATE INDEX IF NOT EXISTS idx_chat_events_related ON chat_events(type,related_i
 
 
 -- V18.21.1 · profiles.community_public INTEGER NOT NULL DEFAULT 0 (creada por ensureColumn al arrancar).
+
+
+-- V18.21.2 · Novedades por email y cola de envíos.
+-- notification_preferences.newsletter_email INTEGER NOT NULL DEFAULT 1 se añade por ensureColumn.
+CREATE TABLE IF NOT EXISTS newsletter_campaigns (
+  id TEXT PRIMARY KEY, subject TEXT NOT NULL, preheader TEXT NOT NULL DEFAULT '', eyebrow TEXT NOT NULL DEFAULT 'NOVEDADES',
+  title TEXT NOT NULL, body_text TEXT NOT NULL, cta_label TEXT NOT NULL DEFAULT '', cta_url TEXT NOT NULL DEFAULT '', audience_city TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'queued', created_by TEXT REFERENCES users(id) ON DELETE SET NULL, created_at INTEGER NOT NULL, started_at INTEGER, completed_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS newsletter_queue (
+  id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL REFERENCES newsletter_campaigns(id) ON DELETE CASCADE, user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, sent_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS newsletter_unsubscribe_tokens (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, token TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL);

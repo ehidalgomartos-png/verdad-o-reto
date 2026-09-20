@@ -52,6 +52,10 @@ services:
         value: "8"
       - key: VR_PUSH_SMART_DAILY_CAP
         value: "2"
+      - key: VR_NEWSLETTER_BATCH_SIZE
+        value: "20"
+      - key: VR_NEWSLETTER_INTERVAL_SECONDS
+        value: "60"
       - key: VR_SYSTEM_ERROR_RETENTION_DAYS
         value: "30"
       - key: VR_HEALTH_MEMORY_WARN_MB

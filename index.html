@@ -406,6 +406,7 @@
         <button id="adminTabHistory" type="button" onclick="cambiarAdminTab('history')">🕘 Historial</button>
         <button id="adminTabMetrics" type="button" onclick="cambiarAdminTab('metrics')">📈 Métricas</button>
         <button id="adminTabFeedback" type="button" onclick="cambiarAdminTab('feedback')">💬 Feedback</button>
+        <button id="adminTabNewsletters" type="button" onclick="cambiarAdminTab('newsletters')">✉️ Novedades</button>
         <button id="adminTabMonetization" class="hidden" type="button" tabindex="-1" aria-hidden="true">Funciones internas</button>
         <button id="adminTabProduction" type="button" onclick="cambiarAdminTab('production')">🚀 Producción</button>
         <button id="adminTabSystem" type="button" onclick="cambiarAdminTab('system')">🛠 Sistema</button>
@@ -450,6 +451,25 @@
           <button class="btn btn-secondary" type="button" onclick="cargarAdminFeedback()">↻ Actualizar</button>
         </div>
         <div id="adminFeedbackList" class="admin-feedback-list"><div class="empty-state"><span>💬</span><strong>Sin cargar</strong></div></div>
+      </div>
+
+      <div id="adminPaneNewsletters" class="admin-pane hidden">
+        <div class="admin-history-head"><div><strong>Novedades por email</strong><small>Envía actualizaciones corporativas a cuentas activas con correo verificado que no hayan desactivado las novedades.</small></div><button class="btn btn-secondary" type="button" onclick="cargarAdminNewsletters()">↻ Actualizar</button></div>
+        <div class="newsletter-admin-grid">
+          <section class="newsletter-composer">
+            <div class="newsletter-quick-row"><button class="btn btn-secondary" type="button" onclick="cargarPlantillaComunidad()">✨ Plantilla: comunidad pública</button><span id="newsletterEligibleText">— destinatarios</span></div>
+            <div class="field"><label for="newsletterSubject">Asunto</label><input id="newsletterSubject" class="profile-input" maxlength="120" placeholder="Ya puedes conocer parte de la comunidad de VRMatch"></div>
+            <div class="newsletter-two"><div class="field"><label for="newsletterEyebrow">Etiqueta</label><input id="newsletterEyebrow" class="profile-input" maxlength="40" value="NOVEDADES"></div><div class="field"><label for="newsletterPreheader">Preheader</label><input id="newsletterPreheader" class="profile-input" maxlength="180" placeholder="Una nueva forma de ver cómo crece VRMatch"></div></div>
+            <div class="field"><label for="newsletterTitle">Título</label><input id="newsletterTitle" class="profile-input" maxlength="140" placeholder="La comunidad de VRMatch ya se deja ver 🔥"></div>
+            <div class="field"><label for="newsletterBody">Contenido</label><textarea id="newsletterBody" class="profile-textarea newsletter-body" maxlength="5000" placeholder="Cuenta la novedad de forma breve y clara."></textarea></div>
+            <div class="newsletter-two"><div class="field"><label for="newsletterCtaLabel">Texto del botón</label><input id="newsletterCtaLabel" class="profile-input" maxlength="60" placeholder="Ver la comunidad"></div><div class="field"><label for="newsletterCtaUrl">Enlace VRMatch</label><input id="newsletterCtaUrl" class="profile-input" maxlength="300" placeholder="https://vrmatch.es/espera"></div></div>
+            <div class="field"><label for="newsletterCity">Destinatarios</label><input id="newsletterCity" class="profile-input" maxlength="80" placeholder="Vacío = todos · o escribe Valencia" oninput="actualizarAudienciaNewsletterDebounced()"><small>Solo cuentas activas, con correo verificado y novedades activadas.</small></div>
+            <div class="newsletter-actions"><button class="btn btn-secondary" type="button" onclick="previsualizarNewsletter()">👁 Previsualizar</button><button class="btn btn-secondary" type="button" onclick="enviarPruebaNewsletter()">✉️ Enviarme prueba</button><button class="btn btn-primary" type="button" onclick="enviarNewsletterMasiva()">🚀 Enviar novedad</button></div>
+          </section>
+          <section><div class="admin-history-head"><div><strong>Vista previa</strong><small>El email real usa la misma identidad negra, fucsia y violeta.</small></div></div><div id="newsletterPreview" class="newsletter-preview"><span>NOVEDADES</span><h3>Prepara una novedad</h3><p>La previsualización aparecerá aquí.</p></div></section>
+        </div>
+        <div class="admin-history-head newsletter-history-head"><div><strong>Últimos envíos</strong><small>Estado de la cola y errores de entrega.</small></div></div>
+        <div id="newsletterCampaignList" class="admin-history-list"><div class="empty-state"><span>✉️</span><strong>Aún no hay campañas</strong></div></div>
       </div>
 
       <div id="adminPaneMonetization" class="admin-pane hidden" aria-hidden="true">
@@ -869,6 +889,7 @@
         <label class="setting-switch compact"><span><b>Invitaciones a jugar</b><small>Rompehielos, Conóceme o Verdad o Reto.</small></span><input id="notifPrefInvite" type="checkbox" checked></label>
         <label class="setting-switch compact"><span><b>Tu turno</b><small>Cuando vuelve a tocarte durante una partida.</small></span><input id="notifPrefTurn" type="checkbox" checked></label>
         <label class="setting-switch compact"><span><b>Recordatorios por email</b><small>Perfil incompleto, mensajes cuando estás fuera, invitaciones a jugar y ayuda para romper el hielo. Sin spam.</small></span><input id="notifPrefRetentionEmail" type="checkbox" checked></label>
+        <label class="setting-switch compact"><span><b>Novedades de VRMatch por email</b><small>Nuevas funciones, mejoras y lanzamientos. Puedes darte de baja aquí o desde cualquier email de novedades.</small></span><input id="notifPrefNewsletterEmail" type="checkbox" checked></label>
         <label class="setting-switch compact"><span><b>Actividad en mi ciudad</b><small>Avisos agregados cuando tu comunidad local tenga movimiento relevante.</small></span><input id="notifPrefCityActivity" type="checkbox" checked></label>
         <label class="setting-switch compact"><span><b>Recomendaciones</b><small>Un aviso ocasional cuando tengas perfiles por descubrir. Nunca muestra nombres en la pantalla bloqueada.</small></span><input id="notifPrefRecommendations" type="checkbox" checked></label>
         <label class="setting-switch compact"><span><b>Reactivación</b><small>Si llevas varios días sin entrar, V/R Match puede recordarte que hay actividad disponible.</small></span><input id="notifPrefReactivation" type="checkbox" checked></label>
@@ -994,7 +1015,7 @@
     let adminSelectedUserId = null;
     let notificationItems = [];
     let notificationUnread = 0;
-    let notificationPreferences = { newMatch:true, newMessage:true, gameInvite:true, gameTurn:true, retentionEmail:true, cityActivity:true, recommendations:true, reactivationPush:true, quietHoursEnabled:true, quietStart:'23:00', quietEnd:'08:00', timezone:'Europe/Madrid', pushEnabled:false };
+    let notificationPreferences = { newMatch:true, newMessage:true, gameInvite:true, gameTurn:true, retentionEmail:true, newsletterEmail:true, cityActivity:true, recommendations:true, reactivationPush:true, quietHoursEnabled:true, quietStart:'23:00', quietEnd:'08:00', timezone:'Europe/Madrid', pushEnabled:false };
     let pushConfigured = false;
     let pushSubscriptionActive = false;
     let notificationBrowserEnabled = localStorage.getItem('vr_browser_notifications') === '1';
@@ -1854,6 +1875,7 @@
         gameInvite:data.gameInvite !== false,
         gameTurn:data.gameTurn !== false,
         retentionEmail:data.retentionEmail !== false,
+        newsletterEmail:data.newsletterEmail !== false,
         cityActivity:data.cityActivity !== false,
         recommendations:data.recommendations !== false,
         reactivationPush:data.reactivationPush !== false,
@@ -1907,6 +1929,7 @@
       if($('notifPrefInvite'))$('notifPrefInvite').checked=notificationPreferences.gameInvite;
       if($('notifPrefTurn'))$('notifPrefTurn').checked=notificationPreferences.gameTurn;
       if($('notifPrefRetentionEmail'))$('notifPrefRetentionEmail').checked=notificationPreferences.retentionEmail;
+      if($('notifPrefNewsletterEmail'))$('notifPrefNewsletterEmail').checked=notificationPreferences.newsletterEmail;
       if($('notifPrefCityActivity'))$('notifPrefCityActivity').checked=notificationPreferences.cityActivity;
       if($('notifPrefRecommendations'))$('notifPrefRecommendations').checked=notificationPreferences.recommendations;
       if($('notifPrefReactivation'))$('notifPrefReactivation').checked=notificationPreferences.reactivationPush;
@@ -2018,6 +2041,7 @@
         gameInvite:$('notifPrefInvite').checked,
         gameTurn:$('notifPrefTurn').checked,
         retentionEmail:$('notifPrefRetentionEmail').checked,
+        newsletterEmail:$('notifPrefNewsletterEmail').checked,
         cityActivity:$('notifPrefCityActivity').checked,
         recommendations:$('notifPrefRecommendations').checked,
         reactivationPush:$('notifPrefReactivation').checked,
@@ -2712,13 +2736,14 @@
       [...$('adminStats').querySelectorAll('strong')].forEach((el,i)=>el.textContent=String(vals[i]??'—'));
     }
     async function cambiarAdminTab(tab='reports') {
-      adminCurrentTab=['reports','users','security','history','metrics','feedback','monetization','production','system'].includes(tab)?tab:'reports';
+      adminCurrentTab=['reports','users','security','history','metrics','feedback','newsletters','monetization','production','system'].includes(tab)?tab:'reports';
       $('adminPaneReports').classList.toggle('hidden',adminCurrentTab!=='reports');
       $('adminPaneUsers').classList.toggle('hidden',adminCurrentTab!=='users');
       $('adminPaneSecurity').classList.toggle('hidden',adminCurrentTab!=='security');
       $('adminPaneHistory').classList.toggle('hidden',adminCurrentTab!=='history');
       $('adminPaneMetrics').classList.toggle('hidden',adminCurrentTab!=='metrics');
       $('adminPaneFeedback').classList.toggle('hidden',adminCurrentTab!=='feedback');
+      $('adminPaneNewsletters').classList.toggle('hidden',adminCurrentTab!=='newsletters');
       $('adminPaneMonetization').classList.toggle('hidden',adminCurrentTab!=='monetization');
       $('adminPaneProduction').classList.toggle('hidden',adminCurrentTab!=='production');
       $('adminPaneSystem').classList.toggle('hidden',adminCurrentTab!=='system');
@@ -2728,6 +2753,7 @@
       $('adminTabHistory').classList.toggle('active',adminCurrentTab==='history');
       $('adminTabMetrics').classList.toggle('active',adminCurrentTab==='metrics');
       $('adminTabFeedback').classList.toggle('active',adminCurrentTab==='feedback');
+      $('adminTabNewsletters').classList.toggle('active',adminCurrentTab==='newsletters');
       $('adminTabMonetization').classList.toggle('active',adminCurrentTab==='monetization');
       $('adminTabProduction').classList.toggle('active',adminCurrentTab==='production');
       $('adminTabSystem').classList.toggle('active',adminCurrentTab==='system');
@@ -2737,12 +2763,13 @@
       if(adminCurrentTab==='history')await cargarAdminHistory();
       if(adminCurrentTab==='metrics')await cargarAdminMetrics();
       if(adminCurrentTab==='feedback')await cargarAdminFeedback();
+      if(adminCurrentTab==='newsletters')await cargarAdminNewsletters();
       if(adminCurrentTab==='monetization')await cargarAdminMonetization();
       if(adminCurrentTab==='production')await cargarProductionReadiness();
       if(adminCurrentTab==='system')await cargarAdminSystem();
     }
     const adminReasonLabels={harassment:'Acoso',fake:'Perfil falso',spam:'Spam / estafa',sexual:'Contenido sexual no consentido',underage:'Posible menor de edad',other:'Otro'};
-    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',suspend:'Cuenta suspendida',reactivate:'Cuenta reactivada',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado',feedback_resolve:'Feedback resuelto',feedback_dismiss:'Feedback descartado',feedback_reopen:'Feedback reabierto',verify_profile:'Perfil verificado',reject_verification:'Verificación rechazada',revoke_verification:'Verificación retirada',system_cleanup_expired:'Limpieza de sesiones/tokens',system_cleanup_telemetry:'Depuración de telemetría',system_cleanup_orphan_uploads:'Limpieza de fotos huérfanas',system_optimize:'Optimización SQLite',system_backup_download:'Backup manual descargado',system_backup_restore_test:'Prueba de restauración completada',system_smtp_test:'Prueba SMTP enviada',monetization_paid_enabled:'Premium de pago activado',monetization_launch_free_enabled:'Premium gratis activado',launch_city_unlocked:'Ciudad desbloqueada',launch_city_test_reset:'Ciudad de prueba reiniciada'};
+    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',suspend:'Cuenta suspendida',reactivate:'Cuenta reactivada',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_profile:'Perfil borrado',delete_account:'Cuenta eliminada',newsletter_test:'Prueba de novedad enviada',newsletter_queued:'Novedad encolada',newsletter_cancelled:'Novedad cancelada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado',feedback_resolve:'Feedback resuelto',feedback_dismiss:'Feedback descartado',feedback_reopen:'Feedback reabierto',verify_profile:'Perfil verificado',reject_verification:'Verificación rechazada',revoke_verification:'Verificación retirada',system_cleanup_expired:'Limpieza de sesiones/tokens',system_cleanup_telemetry:'Depuración de telemetría',system_cleanup_orphan_uploads:'Limpieza de fotos huérfanas',system_optimize:'Optimización SQLite',system_backup_download:'Backup manual descargado',system_backup_restore_test:'Prueba de restauración completada',system_smtp_test:'Prueba SMTP enviada',monetization_paid_enabled:'Premium de pago activado',monetization_launch_free_enabled:'Premium gratis activado',launch_city_unlocked:'Ciudad desbloqueada',launch_city_test_reset:'Ciudad de prueba reiniciada'};
     function adminFecha(ts){return ts?new Date(Number(ts)).toLocaleString('es-ES'):'—';}
     function riesgoLabel(level){return level==='high'?'ALTO':level==='medium'?'MEDIO':level==='low'?'BAJO':'SIN SEÑALES';}
     async function cargarAdminSecurity(){if(!currentUserAdmin)return;const vbox=$('adminVerificationList'),rbox=$('adminRiskList');vbox.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Cargando verificaciones…</strong></div>';rbox.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Calculando señales…</strong></div>';const res=await api(`/api/admin/security?status=${encodeURIComponent($('adminVerificationStatus').value)}`);if(!res.ok){vbox.innerHTML=rbox.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudo cargar.')}</strong></div>`;return;}const rows=res.verifications||[],risk=res.risk||[];vbox.innerHTML=rows.length?rows.map(v=>`<article class="verification-admin-card"><div class="verification-admin-head"><div><strong>${escapeHtml(v.name||v.email||'Usuario')}</strong><small>${escapeHtml(v.email||'')} · ${escapeHtml(v.city||'Sin ciudad')}</small></div><span class="verification-status ${escapeHtml(v.status)}">${escapeHtml(v.status)}</span></div><div id="verificationProof_${escapeHtml(v.id)}" class="verification-proof-box hidden"></div><div class="verification-admin-actions">${v.status==='pending'?`<button class="btn btn-secondary" type="button" onclick="verPruebaVerificacion('${escapeHtml(v.id)}')">👁 Ver selfie</button><button class="btn btn-secondary" type="button" onclick="verAdminUsuario('${escapeHtml(v.user_id)}')">Ver fotos</button><button class="btn btn-primary" type="button" onclick="accionVerificacion('${escapeHtml(v.id)}','approve')">✓ Aprobar</button><button class="btn btn-secondary danger-soft" type="button" onclick="accionVerificacion('${escapeHtml(v.id)}','reject')">Rechazar</button>`:`<button class="btn btn-secondary" type="button" onclick="verAdminUsuario('${escapeHtml(v.user_id)}')">Ver cuenta</button>`}</div><small class="verification-date">Solicitud: ${escapeHtml(adminFecha(v.created_at))}${v.reviewed_at?` · Revisada: ${escapeHtml(adminFecha(v.reviewed_at))}`:''}</small></article>`).join(''):'<div class="empty-state"><span>✓</span><strong>No hay solicitudes con este estado</strong></div>';rbox.innerHTML=risk.length?risk.map(u=>`<button class="risk-admin-card ${escapeHtml(u.risk?.level||'none')}" type="button" onclick="verAdminUsuario('${escapeHtml(u.id)}')"><span class="risk-score">${Number(u.risk?.score)||0}</span><span><b>${escapeHtml(u.name||u.email||'Usuario')}</b><small>${escapeHtml(u.city||'Sin ciudad')} · ${u.profile_verified?'✓ perfil verificado':'sin verificación'}</small><small>${Number(u.risk?.openReports)||0} abiertas · ${Number(u.risk?.blocksReceived)||0} bloqueos recibidos · ${Number(u.risk?.signals)||0} señales</small></span><i>${escapeHtml(riesgoLabel(u.risk?.level))}</i></button>`).join(''):'<div class="empty-state"><span>✓</span><strong>No hay señales de riesgo registradas</strong><small>La ausencia de señales no equivale a una garantía de seguridad.</small></div>';}
@@ -2843,6 +2870,7 @@
       defs.push([u.discoverable===0?'show_profile':'hide_profile',u.discoverable===0?'Mostrar perfil':'Ocultar perfil','']);
       if(u.profile_verified)defs.push(['revoke_verification','Retirar verificación','danger-soft']);
       defs.push(['clear_photos','Eliminar fotos','danger-soft'],['clear_bio','Limpiar biografía','danger-soft']);
+      defs.push(['delete_profile','Borrar perfil completo','danger-soft'],['delete_account','Eliminar cuenta definitivamente','danger']);
       const plusActive=u.plus_status==='active' && (!u.plus_expires_at || Number(u.plus_expires_at)>Date.now());
       defs.push([plusActive?'revoke_plus':'grant_plus_30d',plusActive?'Revocar V/R+':'Conceder V/R+ 30 días',plusActive?'danger-soft':'success']);
       defs.forEach(([action,label,cls])=>{const b=document.createElement('button');b.type='button';b.className=`btn btn-secondary ${cls||''}`;b.textContent=label;b.onclick=()=>accionAdminUsuario(action);actionsBox.appendChild(b);});
@@ -2850,14 +2878,33 @@
     function cerrarAdminUsuario(){adminSelectedUserId=null;$('adminUserModal')?.classList.add('hidden');$('adminUserModal')?.setAttribute('aria-hidden','true');}
     async function accionAdminUsuario(action) {
       if(!adminSelectedUserId)return;
-      const destructive=['suspend','clear_photos','clear_bio','revoke_plus'].includes(action);
-      if(destructive&&!confirm('¿Aplicar esta acción de moderación? Quedará registrada en el historial.'))return;
+      const destructive=['suspend','clear_photos','clear_bio','delete_profile','delete_account','revoke_plus'].includes(action);
+      if(action==='delete_account'){const typed=prompt('Esta acción elimina definitivamente la cuenta y sus datos asociados. Escribe ELIMINAR para continuar.');if(String(typed||'').trim().toUpperCase()!=='ELIMINAR')return;}
+      else if(action==='delete_profile'){if(!confirm('Se borrarán perfil, fotos, likes y matches de esta persona, pero conservará su cuenta y podrá crear un perfil nuevo. ¿Continuar?'))return;}
+      else if(destructive&&!confirm('¿Aplicar esta acción de moderación? Quedará registrada en el historial.'))return;
       const note=String($('adminUserNote').value||'').trim();
       const res=await api(`/api/admin/users/${encodeURIComponent(adminSelectedUserId)}/action`,{method:'POST',body:{action,note}});
       if(!res.ok)return mostrarToast(res.error||'No se pudo aplicar la acción.','error');
-      mostrarToast('Acción aplicada y registrada.','info');
+      mostrarToast(res.deleted?'Cuenta eliminada definitivamente.':res.profileDeleted?'Perfil eliminado.':'Acción aplicada y registrada.','info');
+      if(res.deleted){cerrarAdminUsuario();await cargarAdminStats();await cargarAdminUsers();return;}
       const id=adminSelectedUserId; await cargarAdminStats(); await cargarAdminUsers(); await verAdminUsuario(id);
     }
+
+    let newsletterAudienceTimer=null;
+    function newsletterFormData(){return {subject:String($('newsletterSubject')?.value||'').trim(),preheader:String($('newsletterPreheader')?.value||'').trim(),eyebrow:String($('newsletterEyebrow')?.value||'NOVEDADES').trim(),title:String($('newsletterTitle')?.value||'').trim(),bodyText:String($('newsletterBody')?.value||'').trim(),ctaLabel:String($('newsletterCtaLabel')?.value||'').trim(),ctaUrl:String($('newsletterCtaUrl')?.value||'').trim(),audienceCity:String($('newsletterCity')?.value||'').trim()};}
+    function cargarPlantillaComunidad(){
+      $('newsletterSubject').value='La comunidad de VRMatch ya se deja ver 🔥';$('newsletterEyebrow').value='NOVEDADES';$('newsletterPreheader').value='Descubre algunas personas que han elegido aparecer en nuestra comunidad pública.';$('newsletterTitle').value='Personas reales. Ciudades reales. Matches por descubrir.';
+      $('newsletterBody').value='Hemos estrenado una nueva zona pública en VRMatch para que puedas ver cómo está creciendo la comunidad. Algunas personas pueden elegir voluntariamente mostrar su nombre, edad, ciudad, foto principal e intereses.\n\nTú decides si quieres aparecer: la opción está desactivada por defecto y puedes cambiarla cuando quieras desde Privacidad y seguridad.\n\nEntra, descubre cómo crece tu ciudad y sigue rompiendo el hielo a tu manera.';
+      $('newsletterCtaLabel').value='Ver la comunidad';$('newsletterCtaUrl').value=`${location.origin}/espera`;previsualizarNewsletter();
+    }
+    function previsualizarNewsletter(){const p=newsletterFormData(),box=$('newsletterPreview');box.innerHTML=`<span>${escapeHtml(p.eyebrow||'NOVEDADES')}</span><h3>${escapeHtml(p.title||'Prepara una novedad')}</h3>${(p.bodyText||'La previsualización aparecerá aquí.').split(/\n{2,}/).map(x=>`<p>${escapeHtml(x).replace(/\n/g,'<br>')}</p>`).join('')}${p.ctaLabel?`<b class="newsletter-preview-cta">${escapeHtml(p.ctaLabel)}</b>`:''}`;}
+    async function cargarAdminNewsletters(){if(!currentUserAdmin)return;const city=String($('newsletterCity')?.value||'').trim(),res=await api(`/api/admin/newsletters?city=${encodeURIComponent(city)}`);if(!res.ok)return mostrarToast(res.error||'No se pudieron cargar las novedades.','error');$('newsletterEligibleText').textContent=`${Number(res.eligible)||0} destinatarios elegibles${city?` en ${city}`:''}`;const list=$('newsletterCampaignList'),rows=res.campaigns||[];list.innerHTML=rows.length?rows.map(c=>`<article class="admin-history-item newsletter-campaign"><div><strong>${escapeHtml(c.subject)}</strong><small>${escapeHtml(adminFecha(c.created_at))} · ${escapeHtml(c.status)}</small></div><p>${Number(c.sent)||0}/${Number(c.total)||0} enviados · ${Number(c.errors)||0} errores · ${Number(c.cancelled)||0} cancelados${c.audience_city?` · ${escapeHtml(c.audience_city)}`:''}</p><span>${['queued','sending'].includes(c.status)?`<button class="mini-link" type="button" onclick="procesarNewsletter('${escapeHtml(c.id)}')">Procesar ahora</button> <button class="mini-link danger-soft" type="button" onclick="cancelarNewsletter('${escapeHtml(c.id)}')">Cancelar</button>`:'Finalizado'}</span></article>`).join(''):'<div class="empty-state"><span>✉️</span><strong>Aún no hay campañas</strong></div>';}
+    function actualizarAudienciaNewsletterDebounced(){clearTimeout(newsletterAudienceTimer);newsletterAudienceTimer=setTimeout(()=>cargarAdminNewsletters(),350);}
+    async function enviarPruebaNewsletter(){const p=newsletterFormData();const res=await api('/api/admin/newsletters/test',{method:'POST',body:p});if(!res.ok)return mostrarToast(res.error||'No se pudo enviar la prueba.','error');mostrarToast(`Prueba enviada a ${res.email}.`,'info');}
+    async function enviarNewsletterMasiva(){const p=newsletterFormData();if(!p.subject||!p.title||p.bodyText.length<10)return mostrarToast('Completa asunto, título y contenido.','warn');const typed=prompt(`Vas a crear un envío masivo${p.audienceCity?` para ${p.audienceCity}`:' para todos los destinatarios elegibles'}. Escribe ENVIAR para confirmar.`);if(String(typed||'').trim().toUpperCase()!=='ENVIAR')return;const res=await api('/api/admin/newsletters/send',{method:'POST',body:{...p,confirm:'ENVIAR'}});if(!res.ok)return mostrarToast(res.error||'No se pudo crear el envío.','error');mostrarToast(`${res.queued} emails añadidos a la cola.`,'info');await cargarAdminNewsletters();}
+    async function procesarNewsletter(id){const res=await api(`/api/admin/newsletters/${encodeURIComponent(id)}/process`,{method:'POST',body:{}});if(!res.ok)return mostrarToast(res.error||'No se pudo procesar la cola.','error');mostrarToast(`Procesados: ${Number(res.sent)||0} enviados.`,'info');await cargarAdminNewsletters();}
+    async function cancelarNewsletter(id){if(!confirm('¿Cancelar los emails que todavía no se han enviado?'))return;const res=await api(`/api/admin/newsletters/${encodeURIComponent(id)}/cancel`,{method:'POST',body:{}});if(!res.ok)return mostrarToast(res.error||'No se pudo cancelar.','error');mostrarToast('Envío pendiente cancelado.','info');await cargarAdminNewsletters();}
+
     async function cargarAdminHistory() {
       if(!currentUserAdmin)return;
       const res=await api('/api/admin/actions');

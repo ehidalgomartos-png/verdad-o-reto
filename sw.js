@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vr-match-shell-v18-21-1';
+const CACHE_NAME = 'vr-match-shell-v18-21-2';
 const APP_SHELL = [
   '/',
   '/index.html',

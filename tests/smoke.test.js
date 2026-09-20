@@ -99,7 +99,7 @@ test('healthz comprueba SQLite, almacenamiento y versión', async()=>{
   assert.equal(res.data.db,true);
   assert.equal(res.data.storage,true);
   assert.equal(res.data.version,APP_VERSION);
-  assert.equal(APP_VERSION,'18.21.0');
+  assert.equal(APP_VERSION,'18.21.2');
   assert.ok(res.headers.get('x-request-id'));
 });
 
@@ -283,4 +283,25 @@ test('V18.21 chat y juegos: tablas y timeline estructurado disponibles',()=>{
   for(const table of ['game_invitations','quick_challenges','quick_challenge_answers','chat_events']){
     const row=db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table);assert.equal(row?.name,table);
   }
+});
+
+
+test('V18.21.2: administración borra perfiles y respeta preferencia de novedades', async()=>{
+  const login=await api('/api/auth/login',{method:'POST',body:{email:'admin@test.local',password:'Clave-Segura-1816'}});
+  assert.equal(login.status,200); const adminToken=login.data.token;
+  const tmp=await register('delete-profile@test.local');
+  await setCity(tmp.token,'Valencia'); await setProfile(tmp.token,{name:'Perfil Borrable',age:28});
+  let prefs=await api('/api/notification-preferences',{method:'PUT',token:tmp.token,body:{newsletterEmail:false}});
+  assert.equal(prefs.status,200,prefs.data?.error); assert.equal(prefs.data.preferences.newsletterEmail,false);
+  const campaigns=await api('/api/admin/newsletters',{token:adminToken});
+  assert.equal(campaigns.status,200,campaigns.data?.error); assert.equal(campaigns.data.ok,true);
+  assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='newsletter_campaigns'").get());
+  assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='newsletter_queue'").get());
+  const delProfile=await api(`/api/admin/users/${tmp.user.id}/action`,{method:'POST',token:adminToken,body:{action:'delete_profile',note:'test'}});
+  assert.equal(delProfile.status,200,delProfile.data?.error); assert.equal(delProfile.data.profileDeleted,true);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM users WHERE id=?').get(tmp.user.id).n,1);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM profiles WHERE user_id=?').get(tmp.user.id).n,0);
+  const delAccount=await api(`/api/admin/users/${tmp.user.id}/action`,{method:'POST',token:adminToken,body:{action:'delete_account',note:'test'}});
+  assert.equal(delAccount.status,200,delAccount.data?.error); assert.equal(delAccount.data.deleted,true);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM users WHERE id=?').get(tmp.user.id).n,0);
 });

@@ -1,8 +1,8 @@
 {
   "name": "vr-match",
-  "version": "18.21.1",
+  "version": "18.21.2",
   "private": true,
-  "description": "V/R Match - Chat y Juegos 2.0: rompehielos, retos rápidos e invitaciones persistentes",
+  "description": "V/R Match - Comunidad pública, gestión de perfiles y novedades por email con cola y baja sencilla",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
