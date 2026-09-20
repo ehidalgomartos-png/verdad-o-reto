@@ -30,7 +30,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.24.0';
+const APP_VERSION = '18.24.1';
 const LEGAL_VERSION = '2026-09-20';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -2930,6 +2930,49 @@ function activationState(userId) {
   };
 }
 
+// V18.24.1 · Hotfix de compatibilidad para instalaciones que vienen de una base persistente.
+// El panel Beta no debe romper toda la administración si una migración quedó a medias.
+function ensureBetaSchemaCompatibility() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS beta_memberships (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      city TEXT NOT NULL DEFAULT 'Valencia', wave INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'active', source TEXT NOT NULL DEFAULT 'admin',
+      joined_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, ended_at INTEGER,
+      admin_note TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS beta_activity_days (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      day TEXT NOT NULL, first_seen_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL,
+      opens INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(user_id,day)
+    );
+    CREATE TABLE IF NOT EXISTS beta_feedback (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      rating INTEGER NOT NULL DEFAULT 0, category TEXT NOT NULL DEFAULT 'general',
+      message TEXT NOT NULL, page TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open',
+      admin_note TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER
+    );
+  `);
+  // Si existiera una tabla beta parcial de un despliegue interrumpido, la completamos sin borrar datos.
+  const expected={
+    beta_memberships:[['city',"TEXT NOT NULL DEFAULT 'Valencia'"],['wave','INTEGER NOT NULL DEFAULT 1'],['status',"TEXT NOT NULL DEFAULT 'active'"],['source',"TEXT NOT NULL DEFAULT 'admin'"],['joined_at','INTEGER NOT NULL DEFAULT 0'],['updated_at','INTEGER NOT NULL DEFAULT 0'],['ended_at','INTEGER'],['admin_note',"TEXT NOT NULL DEFAULT ''"]],
+    beta_activity_days:[['first_seen_at','INTEGER NOT NULL DEFAULT 0'],['last_seen_at','INTEGER NOT NULL DEFAULT 0'],['opens','INTEGER NOT NULL DEFAULT 1']],
+    beta_feedback:[['rating','INTEGER NOT NULL DEFAULT 0'],['category',"TEXT NOT NULL DEFAULT 'general'"],['message',"TEXT NOT NULL DEFAULT ''"],['page',"TEXT NOT NULL DEFAULT ''"],['status',"TEXT NOT NULL DEFAULT 'open'"],['admin_note',"TEXT NOT NULL DEFAULT ''"],['created_at','INTEGER NOT NULL DEFAULT 0'],['updated_at','INTEGER']]
+  };
+  for(const [table,cols] of Object.entries(expected)){
+    const current=new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(c=>c.name));
+    for(const [column,definition] of cols){if(!current.has(column))db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);}
+  }
+  // Los índices se crean después de completar columnas para soportar esquemas parciales.
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_beta_memberships_status_city ON beta_memberships(status,city,joined_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_beta_activity_last_seen ON beta_activity_days(last_seen_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_beta_feedback_status_created ON beta_feedback(status,created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_beta_feedback_user_created ON beta_feedback(user_id,created_at DESC);
+  `);
+}
+ensureBetaSchemaCompatibility();
+
 // V18.24 · Beta controlada. La beta no bloquea el registro general: solo etiqueta
 // una cohorte para medir activación, retorno y feedback con consentimiento de uso normal.
 function betaMembership(userId) {
@@ -2975,7 +3018,15 @@ function betaAdminRows(city='',status='all') {
       u.email,u.last_seen_at,u.created_at,u.status account_status,p.name,p.age,p.profile_verified
       FROM beta_memberships b JOIN users u ON u.id=b.user_id LEFT JOIN profiles p ON p.user_id=u.id
       ${where.length?'WHERE '+where.join(' AND '):''} ORDER BY b.joined_at DESC LIMIT 300`).all(...params);
-  return rows.map(r=>({...r,milestones:betaMilestones(r.user_id,r.joined_at),feedbackCount:Number(db.prepare('SELECT COUNT(*) n FROM beta_feedback WHERE user_id=?').get(r.user_id)?.n||0)}));
+  return rows.map(r=>{
+    let milestones;
+    try{milestones=betaMilestones(r.user_id,r.joined_at);}
+    catch(error){
+      recordServerError('beta.milestones',error,{userId:r.user_id});
+      milestones={activationPercent:0,profileReady:false,firstLike:false,firstMatch:false,firstMessage:false,firstGame:false,firstInvite:false,d1:false,d7:false,d1Eligible:false,d7Eligible:false};
+    }
+    return {...r,milestones,feedbackCount:Number(db.prepare('SELECT COUNT(*) n FROM beta_feedback WHERE user_id=?').get(r.user_id)?.n||0)};
+  });
 }
 function betaAdminSummary(city='') {
   const rows=betaAdminRows(city,'all'),active=rows.filter(r=>r.status==='active');
@@ -4437,15 +4488,22 @@ app.post('/api/admin/creator-codes/:code/toggle', requireAuth, requireAdmin, (re
 });
 
 
-app.get('/api/admin/beta', requireAuth, requireAdmin, (req,res) => {
-  const city=cleanCommunityCityName(req.query.city||BETA_DEFAULT_CITY)||BETA_DEFAULT_CITY;
-  const status=['all','active','paused','completed','removed'].includes(String(req.query.status||''))?String(req.query.status):'all';
-  const participants=betaAdminRows(city,status);
-  const feedback=db.prepare(`SELECT f.id,f.user_id,f.rating,f.category,f.message,f.page,f.status,f.admin_note,f.created_at,f.updated_at,
-      u.email,p.name,b.city,b.wave
-      FROM beta_feedback f JOIN users u ON u.id=f.user_id LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN beta_memberships b ON b.user_id=f.user_id
-      WHERE LOWER(COALESCE(b.city,''))=LOWER(?) ORDER BY f.created_at DESC LIMIT 80`).all(city);
-  res.json({ok:true,city,defaultCity:BETA_DEFAULT_CITY,bulkLimit:BETA_BULK_LIMIT,summary:betaAdminSummary(city),participants,feedback});
+app.get('/api/admin/beta', requireAuth, requireAdmin, (req,res,next) => {
+  try{
+    ensureBetaSchemaCompatibility();
+    const city=cleanCommunityCityName(req.query.city||BETA_DEFAULT_CITY)||BETA_DEFAULT_CITY;
+    const status=['all','active','paused','completed','removed'].includes(String(req.query.status||''))?String(req.query.status):'all';
+    const participants=betaAdminRows(city,status);
+    const feedback=db.prepare(`SELECT f.id,f.user_id,f.rating,f.category,f.message,f.page,f.status,f.admin_note,f.created_at,f.updated_at,
+        u.email,p.name,b.city,b.wave
+        FROM beta_feedback f JOIN users u ON u.id=f.user_id LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN beta_memberships b ON b.user_id=f.user_id
+        WHERE LOWER(COALESCE(b.city,''))=LOWER(?) ORDER BY f.created_at DESC LIMIT 80`).all(city);
+    const summary=betaAdminSummary(city);
+    res.json({ok:true,city,defaultCity:BETA_DEFAULT_CITY,bulkLimit:BETA_BULK_LIMIT,summary,participants,feedback});
+  }catch(error){
+    recordServerError('admin.beta.load',error,{userId:req.user?.id||null,city:String(req.query.city||'')});
+    next(error);
+  }
 });
 
 app.post('/api/admin/beta/bulk', requireAuth, requireAdmin, rateLimit({limit:8,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {

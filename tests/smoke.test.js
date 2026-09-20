@@ -99,7 +99,7 @@ test('healthz comprueba SQLite, almacenamiento y versión', async()=>{
   assert.equal(res.data.db,true);
   assert.equal(res.data.storage,true);
   assert.equal(res.data.version,APP_VERSION);
-  assert.equal(APP_VERSION,'18.24.0');
+  assert.equal(APP_VERSION,'18.24.1');
   assert.ok(res.headers.get('x-request-id'));
 });
 

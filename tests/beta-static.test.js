@@ -9,8 +9,8 @@ const read=name=>fs.readFileSync(path.join(ROOT,name),'utf8');
 test('V18.24 declara version y tablas beta',()=>{
   const pkg=JSON.parse(read('package.json'));
   const server=read('server.js');
-  assert.equal(pkg.version,'18.24.0');
-  assert.match(server,/const APP_VERSION = '18\.24\.0'/);
+  assert.equal(pkg.version,'18.24.1');
+  assert.match(server,/const APP_VERSION = '18\.24\.1'/);
   assert.match(server,/CREATE TABLE IF NOT EXISTS beta_memberships/);
   assert.match(server,/CREATE TABLE IF NOT EXISTS beta_activity_days/);
   assert.match(server,/CREATE TABLE IF NOT EXISTS beta_feedback/);
@@ -28,4 +28,12 @@ test('V18.24 incluye panel beta, feedback y privacidad',()=>{
   assert.match(html,/id="betaFeedbackModal"/);
   assert.match(css,/\.beta-admin-stats/);
   assert.match(privacy,/Beta controlada y feedback/);
+});
+
+
+test('V18.24.1 protege la carga del panel beta y repara esquema parcial',()=>{
+  const server=read('server.js');
+  assert.match(server,/function ensureBetaSchemaCompatibility\(\)/);
+  assert.match(server,/recordServerError\('admin\.beta\.load'/);
+  assert.match(server,/recordServerError\('beta\.milestones'/);
 });
