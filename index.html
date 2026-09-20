@@ -15,6 +15,21 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+  <script>
+    (function(){
+      try {
+        var ua = navigator.userAgent || '';
+        var touch = navigator.maxTouchPoints || 0;
+        var isIPad = /iPad/i.test(ua) || (navigator.platform === 'MacIntel' && touch > 1);
+        var isAndroidTablet = /Android/i.test(ua) && !/Mobile/i.test(ua);
+        var isTabletUA = isIPad || isAndroidTablet || /Tablet|PlayBook|Silk/i.test(ua);
+        var isMobileUA = /iPhone|iPod|Android.*Mobile|Windows Phone|Mobi/i.test(ua);
+        var width = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+        var device = isTabletUA ? 'tablet' : (isMobileUA ? 'mobile' : (width >= 1100 ? 'desktop' : (width >= 701 ? 'tablet' : 'mobile')));
+        document.documentElement.dataset.vrDevice = device;
+      } catch (_) {}
+    })();
+  </script>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>

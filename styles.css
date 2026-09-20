@@ -810,3 +810,205 @@ textarea { font: inherit; }
   .field-hint,.mini-info,.legal-note{font-size:11px}
   .app-copyright{font-size:8px;letter-spacing:.04em}
 }
+
+/* =========================================================
+   V18.24.3 · RESPONSIVE REAL POR DISPOSITIVO
+   Móvil / tablet / ordenador con composiciones específicas.
+   ========================================================= */
+
+/* Base fluida: evita que un contenido pensado para móvil se estire sin control. */
+.app-shell{transition:max-width .2s ease,width .2s ease,padding .2s ease}
+.screen{width:100%;margin-inline:auto}
+
+/* ------------------------- TABLET -------------------------
+   701–1099 CSS px. También se fuerza para iPad/tablets detectadas
+   aunque estén en horizontal y superen ese ancho. */
+@media (min-width:701px) and (max-width:1099px){
+  .app-shell{width:min(94vw,920px);padding:26px 0 42px}
+  .brand-bar{margin-inline:8px;margin-bottom:20px}
+  .screen{padding:30px;border-radius:28px}
+  .auth-screen,.city-onboarding-screen{max-width:680px}
+  .screen-profile{max-width:900px}
+  #pantallaDescubrir,#pantallaMatches,#pantallaPlus,#pantallaChat{max-width:860px}
+  #pantallaMazos,#pantallaMenu,#pantallaLobby,#pantallaJuego{max-width:760px}
+  .admin-screen{max-width:920px}
+
+  /* Perfil de tablet: dos columnas reales. */
+  .screen-profile #formularioPerfil{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:18px;row-gap:16px}
+  .screen-profile #formularioPerfil>.profile-avatar-field,
+  .screen-profile #formularioPerfil>.location-card,
+  .screen-profile #formularioPerfil>.profile-preferences-card,
+  .screen-profile #formularioPerfil>.btn-xl{grid-column:1/-1}
+  .profile-photo-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .avatar-options{grid-template-columns:repeat(6,minmax(0,1fr));max-width:560px}
+
+  /* Descubrir y chat aprovechan el ancho sin crear tarjetas gigantes. */
+  .dating-stage{width:min(100%,650px);margin-inline:auto;min-height:560px}
+  .dating-card{max-width:620px;margin-inline:auto}
+  .dating-photo{height:min(55vh,520px)}
+  .swipe-actions{max-width:620px;margin-inline:auto}
+  .dating-tip{max-width:620px;margin-inline:auto}
+  .matches-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;min-height:430px}
+  .matches-empty{grid-column:1/-1}
+  .chat-screen{min-height:720px}
+  .chat-messages{min-height:390px}
+  .chat-action-bar{grid-template-columns:repeat(3,minmax(0,1fr))}
+
+  /* Juegos: dos columnas donde hay opciones repetidas. */
+  .deck-grid,.mode-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .deck-grid>.deck-card:last-child:nth-child(odd),.mode-grid>.mode-card:last-child:nth-child(odd){grid-column:1/-1}
+}
+
+/* Tablets detectadas por dispositivo (p. ej. iPad Pro horizontal a >1100 px). */
+html[data-vr-device="tablet"] .app-shell{width:min(94vw,960px);max-width:960px;padding:28px 0 44px}
+html[data-vr-device="tablet"] .screen{padding:30px;border-radius:28px}
+html[data-vr-device="tablet"] .auth-screen,
+html[data-vr-device="tablet"] .city-onboarding-screen{max-width:700px}
+html[data-vr-device="tablet"] .screen-profile{max-width:920px}
+html[data-vr-device="tablet"] #pantallaDescubrir,
+html[data-vr-device="tablet"] #pantallaMatches,
+html[data-vr-device="tablet"] #pantallaPlus,
+html[data-vr-device="tablet"] #pantallaChat{max-width:880px}
+html[data-vr-device="tablet"] #pantallaMazos,
+html[data-vr-device="tablet"] #pantallaMenu,
+html[data-vr-device="tablet"] #pantallaLobby,
+html[data-vr-device="tablet"] #pantallaJuego{max-width:780px}
+html[data-vr-device="tablet"] .screen-profile #formularioPerfil{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:18px}
+html[data-vr-device="tablet"] .screen-profile #formularioPerfil>.profile-avatar-field,
+html[data-vr-device="tablet"] .screen-profile #formularioPerfil>.location-card,
+html[data-vr-device="tablet"] .screen-profile #formularioPerfil>.profile-preferences-card,
+html[data-vr-device="tablet"] .screen-profile #formularioPerfil>.btn-xl{grid-column:1/-1}
+html[data-vr-device="tablet"] .dating-stage{width:min(100%,660px);margin-inline:auto}
+html[data-vr-device="tablet"] .dating-card,
+html[data-vr-device="tablet"] .swipe-actions,
+html[data-vr-device="tablet"] .dating-tip{max-width:630px;margin-inline:auto}
+
+/* ------------------------ DESKTOP ------------------------- */
+@media (min-width:1100px){
+  body{background:
+    radial-gradient(circle at 20% 0,rgba(255,47,120,.13),transparent 28%),
+    radial-gradient(circle at 88% 30%,rgba(53,217,255,.08),transparent 26%),
+    var(--bg)}
+  .bg-grid{background-size:44px 44px;opacity:.10}
+  .app-shell{width:min(94vw,1180px);padding:30px 0 56px}
+  .brand-bar{margin:0 10px 22px}
+  .brand-mark{font-size:26px}.brand-copy strong{font-size:14px}.brand-copy small{font-size:10px}
+  .screen{padding:34px;border-radius:30px}
+
+  /* Cada tipo de pantalla tiene un ancho propio de escritorio. */
+  .auth-screen,.city-onboarding-screen{max-width:680px}
+  .screen-profile{max-width:980px}
+  #pantallaDescubrir,#pantallaMatches{max-width:1080px}
+  #pantallaPlus{max-width:1040px}
+  #pantallaChat{max-width:1000px}
+  #pantallaAdmin{max-width:1180px}
+  #pantallaMazos,#pantallaMenu,#pantallaLobby,#pantallaJuego{max-width:800px}
+
+  /* Perfil: formulario de escritorio en dos columnas. */
+  .screen-profile #formularioPerfil{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:22px;row-gap:18px}
+  .screen-profile #formularioPerfil>.profile-avatar-field,
+  .screen-profile #formularioPerfil>.location-card,
+  .screen-profile #formularioPerfil>.profile-preferences-card,
+  .screen-profile #formularioPerfil>.btn-xl{grid-column:1/-1}
+  .profile-avatar-row{min-height:104px;padding:16px}
+  .profile-avatar-preview{width:84px;height:84px;flex-basis:84px}
+  .profile-photo-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+  .avatar-options{grid-template-columns:repeat(6,64px);justify-content:start}
+  .profile-preferences-card{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:18px}
+  .profile-preferences-card>div:first-child{grid-column:1/-1}
+
+  /* Descubrir: tarjeta principal + navegación lateral de escritorio. */
+  #pantallaDescubrir{display:grid;grid-template-columns:minmax(0,1fr) 230px;column-gap:28px;align-items:start}
+  #pantallaDescubrir>.dating-topbar{grid-column:1/-1}
+  #pantallaDescubrir>#activationDiscoverCoach,
+  #pantallaDescubrir>#datingFilters,
+  #pantallaDescubrir>.dating-stage,
+  #pantallaDescubrir>.swipe-actions,
+  #pantallaDescubrir>.dating-tip{grid-column:1}
+  #pantallaDescubrir>.dating-nav{grid-column:2;grid-row:2 / span 6;align-self:start;position:sticky;top:24px}
+  #pantallaDescubrir .dating-stage{width:min(100%,680px);margin-inline:auto;min-height:590px}
+  #pantallaDescubrir .dating-card{max-width:650px;margin-inline:auto}
+  #pantallaDescubrir .dating-photo{height:min(57vh,520px)}
+  #pantallaDescubrir .swipe-actions,#pantallaDescubrir .dating-tip{width:min(100%,650px);margin-inline:auto}
+
+  /* Matches también utiliza carril lateral, dejando más espacio a la lista. */
+  #pantallaMatches{display:grid;grid-template-columns:minmax(0,1fr) 230px;column-gap:28px;align-items:start}
+  #pantallaMatches>.dating-topbar{grid-column:1/-1}
+  #pantallaMatches>.matches-list{grid-column:1;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;min-height:520px}
+  #pantallaMatches>.dating-nav{grid-column:2;grid-row:2;align-self:start;position:sticky;top:24px}
+  #pantallaMatches .matches-empty{grid-column:1/-1}
+
+  /* Navegación lateral desktop reutilizando la navegación existente. */
+  #pantallaDescubrir>.dating-nav,#pantallaMatches>.dating-nav{
+    display:flex;flex-direction:column;gap:6px;margin:0;padding:10px;border:1px solid rgba(255,255,255,.08);
+    border-radius:20px;background:rgba(13,13,20,.78);box-shadow:0 18px 46px rgba(0,0,0,.24);backdrop-filter:blur(18px)
+  }
+  #pantallaDescubrir>.dating-nav button,#pantallaMatches>.dating-nav button{
+    min-height:52px;display:grid;grid-template-columns:34px minmax(0,1fr);align-items:center;justify-items:start;gap:10px;
+    padding:8px 12px;border-radius:14px;text-align:left
+  }
+  #pantallaDescubrir>.dating-nav button span,#pantallaMatches>.dating-nav button span{font-size:19px;text-align:center;width:30px}
+  #pantallaDescubrir>.dating-nav button small,#pantallaMatches>.dating-nav button small{font-size:11px}
+  #pantallaDescubrir>.dating-nav button.active,#pantallaMatches>.dating-nav button.active{background:rgba(255,47,120,.10)}
+  .nav-badge{right:10px;top:50%;transform:translateY(-50%)}
+
+  /* Chat de ordenador: más aire y área conversacional. */
+  .chat-screen{min-height:740px;height:min(82vh,820px);display:flex;flex-direction:column}
+  .chat-header{padding-bottom:14px}
+  .chat-messages{flex:1 1 auto;min-height:380px;max-height:none}
+  .chat-action-bar{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .chat-action-bar button{min-height:60px;padding:10px 14px}
+  .chat-starters{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .chat-composer input{font-size:15px}
+
+  /* Juegos y selección de mazos: aprovechan teclado/ratón y ancho. */
+  .deck-grid,.mode-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  .deck-grid>.deck-card:last-child:nth-child(odd),.mode-grid>.mode-card:last-child:nth-child(odd){grid-column:1/-1}
+  .challenge-card{min-height:310px;padding-inline:42px}
+  .challenge-card p{font-size:18px;max-width:580px}
+  .game-actions{max-width:620px;margin-inline:auto;width:100%}
+
+  /* En ordenador la navegación móvil jamás debe aparecer. */
+  .mobile-app-dock,.mobile-install-nudge{display:none!important}
+  body.has-mobile-dock{padding-bottom:0!important}
+  .app-copyright{max-width:1080px;margin-inline:auto}
+}
+
+/* Si el navegador identifica de forma explícita un ordenador, mantiene la
+   composición desktop mientras la ventana tenga espacio suficiente. */
+@media (min-width:900px){
+  html[data-vr-device="desktop"] .app-shell{width:min(94vw,1180px)}
+}
+
+/* ------------------------- MÓVIL --------------------------
+   Se mantiene el diseño táctil de V18.23/18.24.2. Esta capa refuerza que
+   nada de tablet/escritorio se cuele en pantallas pequeñas. */
+@media (max-width:700px){
+  .app-shell{width:min(94vw,520px);max-width:520px}
+  .screen-profile #formularioPerfil{grid-template-columns:1fr}
+  .screen-profile #formularioPerfil>*{grid-column:auto}
+  .matches-list{grid-template-columns:1fr}
+  .deck-grid,.mode-grid{grid-template-columns:1fr}
+  .deck-grid>*:last-child,.mode-grid>*:last-child{grid-column:auto}
+}
+
+/* Un iPad/tablet ancho no debe heredar el carril lateral de escritorio. */
+@media (min-width:1100px){
+  html[data-vr-device="tablet"] #pantallaDescubrir,
+  html[data-vr-device="tablet"] #pantallaMatches{display:block}
+  html[data-vr-device="tablet"] #pantallaDescubrir>.dating-nav,
+  html[data-vr-device="tablet"] #pantallaMatches>.dating-nav{
+    position:static;display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:4px;padding-top:10px;
+    border:0;border-top:1px solid rgba(255,255,255,.07);border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none
+  }
+  html[data-vr-device="tablet"] #pantallaDescubrir>.dating-nav button,
+  html[data-vr-device="tablet"] #pantallaMatches>.dating-nav button{
+    min-height:44px;display:grid;grid-template-columns:1fr;justify-items:center;gap:3px;padding:4px;border-radius:12px;text-align:center
+  }
+  html[data-vr-device="tablet"] #pantallaDescubrir>.dating-nav button span,
+  html[data-vr-device="tablet"] #pantallaMatches>.dating-nav button span{width:auto;font-size:18px}
+  html[data-vr-device="tablet"] #pantallaDescubrir>.dating-nav button small,
+  html[data-vr-device="tablet"] #pantallaMatches>.dating-nav button small{font-size:9px}
+  html[data-vr-device="tablet"] #pantallaDescubrir .dating-stage{width:min(100%,660px);margin-inline:auto}
+  html[data-vr-device="tablet"] #pantallaMatches>.matches-list{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
