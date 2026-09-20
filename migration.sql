@@ -307,3 +307,6 @@ CREATE TABLE IF NOT EXISTS chat_events (
 CREATE INDEX IF NOT EXISTS idx_chat_events_match ON chat_events(match_id,created_at ASC);
 CREATE INDEX IF NOT EXISTS idx_chat_events_related ON chat_events(type,related_id);
 
+
+
+-- V18.21.1 · profiles.community_public INTEGER NOT NULL DEFAULT 0 (creada por ensureColumn al arrancar).

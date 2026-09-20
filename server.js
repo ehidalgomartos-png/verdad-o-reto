@@ -30,7 +30,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.21.0';
+const APP_VERSION = '18.21.1';
 const LEGAL_VERSION = '2026-09-19';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -203,6 +203,7 @@ ensureColumn('profiles', 'location_lng', 'REAL');
 ensureColumn('profiles', 'location_updated_at', 'INTEGER');
 ensureColumn('profiles', 'profile_verified', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('profiles', 'profile_verified_at', 'INTEGER');
+ensureColumn('profiles', 'community_public', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('reports', 'updated_at', 'INTEGER');
 ensureColumn('reports', 'moderator_note', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('reports', 'match_id', 'TEXT');
@@ -2645,7 +2646,8 @@ function profileFromRow(row) {
     privacy: {
       discoverable: row.discoverable !== 0,
       showOnline: row.show_online !== 0,
-      allowGameInvites: row.allow_game_invites !== 0
+      allowGameInvites: row.allow_game_invites !== 0,
+      communityPublic: row.community_public === 1
     },
     online: row.show_online !== 0 ? isOnline(row.user_id) : false
   };
@@ -3138,11 +3140,11 @@ app.put('/api/profile', requireAuth, (req,res) => {
       interests:cleanInterests(req.body?.intereses), avatar, photos,
       ageMin, ageMax, lookingFor:cleanLooking(req.body?.preferences?.lookingFor), cityPref:cleanShortText(req.body?.preferences?.city,40), interestPref:cleanShortText(req.body?.preferences?.interest,30), radiusKm,
       locationLat, locationLng, locationUpdatedAt,
-      discoverable:bool01(req.body?.privacy?.discoverable, existing?.privacy?.discoverable ?? true), showOnline:bool01(req.body?.privacy?.showOnline, existing?.privacy?.showOnline ?? true), allowGameInvites:bool01(req.body?.privacy?.allowGameInvites, existing?.privacy?.allowGameInvites ?? true)
+      discoverable:bool01(req.body?.privacy?.discoverable, existing?.privacy?.discoverable ?? true), showOnline:bool01(req.body?.privacy?.showOnline, existing?.privacy?.showOnline ?? true), allowGameInvites:bool01(req.body?.privacy?.allowGameInvites, existing?.privacy?.allowGameInvites ?? true), communityPublic:bool01(req.body?.privacy?.communityPublic, existing?.privacy?.communityPublic ?? false)
     };
-    db.prepare(`INSERT INTO profiles(user_id,name,age,gender,city,bio,interests_json,avatar,photos_json,age_min,age_max,looking_for,city_pref,interest_pref,radius_km,location_lat,location_lng,location_updated_at,discoverable,show_online,allow_game_invites,updated_at)
-      VALUES(@userId,@name,@age,@gender,@city,@bio,@interests,@avatar,@photos,@ageMin,@ageMax,@lookingFor,@cityPref,@interestPref,@radiusKm,@locationLat,@locationLng,@locationUpdatedAt,@discoverable,@showOnline,@allowGameInvites,@updatedAt)
-      ON CONFLICT(user_id) DO UPDATE SET name=excluded.name,age=excluded.age,gender=excluded.gender,city=excluded.city,bio=excluded.bio,interests_json=excluded.interests_json,avatar=excluded.avatar,photos_json=excluded.photos_json,age_min=excluded.age_min,age_max=excluded.age_max,looking_for=excluded.looking_for,city_pref=excluded.city_pref,interest_pref=excluded.interest_pref,radius_km=excluded.radius_km,location_lat=excluded.location_lat,location_lng=excluded.location_lng,location_updated_at=excluded.location_updated_at,discoverable=excluded.discoverable,show_online=excluded.show_online,allow_game_invites=excluded.allow_game_invites,updated_at=excluded.updated_at`)
+    db.prepare(`INSERT INTO profiles(user_id,name,age,gender,city,bio,interests_json,avatar,photos_json,age_min,age_max,looking_for,city_pref,interest_pref,radius_km,location_lat,location_lng,location_updated_at,discoverable,show_online,allow_game_invites,community_public,updated_at)
+      VALUES(@userId,@name,@age,@gender,@city,@bio,@interests,@avatar,@photos,@ageMin,@ageMax,@lookingFor,@cityPref,@interestPref,@radiusKm,@locationLat,@locationLng,@locationUpdatedAt,@discoverable,@showOnline,@allowGameInvites,@communityPublic,@updatedAt)
+      ON CONFLICT(user_id) DO UPDATE SET name=excluded.name,age=excluded.age,gender=excluded.gender,city=excluded.city,bio=excluded.bio,interests_json=excluded.interests_json,avatar=excluded.avatar,photos_json=excluded.photos_json,age_min=excluded.age_min,age_max=excluded.age_max,looking_for=excluded.looking_for,city_pref=excluded.city_pref,interest_pref=excluded.interest_pref,radius_km=excluded.radius_km,location_lat=excluded.location_lat,location_lng=excluded.location_lng,location_updated_at=excluded.location_updated_at,discoverable=excluded.discoverable,show_online=excluded.show_online,allow_game_invites=excluded.allow_game_invites,community_public=excluded.community_public,updated_at=excluded.updated_at`)
       .run({userId,...values,interests:JSON.stringify(values.interests),photos:JSON.stringify(values.photos),updatedAt:now()});
     cleanupUnusedUploads(userId,[...photos,avatar].filter(x=>String(x).startsWith('/uploads/')));
     const profile = getProfile(userId);
@@ -3168,7 +3170,7 @@ app.post('/api/account/change-password', requireAuth, rateLimit({limit:8,windowM
 
 app.put('/api/account/privacy', requireAuth, (req,res) => {
   const p=getProfile(req.user.id); if(!p)return res.status(400).json({ok:false,error:'Completa tu perfil primero.'});
-  db.prepare('UPDATE profiles SET discoverable=?,show_online=?,allow_game_invites=?,updated_at=? WHERE user_id=?').run(bool01(req.body?.discoverable,p.privacy.discoverable),bool01(req.body?.showOnline,p.privacy.showOnline),bool01(req.body?.allowGameInvites,p.privacy.allowGameInvites),now(),req.user.id);
+  db.prepare('UPDATE profiles SET discoverable=?,show_online=?,allow_game_invites=?,community_public=?,updated_at=? WHERE user_id=?').run(bool01(req.body?.discoverable,p.privacy.discoverable),bool01(req.body?.showOnline,p.privacy.showOnline),bool01(req.body?.allowGameInvites,p.privacy.allowGameInvites),bool01(req.body?.communityPublic,p.privacy.communityPublic),now(),req.user.id);
   broadcastDiscovery(); res.json({ok:true,privacy:getProfile(req.user.id).privacy});
 });
 
@@ -3413,6 +3415,31 @@ app.get('/api/community/cities', rateLimit({limit:180,windowMs:60*60*1000,key:re
 app.get('/api/community/leaderboard', rateLimit({limit:180,windowMs:60*60*1000,key:req=>req.ip}), (req,res) => {
   const days=[1,7,30,90].includes(Number(req.query.days))?Number(req.query.days):7;
   res.json({ok:true,days,cities:communityCityLeaderboard(days,Number(req.query.limit)||10)});
+});
+
+// V18.21.1 · Escaparate público opcional de comunidad. Solo devuelve la
+// información mínima que cada usuario ha aceptado publicar expresamente.
+app.get('/api/community/public-profiles', rateLimit({limit:180,windowMs:60*60*1000,key:req=>req.ip}), (req,res) => {
+  const limit=Math.max(1,Math.min(36,Number(req.query.limit)||18));
+  const city=cleanShortText(req.query.city,40);
+  const where=["u.status='active'","p.discoverable=1","p.community_public=1","p.age BETWEEN 18 AND 99"];
+  const params=[];
+  if(city){where.push('LOWER(TRIM(p.city))=LOWER(TRIM(?))');params.push(city);}
+  const rows=db.prepare(`SELECT p.name,p.age,p.city,p.avatar,p.photos_json,p.interests_json,p.profile_verified,p.updated_at
+    FROM profiles p JOIN users u ON u.id=p.user_id
+    WHERE ${where.join(' AND ')}
+    ORDER BY p.profile_verified DESC,u.last_seen_at DESC,p.updated_at DESC
+    LIMIT ?`).all(...params,limit);
+  const profiles=rows.map(row=>{
+    const fullName=cleanName(row.name||'');
+    const firstName=(fullName.split(/\s+/).filter(Boolean)[0]||'Usuario').slice(0,30);
+    const photos=safeJsonArray(row.photos_json).filter(x=>String(x||'').startsWith('/uploads/'));
+    const avatar=String(row.avatar||'').startsWith('/uploads/')?String(row.avatar):'';
+    const interests=safeJsonArray(row.interests_json).map(x=>cleanShortText(x,30)).filter(Boolean).slice(0,3);
+    return {name:firstName,age:Number(row.age)||18,city:cleanShortText(row.city,40),photo:photos[0]||avatar||'',interests,verified:row.profile_verified===1};
+  });
+  res.setHeader('Cache-Control','public, max-age=60, stale-while-revalidate=120');
+  res.json({ok:true,profiles});
 });
 app.get('/api/community/me', requireAuth, rateLimit({limit:120,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
   res.json({ok:true,city:communityCityForUser(req.user.id)});

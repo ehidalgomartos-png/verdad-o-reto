@@ -1,0 +1,5 @@
+VRMatch V18.21.1 — Comunidad pública
+
+Actualiza el código sin borrar data/ ni uploads/. No requiere variables nuevas en Render.
+La nueva columna profiles.community_public se crea automáticamente al arrancar y queda en 0 para todos los usuarios existentes.
+Por tanto, nadie aparecerá públicamente hasta activar voluntariamente la opción desde Privacidad y seguridad.
