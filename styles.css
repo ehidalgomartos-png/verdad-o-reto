@@ -756,3 +756,57 @@ textarea { font: inherit; }
 .beta-feedback-card>div:first-child{display:grid;gap:2px}.beta-feedback-card>div:first-child>span{font-size:9px;color:#ff5f9b;letter-spacing:1px}.beta-feedback-card b{font-size:9px}.beta-feedback-card small{font-size:7px;color:#777a89}.beta-feedback-card p{font-size:8px;line-height:1.5;color:#b8bac5;margin:8px 0}.admin-beta-user-chip{grid-column:1/-1;padding:8px 10px;border-radius:11px;border:1px solid rgba(151,92,255,.18);background:rgba(111,70,255,.06);color:#b8a2ff;font-size:8px}.admin-beta-user-chip b{color:#fff}
 @media(max-width:900px){.beta-admin-stats{grid-template-columns:repeat(3,1fr)}.beta-admin-grid{grid-template-columns:1fr}.beta-bulk-card{grid-template-columns:1fr 1fr}.beta-bulk-card>div:first-child{grid-column:1/-1}.beta-bulk-card .btn{align-self:stretch}}
 @media(max-width:520px){.beta-admin-stats{grid-template-columns:1fr 1fr}.beta-bulk-card{grid-template-columns:1fr}.beta-bulk-card>div:first-child{grid-column:auto}.beta-rating{gap:5px}.beta-rating button{min-height:42px}}
+
+/* =========================================================
+   V18.24.2 · LEGIBILIDAD MÓVIL / CONTRASTE
+   Ajuste visual sin cambios de lógica.
+   ========================================================= */
+:root{--muted:#a6a8b6}
+
+/* Textos auxiliares que quedaban demasiado tenues en fondos oscuros */
+.field-hint,.mini-info,.legal-note{color:#9ea1af;font-size:11px;line-height:1.55}
+.location-copy small,.profile-avatar-copy small{color:#9a9dab;font-size:10.5px;line-height:1.5}
+.profile-preferences-card label small,.filter-note,.filter-distance-note{color:#9598a7;font-size:10px;line-height:1.5}
+.menu-hero p{color:#9a9dab;font-size:12px;line-height:1.5}
+.deck-body small,.mode-card small{color:#a0a3b1;font-size:11px;line-height:1.5}
+.stats-row span{color:#9295a4;font-size:10px;line-height:1.4}
+.empty-state small,.dating-empty small{color:#999cab;font-size:11px;line-height:1.55}
+.room-title small,.opponent-bar small,.invite-panel small,.upload-box small,.game-hint{color:#989ba9}
+.action-btn small{color:#9a9dab;font-size:9.5px;line-height:1.4}
+.profile-verification-state small{color:#9da0ae;font-size:9.5px}
+.setting-switch small,.danger-zone p{color:#9b9eac}
+.auth-verification-copy small{color:#9ca6a1;font-size:10.5px}
+
+/* Pies y enlaces legales: siguen discretos, pero ya no se pierden */
+.app-copyright{color:#9699a8;font-size:9px;letter-spacing:.055em;line-height:1.6}
+.app-copyright a{color:#b7b9c5;opacity:.92}
+.info-footer{color:#9295a4;font-size:10px;line-height:1.6}
+.info-footer a{color:#b9bbc7}
+.info-card p,.info-card li{font-size:11px;line-height:1.6;color:#a0a3b1}
+.info-faq p{font-size:11px;color:#a0a3b1}
+.info-note{font-size:11px}
+
+@media(max-width:700px){
+  /* En móvil no usar texto funcional por debajo de ~10-11 px */
+  label{font-size:13px}
+  .eyebrow{color:#9a9dac;font-size:10.5px}
+  p.subtitle,.section-heading p{font-size:13.5px;color:#aaacb9}
+  .field-hint,.mini-info,.legal-note{font-size:11.5px;color:#a5a8b5}
+  .location-copy small,.profile-avatar-copy small{font-size:11px;color:#a2a5b3}
+  .profile-preferences-card label small,.filter-note,.filter-distance-note{font-size:10.5px;color:#9da0ae}
+  .dating-empty small{font-size:11.5px;color:#a0a3b1}
+  .menu-hero p{font-size:12px;color:#a3a6b4}
+  .deck-body small,.mode-card small{font-size:11.5px;color:#a5a8b6}
+  .stats-row span{font-size:10px;color:#9b9eac}
+  .mini-link,.link-btn{font-size:11px}
+  .mobile-app-dock button{color:#9699a8}
+  .mobile-app-dock button small{font-size:9px}
+  .app-copyright{font-size:8.5px;color:#9295a4;gap:8px 14px}
+  .app-copyright a{color:#b7b9c5}
+}
+
+@media(max-width:390px){
+  .mobile-app-dock button small{font-size:8.5px}
+  .field-hint,.mini-info,.legal-note{font-size:11px}
+  .app-copyright{font-size:8px;letter-spacing:.04em}
+}

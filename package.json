@@ -1,6 +1,6 @@
 {
   "name": "vr-match",
-  "version": "18.24.1",
+  "version": "18.24.2",
   "private": true,
   "description": "V/R Match - Hotfix panel Beta Valencia y compatibilidad de base persistente",
   "main": "server.js",

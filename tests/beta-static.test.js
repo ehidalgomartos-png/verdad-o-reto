@@ -9,7 +9,7 @@ const read=name=>fs.readFileSync(path.join(ROOT,name),'utf8');
 test('V18.24 declara version y tablas beta',()=>{
   const pkg=JSON.parse(read('package.json'));
   const server=read('server.js');
-  assert.equal(pkg.version,'18.24.1');
+  assert.equal(pkg.version,'18.24.2');
   assert.match(server,/const APP_VERSION = '18\.24\.1'/);
   assert.match(server,/CREATE TABLE IF NOT EXISTS beta_memberships/);
   assert.match(server,/CREATE TABLE IF NOT EXISTS beta_activity_days/);
