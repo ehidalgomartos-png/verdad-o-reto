@@ -1,0 +1,9 @@
+V/R MATCH V18.23.0 — DESPLIEGUE
+
+1. Haz backup de data/ y uploads/.
+2. Sustituye el código por esta versión.
+3. No borres data/ ni uploads/.
+4. Reinicia el servicio en Render.
+5. Abre https://vrmatch.es/healthz y comprueba version 18.23.0.
+
+No requiere nuevas variables de entorno.

@@ -8,7 +8,7 @@ const path = require('node:path');
 const { once } = require('node:events');
 const { io: ioClient } = require('socket.io-client');
 
-const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(),'vrmatch-v1822-test-'));
+const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(),'vrmatch-v1823-test-'));
 process.env.NODE_ENV = 'test';
 process.env.VR_STORAGE_DIR = TEST_DIR;
 process.env.VR_DB_PATH = path.join(TEST_DIR,'data','vrmatch-test.db');
@@ -99,7 +99,7 @@ test('healthz comprueba SQLite, almacenamiento y versión', async()=>{
   assert.equal(res.data.db,true);
   assert.equal(res.data.storage,true);
   assert.equal(res.data.version,APP_VERSION);
-  assert.equal(APP_VERSION,'18.22.0');
+  assert.equal(APP_VERSION,'18.23.0');
   assert.ok(res.headers.get('x-request-id'));
 });
 
@@ -348,4 +348,20 @@ test('V18.21.2: administración borra perfiles y respeta preferencia de novedade
   const delAccount=await api(`/api/admin/users/${tmp.user.id}/action`,{method:'POST',token:adminToken,body:{action:'delete_account',note:'test'}});
   assert.equal(delAccount.status,200,delAccount.data?.error); assert.equal(delAccount.data.deleted,true);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM users WHERE id=?').get(tmp.user.id).n,0);
+});
+
+
+test('V18.23: experiencia movil/PWA incluye dock, red, haptica y sugerencia de instalacion', async()=>{
+  const html=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
+  const css=fs.readFileSync(path.join(ROOT,'styles.css'),'utf8');
+  const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
+  assert.match(html,/id="mobileAppDock"/);
+  assert.match(html,/id="mobileInstallNudge"/);
+  assert.match(html,/id="networkStateBar"/);
+  assert.match(html,/id="mobileHapticsEnabled"/);
+  assert.match(html,/function actualizarMobileDock/);
+  assert.match(html,/function actualizarViewportMovil/);
+  assert.match(css,/\.mobile-app-dock/);
+  assert.match(css,/safe-area-inset-bottom/);
+  assert.match(sw,/vr-match-shell-v18-23-0/);
 });

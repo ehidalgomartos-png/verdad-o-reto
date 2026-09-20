@@ -30,7 +30,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.22.0';
+const APP_VERSION = '18.23.0';
 const LEGAL_VERSION = '2026-09-19';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;

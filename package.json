@@ -1,8 +1,8 @@
 {
   "name": "vr-match",
-  "version": "18.22.0",
+  "version": "18.23.0",
   "private": true,
-  "description": "V/R Match - Moderación avanzada, perfiles completos en Admin e invitaciones para completar ciudades",
+  "description": "V/R Match - Pulido móvil, PWA y experiencia de app",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

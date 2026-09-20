@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#09090d">
+  <meta name="format-detection" content="telephone=no">
   <meta name="description" content="V/R Match - conecta, haz match y rompe el hielo jugando">
   <meta name="application-name" content="V/R Match">
   <meta name="mobile-web-app-capable" content="yes">
@@ -671,6 +672,23 @@
       <div class="game-hint" id="gameHint">La intensidad cambia a medida que avanza la partida.</div>
     </section>
   </main>
+
+  <nav id="mobileAppDock" class="mobile-app-dock hidden" aria-label="Navegación principal móvil">
+    <button type="button" data-screen="pantallaDescubrir" onclick="irADescubrir()"><span>🔥</span><small>Descubrir</small></button>
+    <button type="button" data-screen="pantallaMatches" onclick="irAMatches()"><span>💕</span><small>Matches</small><i id="mobileDockMatchBadge" class="mobile-dock-badge hidden">0</i></button>
+    <button type="button" data-screen="pantallaMazos" onclick="irAMazos()"><span>🎮</span><small>Jugar</small></button>
+    <button type="button" data-screen="pantallaPerfil" onclick="volverPerfil()"><span>👤</span><small>Perfil</small></button>
+  </nav>
+
+  <aside id="mobileInstallNudge" class="mobile-install-nudge hidden" aria-live="polite">
+    <div class="mobile-install-nudge-icon">V/R</div>
+    <div><strong>Ten VRMatch a un toque</strong><small>Instálalo como app para abrirlo más rápido y disfrutar mejor la experiencia móvil.</small></div>
+    <button type="button" class="mobile-install-cta" onclick="instalarDesdeNudge()">Instalar</button>
+    <button type="button" class="mobile-install-close" onclick="cerrarNudgeInstalacion()" aria-label="Cerrar sugerencia">×</button>
+  </aside>
+
+  <div id="networkStateBar" class="network-state-bar hidden" role="status" aria-live="polite"><span>●</span><strong>Sin conexión</strong><small>Algunas acciones se reintentaran al volver la red.</small></div>
+
   <footer class="app-copyright" aria-label="Copyright"><span>Copyright © 2026 Hidalgo Entertainment</span><nav><a href="/terms.html" target="_blank" rel="noopener">Condiciones</a><a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a><a href="/community.html" target="_blank" rel="noopener">Comunidad</a></nav></footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -795,7 +813,7 @@
       <div class="settings-section profile-verification-section"><strong>Verificación de perfil</strong><div id="profileVerificationState" class="profile-verification-state"><span>🛡️</span><div><b>Comprobando estado…</b><small>La verificación es opcional.</small></div></div><p class="account-legal-copy">Envía una selfie actual con el rostro visible. Solo la revisa moderación, no se publica y se elimina automáticamente al aprobar o rechazar la solicitud.</p><input id="verificationSelfieInput" class="hidden" type="file" accept="image/jpeg,image/png,image/webp" capture="user" onchange="prepararSelfieVerificacion(event)"><img id="verificationSelfiePreview" class="verification-selfie-preview hidden" alt="Vista previa privada de la selfie"><div class="verification-actions"><button id="verificationChooseButton" class="btn btn-secondary" type="button" onclick="$('verificationSelfieInput').click()">📷 Elegir selfie</button><button id="verificationSendButton" class="btn btn-primary hidden" type="button" onclick="enviarSelfieVerificacion()">Enviar a revisión</button></div></div>
       <div class="settings-section referral-account-section"><strong>Invita y desbloquea recompensas</strong><p class="account-legal-copy">Tu enlace personal cuenta las altas que traes a VRMatch. Desbloquea insignias y Boost cuando tus invitados empiezan a usar la app.</p><button class="btn btn-secondary" type="button" onclick="cerrarCuenta();abrirInvitaAmigos()">🔥 Ver mi enlace de invitación</button></div>
       <div class="settings-section"><strong>Privacidad</strong><label class="setting-switch"><span><b>Mostrarme en Descubrir</b><small>Desactívalo para pausar temporalmente tu perfil.</small></span><input id="privacyDiscoverable" type="checkbox" checked></label><label class="setting-switch"><span><b>Mostrar estado online</b><small>Oculta el indicador de conexión a otros usuarios.</small></span><input id="privacyShowOnline" type="checkbox" checked></label><label class="setting-switch"><span><b>Permitir invitaciones a jugar</b><small>Tus matches podrán proponerte una partida.</small></span><input id="privacyGameInvites" type="checkbox" checked></label><label class="setting-switch"><span><b>Aparecer en la comunidad pública</b><small>Opcional. En /espera se mostrará solo tu nombre de pila, edad, ciudad, foto principal, hasta 3 intereses y verificación. Nunca email, distancia, estado online ni bio.</small></span><input id="privacyCommunityPublic" type="checkbox"></label><button class="btn btn-secondary" type="button" onclick="guardarPrivacidad()">Guardar privacidad</button></div>
-      <div id="pwaInstallSection" class="settings-section"><strong>Aplicación</strong><div class="pwa-install-card"><div class="pwa-install-icon">V/R</div><div><b>Instalar V/R Match</b><small id="pwaInstallStatus">Añade V/R Match a tu pantalla de inicio y ábrelo como una app.</small></div></div><button id="pwaInstallButton" class="btn btn-secondary" type="button" onclick="instalarPWA()">⇩ Instalar aplicación</button></div>
+      <div id="pwaInstallSection" class="settings-section"><strong>Aplicación</strong><div class="pwa-install-card"><div class="pwa-install-icon">V/R</div><div><b>Instalar V/R Match</b><small id="pwaInstallStatus">Añade V/R Match a tu pantalla de inicio y ábrelo como una app.</small></div></div><button id="pwaInstallButton" class="btn btn-secondary" type="button" onclick="instalarPWA()">⇩ Instalar aplicación</button><label class="setting-switch device-setting"><span><b>Respuesta táctil</b><small>Pequeñas vibraciones al navegar, hacer like y jugar. Solo funciona en dispositivos compatibles.</small></span><input id="mobileHapticsEnabled" type="checkbox" onchange="guardarPreferenciasDispositivo()"></label></div>
       <div class="settings-section"><strong>Cambiar contraseña</strong><div class="field"><input id="currentPassword" type="password" aria-label="Contraseña actual" maxlength="72" autocomplete="current-password" placeholder="Contraseña actual"></div><div class="field"><input id="newPassword" type="password" aria-label="Nueva contraseña" maxlength="72" autocomplete="new-password" placeholder="Nueva contraseña · mínimo 8"></div><button class="btn btn-secondary" type="button" onclick="cambiarPasswordCuenta()">Actualizar contraseña</button></div>
       <div class="settings-section account-control-section"><strong>Control de cuenta y datos</strong><p class="account-legal-copy">Gestiona sesiones abiertas, personas bloqueadas y una copia de la información asociada a tu cuenta.</p><div class="account-control-grid"><button class="account-control-card" type="button" onclick="abrirCentroCuenta('sessions')"><span>🔐</span><b>Sesiones</b><small>Revisa y cierra accesos abiertos.</small></button><button class="account-control-card" type="button" onclick="abrirCentroCuenta('blocked')"><span>⊘</span><b>Bloqueados</b><small>Consulta o desbloquea perfiles.</small></button></div><button id="exportDataButton" class="btn btn-secondary" type="button" onclick="descargarMisDatos()">⇩ Descargar mis datos</button></div>
       <button id="accountPlusButton" class="btn btn-secondary" type="button" onclick="cerrarCuenta();abrirPlus()">✦ Ver V/R+</button>
@@ -1028,6 +1046,12 @@
     let notificationBrowserEnabled = localStorage.getItem('vr_browser_notifications') === '1';
     let deferredInstallPrompt = null;
     let pwaInstalled = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    let mobileHapticsEnabled = localStorage.getItem('vr_mobile_haptics') !== '0';
+    let mobileInteractionCount = Number(sessionStorage.getItem('vr_mobile_interactions') || 0);
+    let currentScreenId = 'pantallaAuth';
+    let networkWasOffline = !navigator.onLine;
+    const mobileDockScreens = new Set(['pantallaDescubrir','pantallaMatches','pantallaMazos','pantallaPerfil']);
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     let referralState = null;
     let communityCityState = null;
     let citySelectorReturn = 'profile';
@@ -1695,9 +1719,103 @@
       }
     }
 
+    function actualizarMobileDock(id=currentScreenId) {
+      const dock=$('mobileAppDock');
+      if(!dock)return;
+      const visible=Boolean(authToken)&&mobileDockScreens.has(id);
+      dock.classList.toggle('hidden',!visible);
+      document.body.classList.toggle('has-mobile-dock',visible);
+      dock.querySelectorAll('button[data-screen]').forEach(btn=>{
+        const active=btn.dataset.screen===id;
+        btn.classList.toggle('active',active);
+        if(active)btn.setAttribute('aria-current','page');else btn.removeAttribute('aria-current');
+      });
+      actualizarBadgeMatchesMovil();
+      if(visible&&mobileInteractionCount>=3&&puedeSugerirInstalacion())setTimeout(()=>$('mobileInstallNudge')?.classList.remove('hidden'),450);
+    }
+
+    function actualizarBadgeMatchesMovil(){
+      const badge=$('mobileDockMatchBadge');if(!badge)return;
+      const total=Array.isArray(datingMatches)?datingMatches.length:0;
+      badge.textContent=total>99?'99+':String(total);
+      badge.classList.toggle('hidden',total===0);
+    }
+
+    function vrHaptic(kind='tap'){
+      if(!mobileHapticsEnabled||!navigator.vibrate)return;
+      try{
+        const patterns={tap:8,select:14,success:[18,28,42],warning:[30,35,30]};
+        navigator.vibrate(patterns[kind]||patterns.tap);
+      }catch{}
+    }
+
+    function guardarPreferenciasDispositivo(){
+      mobileHapticsEnabled=Boolean($('mobileHapticsEnabled')?.checked);
+      localStorage.setItem('vr_mobile_haptics',mobileHapticsEnabled?'1':'0');
+      if(mobileHapticsEnabled)vrHaptic('select');
+    }
+
+    function actualizarPreferenciasDispositivo(){
+      if($('mobileHapticsEnabled'))$('mobileHapticsEnabled').checked=mobileHapticsEnabled;
+    }
+
+    function puedeSugerirInstalacion(){
+      if(pwaInstalled||!authToken||window.innerWidth>700||!mobileDockScreens.has(currentScreenId))return false;
+      if(!deferredInstallPrompt&&!esIOSPWA())return false;
+      const dismissed=Number(localStorage.getItem('vr_install_nudge_dismissed_at')||0);
+      return !dismissed || Date.now()-dismissed>7*24*60*60*1000;
+    }
+
+    function registrarInteraccionMovil(){
+      if(window.innerWidth>700||!authToken||pwaInstalled)return;
+      mobileInteractionCount+=1;sessionStorage.setItem('vr_mobile_interactions',String(mobileInteractionCount));
+      if(mobileInteractionCount>=3&&puedeSugerirInstalacion())setTimeout(()=>$('mobileInstallNudge')?.classList.remove('hidden'),500);
+    }
+
+    function cerrarNudgeInstalacion(){
+      $('mobileInstallNudge')?.classList.add('hidden');
+      localStorage.setItem('vr_install_nudge_dismissed_at',String(Date.now()));
+    }
+
+    async function instalarDesdeNudge(){
+      $('mobileInstallNudge')?.classList.add('hidden');
+      localStorage.setItem('vr_install_nudge_dismissed_at',String(Date.now()));
+      await instalarPWA();
+    }
+
+    function actualizarEstadoRed(initial=false){
+      const bar=$('networkStateBar');if(!bar)return;
+      if(!navigator.onLine){
+        networkWasOffline=true;bar.className='network-state-bar offline';bar.querySelector('strong').textContent='Sin conexión';bar.querySelector('small').textContent='Puedes seguir viendo algunas pantallas; los cambios necesitan conexión.';
+        return;
+      }
+      if(networkWasOffline&&!initial){
+        networkWasOffline=false;bar.className='network-state-bar online';bar.querySelector('strong').textContent='Conexión recuperada';bar.querySelector('small').textContent='VRMatch vuelve a estar sincronizado.';
+        setTimeout(()=>bar.classList.add('hidden'),2200);
+      }else{networkWasOffline=false;bar.classList.add('hidden');}
+    }
+
+    function actualizarViewportMovil(){
+      const viewport=window.visualViewport;
+      const height=viewport?.height||window.innerHeight;
+      document.documentElement.style.setProperty('--vr-visual-height',`${Math.round(height)}px`);
+      const keyboardOpen=window.innerHeight-height>140;
+      document.body.classList.toggle('mobile-keyboard-open',keyboardOpen);
+    }
+
+    function precargarSiguientePerfil(){
+      const next=datingProfiles.find(p=>p?.id!==currentDatingProfile?.id&&!datingPassed.has(p.id)&&!perfilEsMatch(p.id)&&perfilCumpleFiltros(p));
+      const src=fotosDePerfil(next)[0];if(!src)return;
+      const run=()=>{const img=new Image();img.decoding='async';img.src=src;};
+      if('requestIdleCallback'in window)requestIdleCallback(run,{timeout:900});else setTimeout(run,300);
+    }
+
     function showScreen(id) {
+      currentScreenId=id;
       screens.forEach(x => $(x).classList.toggle('hidden', x !== id));
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      actualizarMobileDock(id);
+      document.documentElement.dataset.vrScreen=id;
+      window.scrollTo({ top: 0, behavior: prefersReducedMotion.matches?'auto':'smooth' });
     }
 
     function mostrarToast(texto, tipo='info') {
@@ -2081,6 +2199,8 @@
       if(button){ button.disabled=pwaInstalled; button.textContent=pwaInstalled?'✓ Aplicación instalada':'⇩ Instalar aplicación'; }
       if(section)section.classList.toggle('pwa-installed',pwaInstalled);
       if(header)header.classList.toggle('hidden',pwaInstalled || (!deferredInstallPrompt && !esIOSPWA()));
+      if(pwaInstalled)$('mobileInstallNudge')?.classList.add('hidden');
+      actualizarPreferenciasDispositivo();
     }
     function abrirAyudaInstalacionPWA() {
       const box=$('pwaInstallSteps'), help=$('pwaInstallHelp');
@@ -2104,8 +2224,8 @@
       }
       abrirAyudaInstalacionPWA();
     }
-    window.addEventListener('beforeinstallprompt',(event)=>{ event.preventDefault(); deferredInstallPrompt=event; actualizarEstadoPWA(); });
-    window.addEventListener('appinstalled',()=>{ deferredInstallPrompt=null;pwaInstalled=true;actualizarEstadoPWA();mostrarToast('V/R Match se instaló correctamente.','info'); });
+    window.addEventListener('beforeinstallprompt',(event)=>{ event.preventDefault(); deferredInstallPrompt=event; actualizarEstadoPWA(); if(mobileInteractionCount>=3&&puedeSugerirInstalacion())setTimeout(()=>$('mobileInstallNudge')?.classList.remove('hidden'),500); });
+    window.addEventListener('appinstalled',()=>{ deferredInstallPrompt=null;pwaInstalled=true;$('mobileInstallNudge')?.classList.add('hidden');actualizarEstadoPWA();vrHaptic('success');mostrarToast('V/R Match se instaló correctamente.','info'); });
     window.matchMedia('(display-mode: standalone)').addEventListener?.('change',actualizarEstadoPWA);
     window.addEventListener('online',()=>mostrarToast('Conexión recuperada.','info'));
     window.addEventListener('offline',()=>mostrarToast('Sin conexión. Algunas funciones no estarán disponibles.','warn'));
@@ -3279,6 +3399,7 @@
       const fotos = fotosDePerfil(currentDatingProfile);
       if (fotos.length < 2) return;
       datingPhotoIndex = (datingPhotoIndex + delta + fotos.length) % fotos.length;
+      vrHaptic('tap');
       renderDatingPhoto();
     }
 
@@ -3333,6 +3454,7 @@
         const chip = document.createElement('span'); chip.textContent = item; interestBox.appendChild(chip);
       });
       renderDatingPhoto();
+      precargarSiguientePerfil();
     }
 
     function animarSalidaDating(direccion, despues) {
@@ -3351,6 +3473,7 @@
 
     function pasarPerfil() {
       if (!currentDatingProfile) return;
+      vrHaptic('tap');registrarInteraccionMovil();
       const id = currentDatingProfile.id;
       $('stampPass').style.opacity = '1';
       socket.emit('dating_pass', { oponenteID:id }, () => {});
@@ -3359,6 +3482,7 @@
 
     function darLike() {
       if (!currentDatingProfile) return;
+      vrHaptic('select');registrarInteraccionMovil();
       const p = currentDatingProfile;
       $('stampLike').style.opacity = '1';
       socket.emit('dating_like', { oponenteID: p.id }, (res) => {
@@ -3382,11 +3506,13 @@
       const badge = $('matchCountBadge');
       badge.textContent = datingMatches.length;
       badge.classList.toggle('hidden', datingMatches.length === 0);
+      actualizarBadgeMatchesMovil();
       renderMatches();
     }
 
     function showMatchModal(data) {
       currentMatch = data;
+      vrHaptic('success');registrarInteraccionMovil();
       pintarAvatar($('matchMyAvatar'), avatarJugador, nombreJugador || 'Tú');
       pintarAvatar($('matchTheirAvatar'), data.avatar || '', data.nombre || 'Match');
       $('matchModalText').textContent = `Tú y ${data.nombre || 'tu match'} os gustáis. Ahora evitad el “hola” y empezad jugando.`;
@@ -3601,6 +3727,7 @@
       if (!currentChatMatch) return;
       const text = String(texto || '').trim().slice(0,500);
       if (!text) return;
+      vrHaptic('tap');registrarInteraccionMovil();
       $('chatStarters').classList.add('hidden');
       socket.emit('dating_chat_send', { oponenteID: currentChatMatch.id, texto:text }, (res) => {
         if (!res || !res.ok) mostrarToast((res && res.error) || 'No se pudo enviar el mensaje.', 'warn');
@@ -3669,6 +3796,7 @@
       const badge = $('matchCountBadge');
       badge.textContent = datingMatches.length;
       badge.classList.toggle('hidden', datingMatches.length === 0);
+      actualizarBadgeMatchesMovil();
       renderMatches();
     });
 
@@ -4934,6 +5062,18 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
         }
       });
     }
+    actualizarPreferenciasDispositivo();
+    actualizarEstadoRed(true);
+    actualizarViewportMovil();
+    window.addEventListener('online',()=>actualizarEstadoRed(false));
+    window.addEventListener('offline',()=>actualizarEstadoRed(false));
+    window.addEventListener('resize',actualizarViewportMovil,{passive:true});
+    window.visualViewport?.addEventListener('resize',actualizarViewportMovil,{passive:true});
+    window.visualViewport?.addEventListener('scroll',actualizarViewportMovil,{passive:true});
+    document.addEventListener('pointerup',(event)=>{
+      const control=event.target.closest?.('.mobile-app-dock button,.chat-action-bar button,.match-row');
+      if(control&&!control.disabled)vrHaptic('tap');
+    },{passive:true});
     actualizarEstadoPWA();
     cargarEstadoComercialPublico();
     initDatingSwipe();

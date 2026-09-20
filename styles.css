@@ -682,3 +682,63 @@ textarea { font: inherit; }
 .admin-photo-gallery{display:grid;gap:8px}.admin-photo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.admin-photo-grid a{display:block;min-width:0;border-radius:11px;overflow:hidden;background:#111;border:1px solid rgba(255,255,255,.06)}.admin-photo-grid img{display:block;width:100%;aspect-ratio:4/5;object-fit:cover}.admin-photo-grid a:hover{border-color:rgba(255,79,150,.3)}
 @media(max-width:700px){.admin-city-invite-actions{grid-template-columns:1fr}.admin-city-invite-stats{grid-template-columns:1fr 1fr}.admin-user-detail-grid{grid-template-columns:repeat(3,1fr)}.admin-profile-fields{grid-template-columns:1fr 1fr}.admin-photo-grid{grid-template-columns:1fr 1fr}.admin-repeat-signals{grid-template-columns:1fr 1fr}}
 @media(max-width:460px){.admin-user-detail-grid{grid-template-columns:1fr 1fr}.admin-profile-fields{grid-template-columns:1fr}.admin-city-invite-stats{grid-template-columns:1fr 1fr}}
+
+
+/* =========================================================
+   V18.23 · PULIDO MÓVIL / PWA / EXPERIENCIA APP
+   ========================================================= */
+:root{--vr-visual-height:100dvh;--mobile-dock-height:72px}
+.mobile-app-dock,.mobile-install-nudge,.network-state-bar{display:none}
+.device-setting{margin-top:1px}
+
+@media(max-width:700px){
+  html{scroll-padding-bottom:calc(var(--mobile-dock-height) + env(safe-area-inset-bottom))}
+  body{overscroll-behavior-y:none}
+  body.has-mobile-dock .app-shell{padding-bottom:calc(92px + env(safe-area-inset-bottom))}
+  body.has-mobile-dock .app-copyright{padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+  .dating-nav{display:none!important}
+  .mobile-app-dock{position:fixed;z-index:80;left:50%;bottom:calc(8px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(calc(100vw - 16px),520px);height:64px;padding:6px;grid-template-columns:repeat(4,1fr);gap:4px;border:1px solid rgba(255,255,255,.10);border-radius:22px;background:rgba(13,13,20,.92);box-shadow:0 20px 55px rgba(0,0,0,.56),inset 0 1px 0 rgba(255,255,255,.04);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px)}
+  .mobile-app-dock:not(.hidden){display:grid}
+  .mobile-app-dock button{position:relative;min-width:0;border:0;border-radius:16px;background:transparent;color:#6f7282;display:grid;place-items:center;align-content:center;gap:2px;cursor:pointer;transition:transform .16s ease,background .16s ease,color .16s ease}
+  .mobile-app-dock button span{font-size:20px;line-height:1}.mobile-app-dock button small{font-size:8px;font-weight:900;letter-spacing:.01em}
+  .mobile-app-dock button.active{color:#fff;background:linear-gradient(145deg,rgba(255,47,120,.18),rgba(74,105,255,.10));box-shadow:inset 0 0 0 1px rgba(255,47,120,.12)}
+  .mobile-app-dock button.active span{transform:translateY(-1px);filter:drop-shadow(0 6px 12px rgba(255,47,120,.22))}
+  .mobile-dock-badge{position:absolute;top:3px;left:58%;min-width:17px;height:17px;padding:0 4px;display:grid;place-items:center;border-radius:999px;background:#ff2f78;color:#fff;border:2px solid #0d0d14;font-style:normal;font-size:7px;font-weight:1000}
+  .mobile-keyboard-open .mobile-app-dock,.mobile-keyboard-open .mobile-install-nudge{display:none!important}
+  .mobile-keyboard-open.has-mobile-dock .app-shell{padding-bottom:24px}
+
+  .brand-bar{position:sticky;top:calc(6px + env(safe-area-inset-top));z-index:14;padding:7px 8px;margin-left:-4px;margin-right:-4px;border-radius:16px;background:linear-gradient(180deg,rgba(8,8,12,.92),rgba(8,8,12,.72));backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+  .screen{box-shadow:0 18px 48px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.025)}
+  .btn,.link-btn,.mini-link,.swipe-btn,.chat-action-bar button,.match-row{min-height:44px}
+  .dating-card{will-change:transform;box-shadow:0 20px 48px rgba(0,0,0,.38)}
+  .dating-photo{height:min(51vh,390px)}
+  .dating-stage{min-height:min(68vh,520px)}
+  .swipe-actions{position:relative;z-index:3}
+
+  .chat-screen{min-height:calc(var(--vr-visual-height) - 92px);height:calc(var(--vr-visual-height) - 92px);display:flex;flex-direction:column;overflow:hidden}
+  .chat-header{flex:0 0 auto}.chat-safety-tray,.chat-game-tray,.chat-action-bar,.chat-active-game,.chat-game-history,.chat-starters{flex:0 0 auto}
+  .chat-messages{flex:1 1 auto;min-height:120px!important;max-height:none!important;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+  .chat-composer{position:sticky;bottom:0;z-index:8;margin:0 -3px -2px;padding:9px 3px calc(3px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(12,12,18,.72),rgba(12,12,18,.98) 32%);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  .chat-composer input{font-size:16px}
+
+  .mobile-install-nudge{position:fixed;z-index:86;left:50%;bottom:calc(82px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(calc(100vw - 20px),500px);grid-template-columns:42px minmax(0,1fr) auto;align-items:center;gap:10px;padding:11px 38px 11px 11px;border-radius:19px;border:1px solid rgba(255,47,120,.22);background:rgba(18,18,27,.96);box-shadow:0 20px 55px rgba(0,0,0,.58);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+  .mobile-install-nudge:not(.hidden){display:grid;animation:mobileNudgeIn .28s ease}
+  .mobile-install-nudge-icon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:linear-gradient(145deg,rgba(255,47,120,.26),rgba(74,105,255,.18));font-size:12px;font-weight:1000}
+  .mobile-install-nudge>div:nth-child(2){display:grid;gap:3px;min-width:0}.mobile-install-nudge strong{font-size:10px}.mobile-install-nudge small{font-size:8px;line-height:1.35;color:#8b8e9d}
+  .mobile-install-cta{border:0;border-radius:11px;min-height:36px;padding:0 10px;background:linear-gradient(135deg,#ff2f78,#d50c5a);color:#fff;font-size:8px;font-weight:1000;cursor:pointer}
+  .mobile-install-close{position:absolute;right:8px;top:5px;width:28px;height:28px;border:0;background:transparent;color:#777b89;font-size:18px;cursor:pointer}
+  @keyframes mobileNudgeIn{from{opacity:0;transform:translate(-50%,12px)}to{opacity:1;transform:translate(-50%,0)}}
+
+  .network-state-bar{position:fixed;z-index:90;left:50%;top:calc(8px + env(safe-area-inset-top));transform:translateX(-50%);width:min(calc(100vw - 20px),500px);grid-template-columns:auto auto minmax(0,1fr);align-items:center;gap:7px;padding:9px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.1);background:rgba(18,18,27,.96);box-shadow:0 14px 40px rgba(0,0,0,.45);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+  .network-state-bar:not(.hidden){display:grid}.network-state-bar>span{font-size:8px}.network-state-bar strong{font-size:9px}.network-state-bar small{font-size:8px;color:#9295a4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .network-state-bar.offline{border-color:rgba(255,183,77,.25)}.network-state-bar.offline>span{color:#ffb84d}.network-state-bar.online{border-color:rgba(43,213,118,.24)}.network-state-bar.online>span{color:#2bd576}
+}
+
+@media(max-width:390px){
+  .mobile-app-dock{width:calc(100vw - 10px);bottom:calc(5px + env(safe-area-inset-bottom));border-radius:20px}.mobile-app-dock button small{font-size:7px}
+  .mobile-install-nudge{grid-template-columns:38px minmax(0,1fr);bottom:calc(78px + env(safe-area-inset-bottom))}.mobile-install-nudge-icon{width:38px;height:38px}.mobile-install-cta{grid-column:2;width:max-content}.mobile-install-nudge small{display:none}
+}
+
+@media(display-mode:standalone) and (max-width:700px){
+  .brand-bar{top:calc(2px + env(safe-area-inset-top))}.mobile-install-nudge{display:none!important}.app-shell{padding-top:8px}
+}
