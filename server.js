@@ -30,7 +30,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.21.2';
+const APP_VERSION = '18.22.0';
 const LEGAL_VERSION = '2026-09-19';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -75,6 +75,8 @@ const RETENTION_MATCH_HOURS = Math.max(6, Math.min(168, Number(process.env.VR_RE
 const RETENTION_MESSAGE_COOLDOWN_HOURS = Math.max(1, Math.min(72, Number(process.env.VR_RETENTION_MESSAGE_COOLDOWN_HOURS) || 6));
 const NEWSLETTER_BATCH_SIZE = Math.max(5, Math.min(100, Number(process.env.VR_NEWSLETTER_BATCH_SIZE) || 20));
 const NEWSLETTER_INTERVAL_SECONDS = Math.max(20, Math.min(600, Number(process.env.VR_NEWSLETTER_INTERVAL_SECONDS) || 60));
+const CITY_INVITE_BATCH_SIZE = Math.max(5, Math.min(50, Number(process.env.VR_CITY_INVITE_BATCH_SIZE) || 15));
+const CITY_INVITE_COOLDOWN_DAYS = Math.max(1, Math.min(60, Number(process.env.VR_CITY_INVITE_COOLDOWN_DAYS) || 7));
 const SMART_PUSH_ENABLED = String(process.env.VR_SMART_PUSH_ENABLED || 'true').toLowerCase() !== 'false';
 const SMART_PUSH_SWEEP_MINUTES = Math.max(10, Math.min(360, Number(process.env.VR_SMART_PUSH_SWEEP_MINUTES) || 30));
 const PUSH_DAILY_CAP = Math.max(2, Math.min(30, Number(process.env.VR_PUSH_DAILY_CAP) || 8));
@@ -196,6 +198,8 @@ function ensureColumn(table, column, definition) {
 // Migraciones compatibles con bases creadas por versiones anteriores.
 ensureColumn('users', 'email_verified', 'INTEGER NOT NULL DEFAULT 1');
 ensureColumn('users', 'email_verified_at', 'INTEGER');
+ensureColumn('users', 'suspended_until', 'INTEGER');
+ensureColumn('users', 'suspension_reason', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('profiles', 'discoverable', 'INTEGER NOT NULL DEFAULT 1');
 ensureColumn('profiles', 'show_online', 'INTEGER NOT NULL DEFAULT 1');
 ensureColumn('profiles', 'allow_game_invites', 'INTEGER NOT NULL DEFAULT 1');
@@ -343,6 +347,23 @@ CREATE TABLE IF NOT EXISTS newsletter_unsubscribe_tokens (
   token TEXT NOT NULL UNIQUE,
   created_at INTEGER NOT NULL
 );
+
+-- V18.22 · invitaciones administrativas para completar la ciudad.
+CREATE TABLE IF NOT EXISTS profile_city_invites (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  admin_user TEXT REFERENCES users(id) ON DELETE SET NULL,
+  source TEXT NOT NULL DEFAULT 'admin_single',
+  email_requested INTEGER NOT NULL DEFAULT 0,
+  email_status TEXT NOT NULL DEFAULT 'skipped',
+  email_attempts INTEGER NOT NULL DEFAULT 0,
+  email_error TEXT NOT NULL DEFAULT '',
+  email_sent_at INTEGER,
+  created_at INTEGER NOT NULL,
+  completed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_city_invites_user_created ON profile_city_invites(user_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_city_invites_email_queue ON profile_city_invites(email_status,created_at ASC);
 
 CREATE TABLE IF NOT EXISTS notifications (
   id TEXT PRIMARY KEY,
@@ -1472,6 +1493,58 @@ async function processNewsletterQueue(limit=NEWSLETTER_BATCH_SIZE) {
 }
 setInterval(()=>processNewsletterQueue().catch(e=>recordServerError('newsletter.worker',e)),NEWSLETTER_INTERVAL_SECONDS*1000).unref();
 
+
+function userCityName(userId) {
+  const row=db.prepare(`SELECT COALESCE(c.name,p.city,'') city FROM users u LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN community_city_memberships m ON m.user_id=u.id LEFT JOIN community_cities c ON c.slug=m.city_slug WHERE u.id=?`).get(userId);
+  return cleanCommunityCityName(row?.city||'');
+}
+function cityInviteEligibleForEmail(userId) {
+  return db.prepare(`SELECT u.id,u.email,u.email_verified,u.status,COALESCE(np.retention_email,1) retention_email,p.name
+    FROM users u LEFT JOIN notification_preferences np ON np.user_id=u.id LEFT JOIN profiles p ON p.user_id=u.id WHERE u.id=?`).get(userId)||null;
+}
+function cityInviteHasCooldown(userId) {
+  return Boolean(db.prepare('SELECT 1 FROM profile_city_invites WHERE user_id=? AND created_at>? ORDER BY created_at DESC LIMIT 1').get(userId,now()-CITY_INVITE_COOLDOWN_DAYS*86400000));
+}
+function createCityProfileInvite(userId,adminUserId,{source='admin_single',email=false,force=false}={}) {
+  const user=db.prepare("SELECT id,status FROM users WHERE id=?").get(userId);
+  if(!user||user.status!=='active')return {ok:false,reason:'inactive'};
+  if(userCityName(userId))return {ok:false,reason:'has_city'};
+  if(!force&&cityInviteHasCooldown(userId))return {ok:false,reason:'cooldown'};
+  const mail=cityInviteEligibleForEmail(userId),requestEmail=Boolean(email&&mail?.email_verified&&Number(mail?.retention_email)!==0&&SMTP_CONFIGURED);
+  const id=safeId('cty'),ts=now();
+  db.prepare(`INSERT INTO profile_city_invites(id,user_id,admin_user,source,email_requested,email_status,created_at) VALUES(?,?,?,?,?,?,?)`)
+    .run(id,userId,adminUserId||null,cleanShortText(source,40),email?1:0,requestEmail?'pending':'skipped',ts);
+  createNotification(userId,'system','📍 Añade tu ciudad','Completa tu ciudad o municipio para mejorar tu perfil y ayudar a que VRMatch crezca cerca de ti.',{reason:'complete_city',open:'city_selector',cityInviteId:id});
+  return {ok:true,id,emailQueued:requestEmail};
+}
+function cityInviteEmailHtml(user={}) {
+  const name=cleanShortText(user.name||'',80);
+  return vrEmailShell({eyebrow:'COMPLETA TU PERFIL',title:'¿En qué ciudad estás?',bodyHtml:`<p style="margin:0;color:#eee;line-height:1.6;">${name?`${escapeEmailHtml(name)}, `:''}añadir tu ciudad ayuda a mostrarte personas más relevantes y permite que la comunidad local de VRMatch tenga datos reales.</p><p style="margin:16px 0 0;color:#a9a5b4;line-height:1.6;">Solo pedimos tu ciudad o municipio, nunca tu dirección. La ubicación aproximada para calcular distancia sigue siendo opcional.</p>`,ctaLabel:'AÑADIR MI CIUDAD',ctaUrl:`${retentionBaseUrl()}/?city_invite=1`,footerHtml:'Este recordatorio forma parte de la configuración de tu perfil. Puedes desactivar los recordatorios por email desde Notificaciones.'});
+}
+let cityInviteWorkerRunning=false;
+async function processCityInviteEmailQueue(limit=CITY_INVITE_BATCH_SIZE) {
+  if(cityInviteWorkerRunning||!SMTP_CONFIGURED)return {sent:0,errors:0,skipped:!SMTP_CONFIGURED};
+  cityInviteWorkerRunning=true;let sent=0,errors=0,cancelled=0;
+  try{
+    const rows=db.prepare(`SELECT i.id,i.user_id,i.email_attempts,u.email,u.email_verified,u.status,p.name,COALESCE(np.retention_email,1) retention_email
+      FROM profile_city_invites i JOIN users u ON u.id=i.user_id LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN notification_preferences np ON np.user_id=u.id
+      WHERE i.email_status IN ('pending','error') AND i.email_attempts<4 ORDER BY i.created_at ASC LIMIT ?`).all(Math.max(1,Math.min(50,Number(limit)||CITY_INVITE_BATCH_SIZE)));
+    for(const row of rows){
+      if(row.status!=='active'||!row.email_verified||Number(row.retention_email)===0||userCityName(row.user_id)){
+        db.prepare("UPDATE profile_city_invites SET email_status='cancelled',email_error='' WHERE id=?").run(row.id);cancelled++;continue;
+      }
+      try{
+        await sendEmail({to:row.email,subject:'📍 Completa tu ciudad en VRMatch',text:`Añade tu ciudad o municipio para completar tu perfil y mejorar tu experiencia en VRMatch.
+
+${retentionBaseUrl()}/?city_invite=1`,html:cityInviteEmailHtml(row)});
+        db.prepare("UPDATE profile_city_invites SET email_status='sent',email_attempts=email_attempts+1,email_error='',email_sent_at=? WHERE id=?").run(now(),row.id);sent++;
+      }catch(e){errors++;db.prepare("UPDATE profile_city_invites SET email_status='error',email_attempts=email_attempts+1,email_error=? WHERE id=?").run(redactDiagnosticText(e.message,220),row.id);recordServerError('city_invite.email',e,{inviteId:row.id});}
+    }
+  } finally {cityInviteWorkerRunning=false;}
+  return {sent,errors,cancelled};
+}
+setInterval(()=>processCityInviteEmailQueue().catch(e=>recordServerError('city_invite.worker',e)),NEWSLETTER_INTERVAL_SECONDS*1000).unref();
+
 function retentionEmailWasSent(userId, kind, contextKey='', withinMs=null) {
   const row=db.prepare('SELECT sent_at FROM retention_email_log WHERE user_id=? AND kind=? AND context_key=? AND status=\'sent\' ORDER BY sent_at DESC LIMIT 1').get(userId,kind,String(contextKey||''));
   if(!row)return false;
@@ -1784,6 +1857,7 @@ function setCommunityCityForUser(userId, name) {
     .run(userId,city.slug,existing?.joined_at||ts,ts);
   const profile=db.prepare('SELECT user_id FROM profiles WHERE user_id=?').get(userId);
   if(profile) db.prepare('UPDATE profiles SET city=?,updated_at=? WHERE user_id=?').run(city.name,ts,userId);
+  db.prepare("UPDATE profile_city_invites SET completed_at=COALESCE(completed_at,?),email_status=CASE WHEN email_status IN ('pending','error') THEN 'cancelled' ELSE email_status END WHERE user_id=? AND completed_at IS NULL").run(ts,userId);
   refreshReferrerRewardsForInvitee(userId);
   return communityCityForUser(userId);
 }
@@ -3018,14 +3092,22 @@ function parseEvidence(value) {
     })) : [];
   } catch { return []; }
 }
-function suspendUser(userId) {
-  db.prepare("UPDATE users SET status='suspended' WHERE id=?").run(userId);
+function suspendUser(userId,until=null,reason='') {
+  const limit=Number(until)||null;
+  db.prepare("UPDATE users SET status='suspended',suspended_until=?,suspension_reason=? WHERE id=?").run(limit,cleanShortText(reason,240),userId);
   db.prepare('DELETE FROM sessions WHERE user_id=?').run(userId);
-  disconnectUserSockets(userId,'account_suspended',{});
+  disconnectUserSockets(userId,'account_suspended',{until:limit});
 }
 function reactivateUser(userId) {
-  db.prepare("UPDATE users SET status='active' WHERE id=?").run(userId);
+  db.prepare("UPDATE users SET status='active',suspended_until=NULL,suspension_reason='' WHERE id=?").run(userId);
 }
+function reactivateExpiredSuspensions() {
+  const rows=db.prepare("SELECT id FROM users WHERE status='suspended' AND suspended_until IS NOT NULL AND suspended_until<=?").all(now());
+  for(const row of rows){reactivateUser(row.id);try{db.prepare('INSERT INTO moderation_actions(id,report_id,admin_user,target_user,action,note,created_at) VALUES(?,?,?,?,?,?,?)').run(safeId('mod'),null,null,row.id,'auto_reactivate','Suspensión temporal finalizada.',now());}catch{}}
+  return rows.length;
+}
+reactivateExpiredSuspensions();
+setInterval(()=>reactivateExpiredSuspensions(),10*60*1000).unref();
 function clearProfilePhotos(userId) {
   deleteUserUploads(userId);
   db.prepare("UPDATE profiles SET avatar='',photos_json='[]',profile_verified=0,profile_verified_at=NULL,updated_at=? WHERE user_id=?").run(now(),userId);
@@ -3074,7 +3156,8 @@ app.post('/api/auth/login', rateLimit({limit:25,windowMs:15*60*1000,key:req=>`${
   try {
     const email = cleanEmail(req.body?.email);
     const password = String(req.body?.password || '');
-    const row = db.prepare('SELECT * FROM users WHERE email=?').get(email);
+    let row = db.prepare('SELECT * FROM users WHERE email=?').get(email);
+    if(row?.status==='suspended' && row.suspended_until && Number(row.suspended_until)<=now()){reactivateUser(row.id);row=db.prepare('SELECT * FROM users WHERE id=?').get(row.id);}
     if (!row || row.status !== 'active' || !verifyPassword(password,row.password_hash)) return res.status(401).json({ ok:false, error:'Correo o contraseña incorrectos.' });
     if (REQUIRE_EMAIL_VERIFICATION && !row.email_verified) return res.status(403).json({ok:false,error:'Primero verifica tu correo.',verificationRequired:true});
     db.prepare('UPDATE users SET last_seen_at=? WHERE id=?').run(now(),row.id);
@@ -4429,8 +4512,12 @@ app.get('/api/admin/reports', requireAuth, requireAdmin, (req,res) => {
     const like = `%${q}%`; params.push(like,like,like,like,like);
   }
   const sql = `SELECT r.*,
-    ru.email reporter_email, tu.email reported_email, tu.status reported_status,
-    rp.name reporter_name, tp.name reported_name
+    ru.email reporter_email, tu.email reported_email, tu.status reported_status,tu.suspended_until,
+    rp.name reporter_name, tp.name reported_name,
+    (SELECT COUNT(*) FROM reports rr WHERE rr.reported=r.reported) reported_reports_total,
+    (SELECT COUNT(DISTINCT rr.reporter) FROM reports rr WHERE rr.reported=r.reported) unique_reporters_total,
+    (SELECT COUNT(*) FROM blocks bb WHERE bb.blocked=r.reported) blocks_received_total,
+    (SELECT COUNT(*) FROM moderation_actions ma WHERE ma.target_user=r.reported AND ma.action='warning') warnings_total
     FROM reports r
     JOIN users ru ON ru.id=r.reporter
     JOIN users tu ON tu.id=r.reported
@@ -4532,24 +4619,59 @@ app.post('/api/admin/newsletters/:id/cancel', requireAuth, requireAdmin, (req,re
   res.json({ok:true});
 });
 
+app.get('/api/admin/city-invites', requireAuth, requireAdmin, (req,res) => {
+  const missing=Number(db.prepare(`SELECT COUNT(*) n FROM users u LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN community_city_memberships m ON m.user_id=u.id WHERE u.status='active' AND m.user_id IS NULL AND TRIM(COALESCE(p.city,''))=''`).get()?.n||0);
+  const invited7d=Number(db.prepare('SELECT COUNT(DISTINCT user_id) n FROM profile_city_invites WHERE created_at>?').get(now()-7*86400000)?.n||0);
+  const completed30d=Number(db.prepare('SELECT COUNT(DISTINCT user_id) n FROM profile_city_invites WHERE completed_at>?').get(now()-30*86400000)?.n||0);
+  const pendingEmail=Number(db.prepare("SELECT COUNT(*) n FROM profile_city_invites WHERE email_status IN ('pending','error') AND email_attempts<4").get()?.n||0);
+  const recent=db.prepare(`SELECT i.id,i.user_id,i.source,i.email_requested,i.email_status,i.email_sent_at,i.created_at,i.completed_at,u.email,p.name,COALESCE(c.name,p.city,'') city
+    FROM profile_city_invites i JOIN users u ON u.id=i.user_id LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN community_city_memberships m ON m.user_id=u.id LEFT JOIN community_cities c ON c.slug=m.city_slug ORDER BY i.created_at DESC LIMIT 20`).all();
+  res.json({ok:true,missing,invited7d,completed30d,pendingEmail,smtpConfigured:SMTP_CONFIGURED,cooldownDays:CITY_INVITE_COOLDOWN_DAYS,recent});
+});
+app.post('/api/admin/users/:id/invite-city', requireAuth, requireAdmin, rateLimit({limit:80,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  const target=String(req.params.id||'');
+  const result=createCityProfileInvite(target,req.user.id,{source:'admin_single',email:req.body?.email===true,force:req.body?.force===true});
+  if(!result.ok){const messages={inactive:'La cuenta no está activa.',has_city:'Este perfil ya tiene ciudad.',cooldown:`Ya se le pidió la ciudad recientemente. Espera ${CITY_INVITE_COOLDOWN_DAYS} días.`};return res.status(result.reason==='cooldown'?409:400).json({ok:false,error:messages[result.reason]||'No se pudo crear la invitación.',reason:result.reason});}
+  logModerationAction(req.user.id,target,'city_invite',result.emailQueued?'Aviso interno + email en cola':'Aviso interno',null);
+  setImmediate(()=>processCityInviteEmailQueue().catch(e=>recordServerError('city_invite.manual',e,{userId:target})));
+  res.json({ok:true,emailQueued:result.emailQueued,id:result.id});
+});
+app.post('/api/admin/city-invites/bulk', requireAuth, requireAdmin, rateLimit({limit:8,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  if(String(req.body?.confirm||'').toUpperCase()!=='INVITAR')return res.status(400).json({ok:false,error:'Escribe INVITAR para confirmar el envío masivo.'});
+  const email=req.body?.email===true;
+  const rows=db.prepare(`SELECT u.id FROM users u LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN community_city_memberships m ON m.user_id=u.id
+    WHERE u.status='active' AND m.user_id IS NULL AND TRIM(COALESCE(p.city,''))='' ORDER BY u.created_at ASC LIMIT 1000`).all();
+  let invited=0,skipped=0,emailQueued=0;
+  const tx=db.transaction(items=>{for(const row of items){const r=createCityProfileInvite(row.id,req.user.id,{source:'admin_bulk',email});if(r.ok){invited++;if(r.emailQueued)emailQueued++;}else skipped++;}});
+  tx(rows);logModerationAction(req.user.id,req.user.id,'city_invite_bulk',`${invited} invitados · ${emailQueued} emails en cola · ${skipped} omitidos`,null);
+  setImmediate(()=>processCityInviteEmailQueue().catch(e=>recordServerError('city_invite.bulk',e)));
+  res.json({ok:true,invited,skipped,emailQueued});
+});
+app.post('/api/admin/city-invites/process', requireAuth, requireAdmin, rateLimit({limit:30,windowMs:60*60*1000,key:req=>req.user.id}), async (req,res) => {
+  const result=await processCityInviteEmailQueue(CITY_INVITE_BATCH_SIZE);res.json({ok:true,...result});
+});
+
 app.get('/api/admin/users', requireAuth, requireAdmin, (req,res) => {
   const q = cleanShortText(req.query.q,80).toLowerCase();
   const status = ['active','suspended','all'].includes(String(req.query.status||'all')) ? String(req.query.status||'all') : 'all';
+  const cityState = ['all','missing','set'].includes(String(req.query.cityState||'all')) ? String(req.query.cityState||'all') : 'all';
   const where = [], params = [];
   if (status !== 'all') { where.push('u.status=?'); params.push(status); }
+  if (cityState === 'missing') where.push("m.user_id IS NULL AND TRIM(COALESCE(p.city,''))=''");
+  if (cityState === 'set') where.push("(m.user_id IS NOT NULL OR TRIM(COALESCE(p.city,''))<>'')");
   if (q) {
-    where.push("(LOWER(u.email) LIKE ? OR LOWER(COALESCE(p.name,'')) LIKE ? OR LOWER(COALESCE(p.city,'')) LIKE ?)");
+    where.push("(LOWER(u.email) LIKE ? OR LOWER(COALESCE(p.name,'')) LIKE ? OR LOWER(COALESCE(c.name,p.city,'')) LIKE ?)");
     const like = `%${q}%`; params.push(like,like,like);
   }
-  const sql = `SELECT u.id,u.email,u.status,u.created_at,u.last_seen_at,u.email_verified,
-    p.name,p.age,p.city,p.avatar,p.discoverable,p.profile_verified,p.profile_verified_at,
+  const sql = `SELECT u.id,u.email,u.status,u.created_at,u.last_seen_at,u.email_verified,u.suspended_until,u.suspension_reason,
+    p.name,p.age,COALESCE(c.name,p.city,'') city,p.avatar,p.discoverable,p.profile_verified,p.profile_verified_at,
     (SELECT COUNT(*) FROM reports r WHERE r.reported=u.id) reports_received,
     (SELECT COUNT(*) FROM reports r WHERE r.reporter=u.id) reports_sent,
     (SELECT COUNT(*) FROM messages m WHERE m.from_user=u.id) messages_sent,
     (SELECT COUNT(*) FROM matches mm WHERE mm.active=1 AND (mm.user1=u.id OR mm.user2=u.id)) active_matches,
     (SELECT CASE WHEN pm.status='active' AND (pm.expires_at IS NULL OR pm.expires_at>?) THEN 1 ELSE 0 END FROM plus_memberships pm WHERE pm.user_id=u.id) plus_active,
     (SELECT pm.expires_at FROM plus_memberships pm WHERE pm.user_id=u.id) plus_expires_at
-    FROM users u LEFT JOIN profiles p ON p.user_id=u.id
+    FROM users u LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN community_city_memberships m ON m.user_id=u.id LEFT JOIN community_cities c ON c.slug=m.city_slug
     ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
     ORDER BY u.last_seen_at DESC LIMIT 120`;
   const users=db.prepare(sql).all(now(),...params).map(row=>({...row,risk:securityRiskForUser(row.id)}));
@@ -4558,10 +4680,11 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req,res) => {
 
 app.get('/api/admin/users/:id', requireAuth, requireAdmin, (req,res) => {
   const id = String(req.params.id||'');
-  const user = db.prepare(`SELECT u.id,u.email,u.status,u.created_at,u.last_seen_at,u.email_verified,
-      p.name,p.age,p.gender,p.city,p.bio,p.interests_json,p.avatar,p.photos_json,p.discoverable,p.show_online,p.allow_game_invites,p.location_updated_at,p.profile_verified,p.profile_verified_at,
-      pm.status plus_status,pm.expires_at plus_expires_at
-      FROM users u LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN plus_memberships pm ON pm.user_id=u.id WHERE u.id=?`).get(id);
+  const user = db.prepare(`SELECT u.id,u.email,u.status,u.created_at,u.last_seen_at,u.email_verified,u.email_verified_at,u.suspended_until,u.suspension_reason,u.onboarding_completed,
+      p.name,p.age,p.gender,COALESCE(c.name,p.city,'') city,p.bio,p.interests_json,p.avatar,p.photos_json,p.discoverable,p.show_online,p.allow_game_invites,p.community_public,p.age_min,p.age_max,p.looking_for,p.city_pref,p.interest_pref,p.radius_km,p.location_updated_at,p.profile_verified,p.profile_verified_at,
+      pm.status plus_status,pm.expires_at plus_expires_at,
+      COALESCE(np.retention_email,1) retention_email,COALESCE(np.newsletter_email,1) newsletter_email,COALESCE(np.push_enabled,0) push_enabled
+      FROM users u LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN community_city_memberships m ON m.user_id=u.id LEFT JOIN community_cities c ON c.slug=m.city_slug LEFT JOIN plus_memberships pm ON pm.user_id=u.id LEFT JOIN notification_preferences np ON np.user_id=u.id WHERE u.id=?`).get(id);
   if (!user) return res.status(404).json({ok:false,error:'Usuario no encontrado.'});
   const summary = {
     reportsReceived: db.prepare('SELECT COUNT(*) n FROM reports WHERE reported=?').get(id).n,
@@ -4570,6 +4693,12 @@ app.get('/api/admin/users/:id', requireAuth, requireAdmin, (req,res) => {
     activeMatches: db.prepare('SELECT COUNT(*) n FROM matches WHERE active=1 AND (user1=? OR user2=?)').get(id,id).n,
     blocksMade: db.prepare('SELECT COUNT(*) n FROM blocks WHERE blocker=?').get(id).n,
     blocksReceived: db.prepare('SELECT COUNT(*) n FROM blocks WHERE blocked=?').get(id).n,
+    openReports: db.prepare("SELECT COUNT(*) n FROM reports WHERE reported=? AND status='open'").get(id).n,
+    reports30d: db.prepare('SELECT COUNT(*) n FROM reports WHERE reported=? AND created_at>?').get(id,now()-30*86400000).n,
+    uniqueReporters: db.prepare('SELECT COUNT(DISTINCT reporter) n FROM reports WHERE reported=?').get(id).n,
+    warnings: db.prepare("SELECT COUNT(*) n FROM moderation_actions WHERE target_user=? AND action='warning'").get(id).n,
+    suspensions: db.prepare("SELECT COUNT(*) n FROM moderation_actions WHERE target_user=? AND action LIKE 'suspend%'").get(id).n,
+    cityInvites: db.prepare('SELECT COUNT(*) n FROM profile_city_invites WHERE user_id=?').get(id).n,
     risk: securityRiskForUser(id)
   };
   const reports = db.prepare(`SELECT r.id,r.reason,r.details,r.status,r.created_at,r.updated_at,r.moderator_note,
@@ -4579,6 +4708,7 @@ app.get('/api/admin/users/:id', requireAuth, requireAdmin, (req,res) => {
   const actions = db.prepare(`SELECT ma.id,ma.action,ma.note,ma.created_at,au.email admin_email
       FROM moderation_actions ma LEFT JOIN users au ON au.id=ma.admin_user
       WHERE ma.target_user=? ORDER BY ma.created_at DESC LIMIT 30`).all(id);
+  const cityInvites=db.prepare(`SELECT id,source,email_requested,email_status,email_sent_at,created_at,completed_at FROM profile_city_invites WHERE user_id=? ORDER BY created_at DESC LIMIT 12`).all(id);
   const resultUser = {
     ...user,
     interests:safeJsonArray(user.interests_json),
@@ -4588,7 +4718,7 @@ app.get('/api/admin/users/:id', requireAuth, requireAdmin, (req,res) => {
   delete resultUser.interests_json;
   delete resultUser.photos_json;
   delete resultUser.location_updated_at;
-  res.json({ok:true,user:resultUser,summary,reports,actions});
+  res.json({ok:true,user:resultUser,summary,reports,actions,cityInvites});
 });
 
 app.post('/api/admin/users/:id/action', requireAuth, requireAdmin, (req,res) => {
@@ -4597,9 +4727,17 @@ app.post('/api/admin/users/:id/action', requireAuth, requireAdmin, (req,res) => 
   if (!user) return res.status(404).json({ok:false,error:'Usuario no encontrado.'});
   const action = String(req.body?.action||'');
   const note = cleanShortText(req.body?.note,500);
-  if (target === req.user.id && ['suspend','delete_profile','delete_account'].includes(action)) return res.status(400).json({ok:false,error:'No puedes aplicar esa acción destructiva a tu propia cuenta administradora.'});
-  if (!['suspend','reactivate','hide_profile','show_profile','clear_photos','clear_bio','delete_profile','delete_account','grant_plus_30d','revoke_plus','revoke_verification'].includes(action)) return res.status(400).json({ok:false,error:'Acción no válida.'});
-  if (action === 'suspend') suspendUser(target);
+  if (target === req.user.id && ['suspend','suspend_24h','suspend_7d','suspend_30d','delete_profile','delete_account'].includes(action)) return res.status(400).json({ok:false,error:'No puedes aplicar esa acción destructiva a tu propia cuenta administradora.'});
+  if (!['warning','suspend','suspend_24h','suspend_7d','suspend_30d','reactivate','hide_profile','show_profile','clear_photos','clear_bio','delete_profile','delete_account','grant_plus_30d','revoke_plus','revoke_verification'].includes(action)) return res.status(400).json({ok:false,error:'Acción no válida.'});
+  if (action === 'warning') {
+    createNotification(target,'system','Aviso de moderación','Te recordamos que el uso de VRMatch debe respetar a las demás personas y las normas de la comunidad.',{reason:'moderation_warning'});
+    const account=cityInviteEligibleForEmail(target);
+    if(SMTP_CONFIGURED&&account?.email_verified){setImmediate(()=>sendEmail({to:account.email,subject:'Aviso de moderación · VRMatch',text:'Hemos revisado actividad asociada a tu cuenta. Recuerda respetar las normas de la comunidad y a las demás personas.',html:vrEmailShell({eyebrow:'SEGURIDAD',title:'Aviso de moderación',bodyHtml:'<p style="margin:0;color:#eee;line-height:1.6;">Hemos revisado actividad asociada a tu cuenta. Te recordamos que VRMatch debe utilizarse respetando a las demás personas y las normas de la comunidad.</p>',ctaLabel:'ABRIR VRMATCH',ctaUrl:retentionBaseUrl(),footerHtml:'Si crees que este aviso es un error, puedes enviarnos feedback desde tu cuenta.'})}).catch(e=>recordServerError('moderation.warning_email',e,{userId:target})));}
+  }
+  if (action === 'suspend') suspendUser(target,null,note);
+  if (action === 'suspend_24h') suspendUser(target,now()+24*3600000,note);
+  if (action === 'suspend_7d') suspendUser(target,now()+7*86400000,note);
+  if (action === 'suspend_30d') suspendUser(target,now()+30*86400000,note);
   if (action === 'reactivate') reactivateUser(target);
   if (action === 'hide_profile') db.prepare('UPDATE profiles SET discoverable=0,updated_at=? WHERE user_id=?').run(now(),target);
   if (action === 'show_profile') db.prepare('UPDATE profiles SET discoverable=1,updated_at=? WHERE user_id=?').run(now(),target);
@@ -5739,4 +5877,4 @@ function startServer(port=PORT,host='0.0.0.0'){
     console.log(`Activación de ciudades: tokens hash-only · ${LAUNCH_ACTIVATION_DAYS} días · reenvío protegido`);console.log(`Socket origin: ${(allowedOrigins.length||appBaseOrigin)?'restringido':'ABIERTO (solo desarrollo)'}`);console.log('V/R+: funciones actuales disponibles para todos · monetización pública desactivada');console.log(`Web Push: ${PUSH_CONFIGURED?'configurado':'opcional / no configurado'} | inteligente ${SMART_PUSH_ENABLED?'activo':'inactivo'} | cap ${PUSH_DAILY_CAP}/día`);console.log(`Preproducción: ${ready.productionReady?'lista':'pendiente'} | legal ${LEGAL_VERSION}`);console.log('Observabilidad: métricas + request-id + errores cliente/servidor + diagnóstico técnico');console.log('Privacidad: sesiones + bloqueados + exportación + selfie de verificación privada');});
 }
 if(require.main===module)startServer();
-module.exports={app,server,io,db,startServer,APP_VERSION,productionReadiness,quickCheckDatabase,systemMaintenanceStatus,systemDiagnostics,runBackupSelfTest,runSmtpVerify,recordServerError,activationState,userInQuietHours,processSmartPushes,processDeferredPushes};
+module.exports={app,server,io,db,startServer,APP_VERSION,productionReadiness,quickCheckDatabase,systemMaintenanceStatus,systemDiagnostics,runBackupSelfTest,runSmtpVerify,recordServerError,activationState,userInQuietHours,processSmartPushes,processDeferredPushes,processCityInviteEmailQueue,reactivateExpiredSuspensions};

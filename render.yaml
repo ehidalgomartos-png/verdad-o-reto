@@ -56,6 +56,10 @@ services:
         value: "20"
       - key: VR_NEWSLETTER_INTERVAL_SECONDS
         value: "60"
+      - key: VR_CITY_INVITE_BATCH_SIZE
+        value: "15"
+      - key: VR_CITY_INVITE_COOLDOWN_DAYS
+        value: "7"
       - key: VR_SYSTEM_ERROR_RETENTION_DAYS
         value: "30"
       - key: VR_HEALTH_MEMORY_WARN_MB

@@ -427,7 +427,14 @@
         <div class="admin-toolbar admin-toolbar-users">
           <label>Buscar<input id="adminUserSearch" class="profile-input" type="search" maxlength="80" placeholder="nombre, email o ciudad" onkeydown="if(event.key==='Enter'){event.preventDefault();cargarAdminUsers();}"></label>
           <label>Estado<select id="adminUserStatus" class="profile-select" onchange="cargarAdminUsers()"><option value="all">Todos</option><option value="active">Activos</option><option value="suspended">Suspendidos</option></select></label>
+          <label>Ciudad<select id="adminUserCityState" class="profile-select" onchange="cargarAdminUsers()"><option value="all">Todas</option><option value="missing">Sin ciudad</option><option value="set">Con ciudad</option></select></label>
           <button class="btn btn-secondary" type="button" onclick="cargarAdminUsers()">Buscar</button>
+        </div>
+        <div class="admin-city-invite-card">
+          <div class="admin-city-invite-copy"><span>📍</span><div><strong>Completar ciudades</strong><small>Envía un aviso a las cuentas activas que todavía no han indicado ciudad o municipio. Se respeta un periodo de espera para no insistir demasiado.</small></div></div>
+          <div id="adminCityInviteStats" class="admin-city-invite-stats"><span><b>—</b> sin ciudad</span><span><b>—</b> invitados 7d</span><span><b>—</b> completados 30d</span></div>
+          <div class="admin-city-invite-actions"><label class="setting-switch compact"><span><b>Enviar también email</b><small>Solo a correo verificado y con recordatorios activados.</small></span><input id="adminCityInviteEmail" type="checkbox" checked></label><button class="btn btn-primary" type="button" onclick="invitarCiudadesMasivo()">Invitar a añadir ciudad</button><button class="btn btn-secondary" type="button" onclick="procesarEmailsCiudad()">Procesar emails</button></div>
+          <div id="adminCityInviteRecent" class="admin-city-invite-recent"></div>
         </div>
         <div id="adminUserList" class="admin-user-list"><div class="empty-state"><span>👤</span><strong>Busca o revisa usuarios</strong></div></div>
       </div>
@@ -1622,6 +1629,7 @@
     let resetToken = params.get('reset') || '';
     const verificationResult = params.get('verification') || '';
     const billingResult = params.get('billing') || '';
+    const cityInviteIntent = params.get('city_invite') === '1';
     let pendingNotificationId = params.get('notification') || '';
     let pendingPushOpen = params.get('push_open') === '1';
     const registerIntent = params.get('register') === '1';
@@ -2032,6 +2040,7 @@
         else mostrarToast('La partida ya no está activa en este dispositivo.','warn');
         return;
       }
+      if(n.data?.open==='city_selector'||n.data?.reason==='complete_city'){abrirSelectorCiudad(Boolean(nombreJugador));return;}
       if(['city_activity','recommendation','reactivation'].includes(n.type)) { irADescubrir(); return; }
     }
     async function guardarPreferenciasNotificaciones() {
@@ -2488,6 +2497,10 @@
         if(city){ciudadJugador=city.name||'';$('ciudadUsuario').value=ciudadJugador;pintarCrecimientoCiudad(city);}
         else mostrarEleccionCiudad();
       }
+      if(cityInviteIntent){
+        const city=communityCityState||await cargarCommunityCityState(true);
+        if(!city)setTimeout(()=>{abrirSelectorCiudad(Boolean(result.profile));mostrarToast('Añade tu ciudad o municipio para completar tu perfil.','info');},260);
+      }
     }
 
     function abrirOnboarding() { $('onboardingModal').classList.remove('hidden'); $('onboardingModal').setAttribute('aria-hidden','false'); }
@@ -2769,7 +2782,7 @@
       if(adminCurrentTab==='system')await cargarAdminSystem();
     }
     const adminReasonLabels={harassment:'Acoso',fake:'Perfil falso',spam:'Spam / estafa',sexual:'Contenido sexual no consentido',underage:'Posible menor de edad',other:'Otro'};
-    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',suspend:'Cuenta suspendida',reactivate:'Cuenta reactivada',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_profile:'Perfil borrado',delete_account:'Cuenta eliminada',newsletter_test:'Prueba de novedad enviada',newsletter_queued:'Novedad encolada',newsletter_cancelled:'Novedad cancelada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado',feedback_resolve:'Feedback resuelto',feedback_dismiss:'Feedback descartado',feedback_reopen:'Feedback reabierto',verify_profile:'Perfil verificado',reject_verification:'Verificación rechazada',revoke_verification:'Verificación retirada',system_cleanup_expired:'Limpieza de sesiones/tokens',system_cleanup_telemetry:'Depuración de telemetría',system_cleanup_orphan_uploads:'Limpieza de fotos huérfanas',system_optimize:'Optimización SQLite',system_backup_download:'Backup manual descargado',system_backup_restore_test:'Prueba de restauración completada',system_smtp_test:'Prueba SMTP enviada',monetization_paid_enabled:'Premium de pago activado',monetization_launch_free_enabled:'Premium gratis activado',launch_city_unlocked:'Ciudad desbloqueada',launch_city_test_reset:'Ciudad de prueba reiniciada'};
+    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',warning:'Aviso de moderación',suspend:'Cuenta suspendida',suspend_24h:'Suspensión 24 h',suspend_7d:'Suspensión 7 días',suspend_30d:'Suspensión 30 días',auto_reactivate:'Suspensión temporal finalizada',reactivate:'Cuenta reactivada',city_invite:'Petición de ciudad',city_invite_bulk:'Campaña para completar ciudades',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_profile:'Perfil borrado',delete_account:'Cuenta eliminada',newsletter_test:'Prueba de novedad enviada',newsletter_queued:'Novedad encolada',newsletter_cancelled:'Novedad cancelada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado',feedback_resolve:'Feedback resuelto',feedback_dismiss:'Feedback descartado',feedback_reopen:'Feedback reabierto',verify_profile:'Perfil verificado',reject_verification:'Verificación rechazada',revoke_verification:'Verificación retirada',system_cleanup_expired:'Limpieza de sesiones/tokens',system_cleanup_telemetry:'Depuración de telemetría',system_cleanup_orphan_uploads:'Limpieza de fotos huérfanas',system_optimize:'Optimización SQLite',system_backup_download:'Backup manual descargado',system_backup_restore_test:'Prueba de restauración completada',system_smtp_test:'Prueba SMTP enviada',monetization_paid_enabled:'Premium de pago activado',monetization_launch_free_enabled:'Premium gratis activado',launch_city_unlocked:'Ciudad desbloqueada',launch_city_test_reset:'Ciudad de prueba reiniciada'};
     function adminFecha(ts){return ts?new Date(Number(ts)).toLocaleString('es-ES'):'—';}
     function riesgoLabel(level){return level==='high'?'ALTO':level==='medium'?'MEDIO':level==='low'?'BAJO':'SIN SEÑALES';}
     async function cargarAdminSecurity(){if(!currentUserAdmin)return;const vbox=$('adminVerificationList'),rbox=$('adminRiskList');vbox.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Cargando verificaciones…</strong></div>';rbox.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Calculando señales…</strong></div>';const res=await api(`/api/admin/security?status=${encodeURIComponent($('adminVerificationStatus').value)}`);if(!res.ok){vbox.innerHTML=rbox.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudo cargar.')}</strong></div>`;return;}const rows=res.verifications||[],risk=res.risk||[];vbox.innerHTML=rows.length?rows.map(v=>`<article class="verification-admin-card"><div class="verification-admin-head"><div><strong>${escapeHtml(v.name||v.email||'Usuario')}</strong><small>${escapeHtml(v.email||'')} · ${escapeHtml(v.city||'Sin ciudad')}</small></div><span class="verification-status ${escapeHtml(v.status)}">${escapeHtml(v.status)}</span></div><div id="verificationProof_${escapeHtml(v.id)}" class="verification-proof-box hidden"></div><div class="verification-admin-actions">${v.status==='pending'?`<button class="btn btn-secondary" type="button" onclick="verPruebaVerificacion('${escapeHtml(v.id)}')">👁 Ver selfie</button><button class="btn btn-secondary" type="button" onclick="verAdminUsuario('${escapeHtml(v.user_id)}')">Ver fotos</button><button class="btn btn-primary" type="button" onclick="accionVerificacion('${escapeHtml(v.id)}','approve')">✓ Aprobar</button><button class="btn btn-secondary danger-soft" type="button" onclick="accionVerificacion('${escapeHtml(v.id)}','reject')">Rechazar</button>`:`<button class="btn btn-secondary" type="button" onclick="verAdminUsuario('${escapeHtml(v.user_id)}')">Ver cuenta</button>`}</div><small class="verification-date">Solicitud: ${escapeHtml(adminFecha(v.created_at))}${v.reviewed_at?` · Revisada: ${escapeHtml(adminFecha(v.reviewed_at))}`:''}</small></article>`).join(''):'<div class="empty-state"><span>✓</span><strong>No hay solicitudes con este estado</strong></div>';rbox.innerHTML=risk.length?risk.map(u=>`<button class="risk-admin-card ${escapeHtml(u.risk?.level||'none')}" type="button" onclick="verAdminUsuario('${escapeHtml(u.id)}')"><span class="risk-score">${Number(u.risk?.score)||0}</span><span><b>${escapeHtml(u.name||u.email||'Usuario')}</b><small>${escapeHtml(u.city||'Sin ciudad')} · ${u.profile_verified?'✓ perfil verificado':'sin verificación'}</small><small>${Number(u.risk?.openReports)||0} abiertas · ${Number(u.risk?.blocksReceived)||0} bloqueos recibidos · ${Number(u.risk?.signals)||0} señales</small></span><i>${escapeHtml(riesgoLabel(u.risk?.level))}</i></button>`).join(''):'<div class="empty-state"><span>✓</span><strong>No hay señales de riesgo registradas</strong><small>La ausencia de señales no equivale a una garantía de seguridad.</small></div>';}
@@ -2798,6 +2811,7 @@
         card.innerHTML=`<div class="admin-report-head"><div><small>${escapeHtml(adminReasonLabels[r.reason]||r.reason)} · ${escapeHtml(adminFecha(r.created_at))}</small><strong>${escapeHtml(r.reported_name||r.reported_email||'Usuario')}</strong></div><span class="${r.status==='open'?'open':''}">${escapeHtml(r.status)}</span></div>
           <p>${escapeHtml(r.details||'Sin detalles adicionales.')}</p>
           <div class="admin-report-meta"><b>Reporta:</b> ${escapeHtml(r.reporter_name||r.reporter_email||'Usuario')}<br><b>Cuenta denunciada:</b> ${escapeHtml(r.reported_email||'')} · ${escapeHtml(r.reported_status||'')}</div>
+          <div class="admin-repeat-signals"><span><b>${Number(r.reported_reports_total)||0}</b> denuncias históricas</span><span><b>${Number(r.unique_reporters_total)||0}</b> reportantes distintos</span><span><b>${Number(r.blocks_received_total)||0}</b> bloqueos recibidos</span><span><b>${Number(r.warnings_total)||0}</b> avisos previos</span></div>
           ${evidenceHtml}
           ${r.moderator_note?`<div class="admin-existing-note"><b>Nota:</b> ${escapeHtml(r.moderator_note)}</div>`:''}
           <textarea maxlength="500" placeholder="Nota interna para moderación"></textarea>
@@ -2827,8 +2841,9 @@
       if(!currentUserAdmin)return;
       const q=String($('adminUserSearch').value||'').trim();
       const status=$('adminUserStatus').value;
-      const params=new URLSearchParams({status}); if(q)params.set('q',q);
-      const res=await api(`/api/admin/users?${params.toString()}`);
+      const cityState=$('adminUserCityState')?.value||'all';
+      const params=new URLSearchParams({status,cityState}); if(q)params.set('q',q);
+      const [res]=await Promise.all([api(`/api/admin/users?${params.toString()}`),cargarAdminCityInvites()]);
       if(!res.ok)return mostrarToast(res.error||'No se pudieron cargar usuarios.','error');
       renderAdminUsers(res.users||[]);
     }
@@ -2839,7 +2854,7 @@
         const card=document.createElement('article');card.className='admin-user-card';
         const avatar=document.createElement('div');avatar.className='admin-user-avatar';pintarAvatar(avatar,u.avatar||'',u.name||u.email||'U');
         const copy=document.createElement('div');copy.className='admin-user-copy';
-        copy.innerHTML=`<div class="admin-user-title"><strong>${escapeHtml(u.name||'Sin perfil')}</strong><span class="${u.status==='suspended'?'suspended':'active'}">${escapeHtml(u.status)}</span>${u.profile_verified?'<span class="profile-admin-verified">✓ verificado</span>':''}${u.plus_active?'<span class="plus-admin-chip">V/R+</span>':''}</div><small>${escapeHtml(u.email||'')}</small><p>${escapeHtml(u.city||'Sin ciudad')} · ${u.age?`${Number(u.age)} años · `:''}${u.reports_received||0} denuncias recibidas</p><div class="admin-user-metrics"><span>💬 ${u.messages_sent||0}</span><span>💕 ${u.active_matches||0}</span><span>⚑ ${u.reports_sent||0}</span>${Number(u.risk?.score)>0?`<span class="risk-mini ${escapeHtml(u.risk?.level||'low')}">🛡 ${Number(u.risk.score)}</span>`:''}</div>`;
+        copy.innerHTML=`<div class="admin-user-title"><strong>${escapeHtml(u.name||'Sin perfil')}</strong><span class="${u.status==='suspended'?'suspended':'active'}">${escapeHtml(u.status)}</span>${u.profile_verified?'<span class="profile-admin-verified">✓ verificado</span>':''}${u.plus_active?'<span class="plus-admin-chip">V/R+</span>':''}${!u.city?'<span class="admin-city-missing">📍 sin ciudad</span>':''}</div><small>${escapeHtml(u.email||'')}</small><p>${escapeHtml(u.city||'Sin ciudad')} · ${u.age?`${Number(u.age)} años · `:''}${u.reports_received||0} denuncias recibidas${u.suspended_until?` · hasta ${escapeHtml(adminFecha(u.suspended_until))}`:''}</p><div class="admin-user-metrics"><span>💬 ${u.messages_sent||0}</span><span>💕 ${u.active_matches||0}</span><span>⚑ ${u.reports_sent||0}</span>${Number(u.risk?.score)>0?`<span class="risk-mini ${escapeHtml(u.risk?.level||'low')}">🛡 ${Number(u.risk.score)}</span>`:''}</div>`;
         const btn=document.createElement('button');btn.className='btn btn-secondary';btn.type='button';btn.textContent='Revisar';btn.onclick=()=>verAdminUsuario(u.id);
         card.append(avatar,copy,btn);list.appendChild(card);
       });
@@ -2854,33 +2869,54 @@
       if(!res.ok){$('adminUserDetail').innerHTML=`<div class="empty-state"><span>!</span><strong>${escapeHtml(res.error||'No se pudo cargar.')}</strong></div>`;return;}
       renderAdminUserDetail(res);
     }
+    function adminGenderLabel(v){return ({man:'Hombre',woman:'Mujer',nonbinary:'No binario',other:'Otro'})[String(v||'')]||'No indicado';}
+    function adminLookingLabel(v){return ({all:'Todos',men:'Hombres',women:'Mujeres',nonbinary:'No binario'})[String(v||'')]||'Todos';}
     function renderAdminUserDetail(data) {
-      const u=data.user||{},s=data.summary||{},reports=data.reports||[],actions=data.actions||[];
-      const photos=Array.isArray(u.photos)?u.photos:[];
-      $('adminUserDetail').innerHTML=`<div class="admin-user-detail-head"><div><span class="security-badge ${u.status==='active'?'verified':''}">${escapeHtml(u.status||'')}</span><h3>${escapeHtml(u.name||'Sin perfil')}${u.age?`, ${Number(u.age)}`:''}</h3><p>${escapeHtml(u.email||'')}</p></div><small>Última actividad<br><b>${escapeHtml(adminFecha(u.last_seen_at))}</b></small></div>
-        <div class="admin-user-detail-grid"><div><strong>${s.reportsReceived||0}</strong><span>denuncias recibidas</span></div><div><strong>${s.messagesSent||0}</strong><span>mensajes</span></div><div><strong>${s.activeMatches||0}</strong><span>matches activos</span></div><div><strong>${s.blocksMade||0}</strong><span>bloqueos hechos</span></div></div>
-        <div class="admin-user-profile-preview"><b>${escapeHtml(u.city||'Sin ciudad')}</b><span>${u.email_verified?'Correo verificado':'Correo pendiente'} · ${u.profile_verified?'✓ Perfil verificado':'Perfil sin verificar'} · ${u.discoverable===0?'Perfil oculto':'Visible en Descubrir'} · ${u.locationEnabled?'Ubicación configurada':'Sin ubicación'} · ${u.plus_status==='active' && (!u.plus_expires_at || Number(u.plus_expires_at)>Date.now())?'V/R+ activo':'V/R Free'}</span><p>${escapeHtml(u.bio||'Sin biografía')}</p><small>${(u.interests||[]).map(x=>escapeHtml(x)).join(' · ')||'Sin intereses'}</small></div><div class="admin-risk-summary ${escapeHtml(s.risk?.level||'none')}"><b>Señal de riesgo: ${Number(s.risk?.score)||0}/100 · ${escapeHtml(riesgoLabel(s.risk?.level))}</b><small>${Number(s.risk?.openReports)||0} denuncias abiertas · ${Number(s.blocksReceived)||0} bloqueos recibidos · ${Number(s.risk?.signals)||0} señales anti-spam en 30 días. Sirve para priorizar revisión, no para sancionar automáticamente.</small></div>
-        ${photos.length?`<div class="admin-photo-strip">${photos.slice(0,4).map(src=>`<img src="${escapeHtml(src)}" alt="">`).join('')}</div>`:''}
-        <div class="admin-user-mini-history"><strong>Últimas denuncias</strong>${reports.length?reports.slice(0,5).map(r=>`<div><span>${escapeHtml(adminReasonLabels[r.reason]||r.reason)} · ${escapeHtml(r.status)}</span><small>${escapeHtml(adminFecha(r.created_at))}</small></div>`).join(''):'<small>No tiene denuncias recibidas.</small>'}</div>
-        <div class="admin-user-mini-history"><strong>Últimas acciones</strong>${actions.length?actions.slice(0,5).map(a=>`<div><span>${escapeHtml(adminActionLabels[a.action]||a.action)}</span><small>${escapeHtml(adminFecha(a.created_at))}</small></div>`).join(''):'<small>Sin acciones previas.</small>'}</div>`;
+      const u=data.user||{},s=data.summary||{},reports=data.reports||[],actions=data.actions||[],cityInvites=data.cityInvites||[];
+      const photos=Array.isArray(u.photos)?u.photos.filter(Boolean):[];
+      const allPhotos=[u.avatar,...photos].filter((x,i,a)=>x&&a.indexOf(x)===i);
+      const plusActive=u.plus_status==='active' && (!u.plus_expires_at || Number(u.plus_expires_at)>Date.now());
+      const suspension=u.status==='suspended'?(u.suspended_until?`Suspensión hasta ${adminFecha(u.suspended_until)}`:'Suspensión indefinida'):'';
+      $('adminUserDetail').innerHTML=`<div class="admin-user-detail-head"><div><span class="security-badge ${u.status==='active'?'verified':''}">${escapeHtml(u.status||'')}</span><h3>${escapeHtml(u.name||'Sin perfil')}${u.age?`, ${Number(u.age)}`:''}</h3><p>${escapeHtml(u.email||'')}</p></div><small>Alta<br><b>${escapeHtml(adminFecha(u.created_at))}</b><br>Última actividad<br><b>${escapeHtml(adminFecha(u.last_seen_at))}</b></small></div>
+        ${suspension?`<div class="admin-suspension-banner"><b>⏳ ${escapeHtml(suspension)}</b><small>${escapeHtml(u.suspension_reason||'Sin motivo interno indicado.')}</small></div>`:''}
+        <div class="admin-user-detail-grid"><div><strong>${s.reportsReceived||0}</strong><span>denuncias recibidas</span></div><div><strong>${s.uniqueReporters||0}</strong><span>reportantes distintos</span></div><div><strong>${s.blocksReceived||0}</strong><span>bloqueos recibidos</span></div><div><strong>${s.warnings||0}</strong><span>avisos previos</span></div><div><strong>${s.messagesSent||0}</strong><span>mensajes</span></div><div><strong>${s.activeMatches||0}</strong><span>matches activos</span></div></div>
+        <section class="admin-full-profile"><div class="admin-full-profile-head"><div><strong>Perfil completo</strong><small>Vista privada de administración para soporte, seguridad y moderación.</small></div>${!u.city?'<span class="admin-city-missing big">📍 Falta ciudad</span>':''}</div>
+          <div class="admin-profile-fields"><div><small>Nombre</small><b>${escapeHtml(u.name||'Sin perfil')}</b></div><div><small>Edad</small><b>${u.age?Number(u.age)+' años':'—'}</b></div><div><small>Género</small><b>${escapeHtml(adminGenderLabel(u.gender))}</b></div><div><small>Ciudad</small><b>${escapeHtml(u.city||'Sin ciudad')}</b></div><div><small>Busca</small><b>${escapeHtml(adminLookingLabel(u.looking_for))}</b></div><div><small>Rango de edad</small><b>${Number(u.age_min)||18}–${Number(u.age_max)||99}</b></div><div><small>Radio</small><b>${Number(u.radius_km)||50} km</b></div><div><small>Preferencia ciudad</small><b>${escapeHtml(u.city_pref||'Sin filtro')}</b></div></div>
+          <div class="admin-profile-bio"><small>Biografía</small><p>${escapeHtml(u.bio||'Sin biografía')}</p></div>
+          <div class="admin-profile-interests"><small>Intereses</small><div>${(u.interests||[]).length?(u.interests||[]).map(x=>`<span>${escapeHtml(x)}</span>`).join(''):'<em>Sin intereses</em>'}</div></div>
+          <div class="admin-profile-settings"><span>${u.email_verified?'✓ Correo verificado':'○ Correo pendiente'}</span><span>${u.profile_verified?'✓ Perfil verificado':'○ Perfil sin verificar'}</span><span>${u.discoverable===0?'Perfil oculto':'Visible en Descubrir'}</span><span>${u.community_public?'Visible en comunidad pública':'No público en /espera'}</span><span>${u.show_online===0?'Online oculto':'Online visible'}</span><span>${u.allow_game_invites===0?'Juegos bloqueados':'Invitaciones de juego activas'}</span><span>${u.locationEnabled?'Ubicación aprox. configurada':'Sin ubicación aprox.'}</span><span>${plusActive?'V/R+ activo':'V/R Free'}</span><span>${u.push_enabled?'Push activado':'Push no activado'}</span><span>${u.retention_email?'Recordatorios email activos':'Recordatorios email desactivados'}</span><span>${u.newsletter_email?'Novedades email activas':'Novedades email desactivadas'}</span></div>
+          <div class="admin-photo-gallery"><div class="admin-full-profile-head"><div><strong>Fotos del perfil</strong><small>${allPhotos.length} imagen${allPhotos.length===1?'':'es'} guardada${allPhotos.length===1?'':'s'}.</small></div></div>${allPhotos.length?`<div class="admin-photo-grid">${allPhotos.map((src,i)=>`<a href="${escapeHtml(src)}" target="_blank" rel="noopener" title="Abrir foto ${i+1}"><img src="${escapeHtml(src)}" alt="Foto ${i+1} del perfil"></a>`).join('')}</div>`:'<div class="admin-no-evidence">Este perfil no tiene fotos.</div>'}</div>
+        </section>
+        <div class="admin-risk-summary ${escapeHtml(s.risk?.level||'none')}"><b>Señal de riesgo: ${Number(s.risk?.score)||0}/100 · ${escapeHtml(riesgoLabel(s.risk?.level))}</b><small>${Number(s.openReports)||0} denuncias abiertas · ${Number(s.reports30d)||0} recibidas en 30 días · ${Number(s.uniqueReporters)||0} reportantes distintos · ${Number(s.blocksReceived)||0} bloqueos recibidos · ${Number(s.warnings)||0} avisos · ${Number(s.suspensions)||0} suspensiones históricas. Es información de apoyo para revisión humana, no una sanción automática.</small></div>
+        <div class="admin-user-mini-history"><strong>Peticiones de ciudad</strong>${cityInvites.length?cityInvites.slice(0,5).map(i=>`<div><span>${i.completed_at?'✓ Ciudad completada':i.email_status==='sent'?'Email + aviso enviados':'Aviso enviado'} · ${escapeHtml(i.source||'admin')}</span><small>${escapeHtml(adminFecha(i.created_at))}</small></div>`).join(''):'<small>No se le ha pedido completar la ciudad.</small>'}</div>
+        <div class="admin-user-mini-history"><strong>Últimas denuncias</strong>${reports.length?reports.slice(0,8).map(r=>`<div><span>${escapeHtml(adminReasonLabels[r.reason]||r.reason)} · ${escapeHtml(r.status)}</span><small>${escapeHtml(adminFecha(r.created_at))}</small></div>`).join(''):'<small>No tiene denuncias recibidas.</small>'}</div>
+        <div class="admin-user-mini-history"><strong>Últimas acciones</strong>${actions.length?actions.slice(0,10).map(a=>`<div><span>${escapeHtml(adminActionLabels[a.action]||a.action)}</span><small>${escapeHtml(adminFecha(a.created_at))}</small></div>`).join(''):'<small>Sin acciones previas.</small>'}</div>`;
       const actionsBox=$('adminUserActions');actionsBox.innerHTML='';
-      const defs=u.status==='suspended'
-        ?[['reactivate','Reactivar cuenta','success']]
-        :[['suspend','Suspender cuenta','danger']];
+      const defs=[];
+      if(!u.city)defs.push(['invite_city','📍 Pedir ciudad','success']);
+      if(u.status==='suspended') defs.push(['reactivate','Reactivar cuenta','success']);
+      else defs.push(['warning','Enviar aviso',''],['suspend_24h','Suspender 24 h','danger-soft'],['suspend_7d','Suspender 7 días','danger-soft'],['suspend_30d','Suspender 30 días','danger-soft'],['suspend','Suspender indefinidamente','danger']);
       defs.push([u.discoverable===0?'show_profile':'hide_profile',u.discoverable===0?'Mostrar perfil':'Ocultar perfil','']);
       if(u.profile_verified)defs.push(['revoke_verification','Retirar verificación','danger-soft']);
       defs.push(['clear_photos','Eliminar fotos','danger-soft'],['clear_bio','Limpiar biografía','danger-soft']);
       defs.push(['delete_profile','Borrar perfil completo','danger-soft'],['delete_account','Eliminar cuenta definitivamente','danger']);
-      const plusActive=u.plus_status==='active' && (!u.plus_expires_at || Number(u.plus_expires_at)>Date.now());
       defs.push([plusActive?'revoke_plus':'grant_plus_30d',plusActive?'Revocar V/R+':'Conceder V/R+ 30 días',plusActive?'danger-soft':'success']);
-      defs.forEach(([action,label,cls])=>{const b=document.createElement('button');b.type='button';b.className=`btn btn-secondary ${cls||''}`;b.textContent=label;b.onclick=()=>accionAdminUsuario(action);actionsBox.appendChild(b);});
+      defs.forEach(([action,label,cls])=>{const b=document.createElement('button');b.type='button';b.className=`btn btn-secondary ${cls||''}`;b.textContent=label;b.onclick=()=>action==='invite_city'?invitarCiudadUsuario():accionAdminUsuario(action);actionsBox.appendChild(b);});
     }
     function cerrarAdminUsuario(){adminSelectedUserId=null;$('adminUserModal')?.classList.add('hidden');$('adminUserModal')?.setAttribute('aria-hidden','true');}
+    async function invitarCiudadUsuario(){
+      if(!adminSelectedUserId)return;const email=$('adminCityInviteEmail')?.checked!==false;
+      const res=await api(`/api/admin/users/${encodeURIComponent(adminSelectedUserId)}/invite-city`,{method:'POST',body:{email}});
+      if(!res.ok)return mostrarToast(res.error||'No se pudo enviar la petición de ciudad.','warn');
+      mostrarToast(res.emailQueued?'Aviso enviado y email añadido a la cola.':'Aviso enviado dentro de VRMatch.','info');
+      const id=adminSelectedUserId;await cargarAdminCityInvites();await verAdminUsuario(id);
+    }
     async function accionAdminUsuario(action) {
       if(!adminSelectedUserId)return;
-      const destructive=['suspend','clear_photos','clear_bio','delete_profile','delete_account','revoke_plus'].includes(action);
+      const destructive=['suspend','suspend_24h','suspend_7d','suspend_30d','clear_photos','clear_bio','delete_profile','delete_account','revoke_plus'].includes(action);
       if(action==='delete_account'){const typed=prompt('Esta acción elimina definitivamente la cuenta y sus datos asociados. Escribe ELIMINAR para continuar.');if(String(typed||'').trim().toUpperCase()!=='ELIMINAR')return;}
       else if(action==='delete_profile'){if(!confirm('Se borrarán perfil, fotos, likes y matches de esta persona, pero conservará su cuenta y podrá crear un perfil nuevo. ¿Continuar?'))return;}
+      else if(action==='warning'){if(!confirm('¿Enviar un aviso de moderación a esta persona? El texto interno no se comparte.'))return;}
       else if(destructive&&!confirm('¿Aplicar esta acción de moderación? Quedará registrada en el historial.'))return;
       const note=String($('adminUserNote').value||'').trim();
       const res=await api(`/api/admin/users/${encodeURIComponent(adminSelectedUserId)}/action`,{method:'POST',body:{action,note}});
@@ -2889,6 +2925,20 @@
       if(res.deleted){cerrarAdminUsuario();await cargarAdminStats();await cargarAdminUsers();return;}
       const id=adminSelectedUserId; await cargarAdminStats(); await cargarAdminUsers(); await verAdminUsuario(id);
     }
+
+    async function cargarAdminCityInvites(){
+      if(!currentUserAdmin||!$('adminCityInviteStats'))return;
+      const res=await api('/api/admin/city-invites');if(!res.ok)return;
+      $('adminCityInviteStats').innerHTML=`<span><b>${Number(res.missing)||0}</b> sin ciudad</span><span><b>${Number(res.invited7d)||0}</b> invitados 7d</span><span><b>${Number(res.completed30d)||0}</b> completados 30d</span><span><b>${Number(res.pendingEmail)||0}</b> emails en cola</span>`;
+      const recent=res.recent||[];$('adminCityInviteRecent').innerHTML=recent.length?`<details><summary>Últimas peticiones de ciudad</summary><div>${recent.slice(0,8).map(i=>`<span><b>${escapeHtml(i.name||i.email||'Usuario')}</b><small>${i.completed_at?'✓ completada':i.email_status==='sent'?'email enviado':i.email_status==='pending'?'email pendiente':'aviso interno'} · ${escapeHtml(adminFecha(i.created_at))}</small></span>`).join('')}</div></details>`:'';
+      const emailToggle=$('adminCityInviteEmail');if(emailToggle&&!res.smtpConfigured){emailToggle.checked=false;emailToggle.disabled=true;emailToggle.closest('label')?.querySelector('small')?.replaceChildren(document.createTextNode('SMTP no está configurado; se enviará solo el aviso interno.'));}
+    }
+    async function invitarCiudadesMasivo(){
+      const typed=prompt('Se avisará a las cuentas activas que todavía no tienen ciudad. Escribe INVITAR para confirmar.');if(String(typed||'').trim().toUpperCase()!=='INVITAR')return;
+      const email=$('adminCityInviteEmail')?.checked===true;const res=await api('/api/admin/city-invites/bulk',{method:'POST',body:{confirm:'INVITAR',email}});if(!res.ok)return mostrarToast(res.error||'No se pudo iniciar.','error');
+      mostrarToast(`${Number(res.invited)||0} usuarios avisados · ${Number(res.emailQueued)||0} emails en cola · ${Number(res.skipped)||0} omitidos.`,'info');await cargarAdminCityInvites();await cargarAdminUsers();
+    }
+    async function procesarEmailsCiudad(){const res=await api('/api/admin/city-invites/process',{method:'POST',body:{}});if(!res.ok)return mostrarToast(res.error||'No se pudo procesar la cola.','error');mostrarToast(`Emails de ciudad: ${Number(res.sent)||0} enviados · ${Number(res.errors)||0} errores.`,'info');await cargarAdminCityInvites();}
 
     let newsletterAudienceTimer=null;
     function newsletterFormData(){return {subject:String($('newsletterSubject')?.value||'').trim(),preheader:String($('newsletterPreheader')?.value||'').trim(),eyebrow:String($('newsletterEyebrow')?.value||'NOVEDADES').trim(),title:String($('newsletterTitle')?.value||'').trim(),bodyText:String($('newsletterBody')?.value||'').trim(),ctaLabel:String($('newsletterCtaLabel')?.value||'').trim(),ctaUrl:String($('newsletterCtaUrl')?.value||'').trim(),audienceCity:String($('newsletterCity')?.value||'').trim()};}

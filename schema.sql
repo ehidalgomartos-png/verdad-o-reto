@@ -304,3 +304,22 @@ CREATE TABLE IF NOT EXISTS newsletter_queue (
   status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, sent_at INTEGER
 );
 CREATE TABLE IF NOT EXISTS newsletter_unsubscribe_tokens (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, token TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL);
+
+
+-- V18.22 · Moderación avanzada, perfil completo en Admin e invitaciones de ciudad.
+-- users.suspended_until INTEGER y users.suspension_reason TEXT se añaden por ensureColumn al arrancar.
+CREATE TABLE IF NOT EXISTS profile_city_invites (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  admin_user TEXT REFERENCES users(id) ON DELETE SET NULL,
+  source TEXT NOT NULL DEFAULT 'admin_single',
+  email_requested INTEGER NOT NULL DEFAULT 0,
+  email_status TEXT NOT NULL DEFAULT 'skipped',
+  email_attempts INTEGER NOT NULL DEFAULT 0,
+  email_error TEXT NOT NULL DEFAULT '',
+  email_sent_at INTEGER,
+  created_at INTEGER NOT NULL,
+  completed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_city_invites_user_created ON profile_city_invites(user_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_city_invites_email_queue ON profile_city_invites(email_status,created_at ASC);

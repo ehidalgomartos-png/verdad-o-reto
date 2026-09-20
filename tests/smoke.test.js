@@ -8,7 +8,7 @@ const path = require('node:path');
 const { once } = require('node:events');
 const { io: ioClient } = require('socket.io-client');
 
-const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(),'vrmatch-v1820-test-'));
+const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(),'vrmatch-v1822-test-'));
 process.env.NODE_ENV = 'test';
 process.env.VR_STORAGE_DIR = TEST_DIR;
 process.env.VR_DB_PATH = path.join(TEST_DIR,'data','vrmatch-test.db');
@@ -24,7 +24,7 @@ delete process.env.SMTP_PORT;
 delete process.env.SMTP_FROM;
 
 const appModule = require('../server.js');
-const { server, db, startServer, APP_VERSION, runBackupSelfTest, recordServerError, userInQuietHours } = appModule;
+const { server, db, startServer, APP_VERSION, runBackupSelfTest, recordServerError, userInQuietHours, reactivateExpiredSuspensions } = appModule;
 let baseUrl = '';
 
 async function api(route,{method='GET',token,body}={}){
@@ -99,7 +99,7 @@ test('healthz comprueba SQLite, almacenamiento y versión', async()=>{
   assert.equal(res.data.db,true);
   assert.equal(res.data.storage,true);
   assert.equal(res.data.version,APP_VERSION);
-  assert.equal(APP_VERSION,'18.21.2');
+  assert.equal(APP_VERSION,'18.22.0');
   assert.ok(res.headers.get('x-request-id'));
 });
 
@@ -253,6 +253,50 @@ test('viralidad 2.0: códigos de creador, ranking de ciudades y recompensa de Bo
   }
   const rewarded=await api('/api/referrals/me',{token:adminToken});assert.equal(rewarded.status,200);assert.ok(rewarded.data.referral.activeReferrals>=5);assert.ok(rewarded.data.referral.boostCredits>=1);
   const boost=await api('/api/referrals/boost',{method:'POST',token:adminToken,body:{}});assert.equal(boost.status,200,boost.data?.error);assert.ok(boost.data.activeUntil>Date.now());assert.equal(boost.data.referral.boostCredits,rewarded.data.referral.boostCredits-1);
+});
+
+
+test('V18.22: Admin ve perfil completo, pide ciudad y controla suspensiones temporales', async()=>{
+  const adminLogin=await api('/api/auth/login',{method:'POST',body:{email:'admin@test.local',password:'Clave-Segura-1816'}});
+  assert.equal(adminLogin.status,200);const adminToken=adminLogin.data.token;
+
+  const missing=await register('sin-ciudad-v1822@test.local');
+  await setProfile(missing.token,{name:'Sin Ciudad',age:28,city:''});
+  // Aseguramos que no queda membresía de ciudad en esta cuenta de prueba.
+  db.prepare('DELETE FROM community_city_memberships WHERE user_id=?').run(missing.user.id);
+  db.prepare("UPDATE profiles SET city='',bio='Bio completa para revisión administrativa',interests_json='[\"cine\",\"viajes\"]',photos_json='[\"/uploads/foto-a.jpg\",\"/uploads/foto-b.jpg\"]',age_min=24,age_max=38,looking_for='women',radius_km=35 WHERE user_id=?").run(missing.user.id);
+
+  const detail=await api(`/api/admin/users/${missing.user.id}`,{token:adminToken});
+  assert.equal(detail.status,200,detail.data?.error);
+  assert.equal(detail.data.user.name,'Sin Ciudad');
+  assert.equal(detail.data.user.bio,'Bio completa para revisión administrativa');
+  assert.equal(detail.data.user.looking_for,'women');
+  assert.equal(detail.data.user.radius_km,35);
+  assert.deepEqual(detail.data.user.interests,['cine','viajes']);
+  assert.equal(detail.data.user.photos.length,2);
+  assert.ok('uniqueReporters' in detail.data.summary);
+
+  const invite=await api(`/api/admin/users/${missing.user.id}/invite-city`,{method:'POST',token:adminToken,body:{email:false}});
+  assert.equal(invite.status,200,invite.data?.error);
+  assert.equal(invite.data.ok,true);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM profile_city_invites WHERE user_id=?').get(missing.user.id).n,1);
+  const notif=db.prepare("SELECT data_json FROM notifications WHERE user_id=? AND type='system' ORDER BY created_at DESC LIMIT 1").get(missing.user.id);
+  assert.ok(notif);assert.equal(JSON.parse(notif.data_json).open,'city_selector');
+  const duplicate=await api(`/api/admin/users/${missing.user.id}/invite-city`,{method:'POST',token:adminToken,body:{email:false}});
+  assert.equal(duplicate.status,409);
+
+  await setCity(missing.token,'Sagunto');
+  assert.ok(db.prepare('SELECT completed_at FROM profile_city_invites WHERE user_id=?').get(missing.user.id).completed_at);
+
+  const temp=await register('suspendido-v1822@test.local');
+  const suspension=await api(`/api/admin/users/${temp.user.id}/action`,{method:'POST',token:adminToken,body:{action:'suspend_24h',note:'Prueba automática'}});
+  assert.equal(suspension.status,200,suspension.data?.error);
+  let row=db.prepare('SELECT status,suspended_until,suspension_reason FROM users WHERE id=?').get(temp.user.id);
+  assert.equal(row.status,'suspended');assert.ok(row.suspended_until>Date.now());assert.equal(row.suspension_reason,'Prueba automática');
+  db.prepare('UPDATE users SET suspended_until=? WHERE id=?').run(Date.now()-1000,temp.user.id);
+  assert.ok(reactivateExpiredSuspensions()>=1);
+  row=db.prepare('SELECT status,suspended_until FROM users WHERE id=?').get(temp.user.id);
+  assert.equal(row.status,'active');assert.equal(row.suspended_until,null);
 });
 
 test('backup restaurable, errores de servidor y diagnóstico admin', async()=>{

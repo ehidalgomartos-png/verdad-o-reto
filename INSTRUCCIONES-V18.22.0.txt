@@ -1,0 +1,19 @@
+V/R MATCH V18.22.0 — DESPLIEGUE
+
+1. Haz copia de seguridad de SQLite y uploads/.
+2. Sustituye el código por esta versión.
+3. NO borres data/ ni uploads/.
+4. Reinicia Render.
+5. Abre https://vrmatch.es/healthz y comprueba version 18.22.0.
+6. En Administración > Usuarios prueba primero con una cuenta de prueba:
+   - Revisar perfil completo.
+   - Pedir ciudad.
+   - Enviar aviso.
+   - Suspensión temporal y reactivación.
+
+No hay nuevas variables obligatorias.
+Opcionales:
+VR_CITY_INVITE_BATCH_SIZE=15
+VR_CITY_INVITE_COOLDOWN_DAYS=7
+
+Los emails para completar ciudad reutilizan el SMTP existente y solo se intentan cuando el correo está verificado y los recordatorios por email están activados.
