@@ -1,8 +1,8 @@
 {
   "name": "vr-match",
-  "version": "18.23.0",
+  "version": "18.24.0",
   "private": true,
-  "description": "V/R Match - Pulido móvil, PWA y experiencia de app",
+  "description": "V/R Match - Beta Valencia, cohortes y feedback de primeros usuarios",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

@@ -30,8 +30,8 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.23.0';
-const LEGAL_VERSION = '2026-09-19';
+const APP_VERSION = '18.24.0';
+const LEGAL_VERSION = '2026-09-20';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -77,6 +77,8 @@ const NEWSLETTER_BATCH_SIZE = Math.max(5, Math.min(100, Number(process.env.VR_NE
 const NEWSLETTER_INTERVAL_SECONDS = Math.max(20, Math.min(600, Number(process.env.VR_NEWSLETTER_INTERVAL_SECONDS) || 60));
 const CITY_INVITE_BATCH_SIZE = Math.max(5, Math.min(50, Number(process.env.VR_CITY_INVITE_BATCH_SIZE) || 15));
 const CITY_INVITE_COOLDOWN_DAYS = Math.max(1, Math.min(60, Number(process.env.VR_CITY_INVITE_COOLDOWN_DAYS) || 7));
+const BETA_DEFAULT_CITY = String(process.env.VR_BETA_CITY || 'Valencia').trim().slice(0,80) || 'Valencia';
+const BETA_BULK_LIMIT = Math.max(10, Math.min(250, Number(process.env.VR_BETA_BULK_LIMIT) || 100));
 const SMART_PUSH_ENABLED = String(process.env.VR_SMART_PUSH_ENABLED || 'true').toLowerCase() !== 'false';
 const SMART_PUSH_SWEEP_MINUTES = Math.max(10, Math.min(360, Number(process.env.VR_SMART_PUSH_SWEEP_MINUTES) || 30));
 const PUSH_DAILY_CAP = Math.max(2, Math.min(30, Number(process.env.VR_PUSH_DAILY_CAP) || 8));
@@ -398,6 +400,41 @@ CREATE TABLE IF NOT EXISTS legal_acceptances (
   accepted_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_legal_acceptances_user ON legal_acceptances(user_id, accepted_at DESC);
+CREATE TABLE IF NOT EXISTS beta_memberships (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  city TEXT NOT NULL DEFAULT 'Valencia',
+  wave INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'active',
+  source TEXT NOT NULL DEFAULT 'admin',
+  joined_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  ended_at INTEGER,
+  admin_note TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_beta_memberships_status_city ON beta_memberships(status,city,joined_at DESC);
+CREATE TABLE IF NOT EXISTS beta_activity_days (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  day TEXT NOT NULL,
+  first_seen_at INTEGER NOT NULL,
+  last_seen_at INTEGER NOT NULL,
+  opens INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY(user_id,day)
+);
+CREATE INDEX IF NOT EXISTS idx_beta_activity_last_seen ON beta_activity_days(last_seen_at DESC);
+CREATE TABLE IF NOT EXISTS beta_feedback (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  rating INTEGER NOT NULL DEFAULT 0,
+  category TEXT NOT NULL DEFAULT 'general',
+  message TEXT NOT NULL,
+  page TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'open',
+  admin_note TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_beta_feedback_status_created ON beta_feedback(status,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_beta_feedback_user_created ON beta_feedback(user_id,created_at DESC);
 CREATE TABLE IF NOT EXISTS feedback (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -2892,6 +2929,83 @@ function activationState(userId) {
     city:city?{name:city.name,current:Number(city.current)||0,goal:Number(city.goal)||500,percent:Number(city.percent)||0}:null
   };
 }
+
+// V18.24 · Beta controlada. La beta no bloquea el registro general: solo etiqueta
+// una cohorte para medir activación, retorno y feedback con consentimiento de uso normal.
+function betaMembership(userId) {
+  if(!userId)return null;
+  const row=db.prepare('SELECT user_id,city,wave,status,source,joined_at,updated_at,ended_at,admin_note FROM beta_memberships WHERE user_id=?').get(userId);
+  if(!row)return null;
+  return {userId:row.user_id,city:row.city,wave:Number(row.wave)||1,status:row.status,source:row.source,joinedAt:row.joined_at,updatedAt:row.updated_at,endedAt:row.ended_at||null,adminNote:row.admin_note||'',active:row.status==='active'};
+}
+function betaState(userId) {
+  const membership=betaMembership(userId);
+  if(!membership)return {member:false,active:false};
+  const fb=db.prepare('SELECT COUNT(*) n,MAX(created_at) last_at FROM beta_feedback WHERE user_id=?').get(userId)||{};
+  const {adminNote,...publicMembership}=membership;
+  return {...publicMembership,member:true,feedbackCount:Number(fb.n)||0,lastFeedbackAt:fb.last_at||null};
+}
+function touchBetaActivity(userId) {
+  const membership=betaMembership(userId);
+  if(!membership?.active)return null;
+  const ts=now(),day=new Date(ts).toISOString().slice(0,10);
+  db.prepare(`INSERT INTO beta_activity_days(user_id,day,first_seen_at,last_seen_at,opens) VALUES(?,?,?,?,1)
+    ON CONFLICT(user_id,day) DO UPDATE SET last_seen_at=excluded.last_seen_at,opens=beta_activity_days.opens+1`).run(userId,day,ts,ts);
+  return {day,at:ts};
+}
+function betaMilestones(userId,joinedAt=0) {
+  const since=Number(joinedAt)||0,activation=activationState(userId);
+  const firstLike=Boolean(db.prepare('SELECT 1 FROM likes WHERE from_user=? AND created_at>=? LIMIT 1').get(userId,since));
+  const firstMatch=Boolean(db.prepare('SELECT 1 FROM matches WHERE (user1=? OR user2=?) AND created_at>=? LIMIT 1').get(userId,userId,since));
+  const firstMessage=Boolean(db.prepare('SELECT 1 FROM messages WHERE from_user=? AND created_at>=? LIMIT 1').get(userId,since)) || Boolean(db.prepare("SELECT 1 FROM chat_events WHERE actor_user=? AND created_at>=? AND type IN ('game_invite','quick_challenge') LIMIT 1").get(userId,since));
+  const firstGame=Boolean(db.prepare('SELECT 1 FROM game_sessions WHERE (user1=? OR user2=?) AND started_at>=? LIMIT 1').get(userId,userId,since));
+  const firstInvite=Boolean(db.prepare("SELECT 1 FROM user_referral_events WHERE user_id=? AND created_at>=? AND event_type LIKE 'SHARE_%' LIMIT 1").get(userId,since)) || Boolean(db.prepare("SELECT 1 FROM growth_events WHERE user_id=? AND created_at>=? AND event_name IN ('share_invite','share_game_result') LIMIT 1").get(userId,since));
+  const rows=db.prepare('SELECT first_seen_at,last_seen_at FROM beta_activity_days WHERE user_id=? ORDER BY first_seen_at ASC').all(userId);
+  const d1Start=since+20*3600000,d1End=since+48*3600000,d7Start=since+6*86400000,d7End=since+9*86400000;
+  const overlaps=(r,a,b)=>Number(r.last_seen_at)>=a && Number(r.first_seen_at)<b;
+  const d1=rows.some(r=>overlaps(r,d1Start,d1End)),d7=rows.some(r=>overlaps(r,d7Start,d7End));
+  return {activationPercent:Number(activation.percent)||0,profileReady:Boolean(activation.profileReady),firstLike,firstMatch,firstMessage,firstGame,firstInvite,d1,d7,d1Eligible:now()>=since+24*3600000,d7Eligible:now()>=since+7*86400000};
+}
+function betaAdminRows(city='',status='all') {
+  const params=[],where=[];
+  const cleanCity=cleanCommunityCityName(city||'');
+  if(cleanCity){where.push('LOWER(b.city)=LOWER(?)');params.push(cleanCity);}
+  if(['active','paused','completed','removed'].includes(status)){where.push('b.status=?');params.push(status);}
+  const rows=db.prepare(`SELECT b.user_id,b.city,b.wave,b.status,b.source,b.joined_at,b.updated_at,b.ended_at,b.admin_note,
+      u.email,u.last_seen_at,u.created_at,u.status account_status,p.name,p.age,p.profile_verified
+      FROM beta_memberships b JOIN users u ON u.id=b.user_id LEFT JOIN profiles p ON p.user_id=u.id
+      ${where.length?'WHERE '+where.join(' AND '):''} ORDER BY b.joined_at DESC LIMIT 300`).all(...params);
+  return rows.map(r=>({...r,milestones:betaMilestones(r.user_id,r.joined_at),feedbackCount:Number(db.prepare('SELECT COUNT(*) n FROM beta_feedback WHERE user_id=?').get(r.user_id)?.n||0)}));
+}
+function betaAdminSummary(city='') {
+  const rows=betaAdminRows(city,'all'),active=rows.filter(r=>r.status==='active');
+  const sumKey=k=>active.filter(r=>r.milestones?.[k]).length;
+  const d1Eligible=active.filter(r=>r.milestones?.d1Eligible),d7Eligible=active.filter(r=>r.milestones?.d7Eligible);
+  const sevenAgo=now()-7*86400000;
+  const feedbackWhere=city?` AND EXISTS(SELECT 1 FROM beta_memberships b WHERE b.user_id=f.user_id AND LOWER(b.city)=LOWER(?))`:'';
+  const fbParams=city?[cleanCommunityCityName(city)]:[];
+  const fb=db.prepare(`SELECT COUNT(*) n,COALESCE(AVG(CASE WHEN rating BETWEEN 1 AND 5 THEN rating END),0) avg_rating,SUM(CASE WHEN status='open' THEN 1 ELSE 0 END) open_n FROM beta_feedback f WHERE 1=1${feedbackWhere}`).get(...fbParams)||{};
+  return {
+    city:cleanCommunityCityName(city)||BETA_DEFAULT_CITY,total:rows.length,active:active.length,paused:rows.filter(r=>r.status==='paused').length,completed:rows.filter(r=>r.status==='completed').length,
+    active7d:active.filter(r=>Number(r.last_seen_at)>=sevenAgo).length,profileReady:sumKey('profileReady'),firstLike:sumKey('firstLike'),firstMatch:sumKey('firstMatch'),firstMessage:sumKey('firstMessage'),firstGame:sumKey('firstGame'),firstInvite:sumKey('firstInvite'),
+    d1:{returned:d1Eligible.filter(r=>r.milestones.d1).length,eligible:d1Eligible.length},d7:{returned:d7Eligible.filter(r=>r.milestones.d7).length,eligible:d7Eligible.length},
+    feedback:{total:Number(fb.n)||0,open:Number(fb.open_n)||0,averageRating:Number(Number(fb.avg_rating||0).toFixed(1))}
+  };
+}
+function addBetaMember(userId,{city=BETA_DEFAULT_CITY,wave=1,source='admin',note=''}={}) {
+  const user=db.prepare("SELECT id,status FROM users WHERE id=?").get(userId);
+  if(!user)return {ok:false,reason:'missing_user'};
+  if(user.status!=='active')return {ok:false,reason:'inactive_user'};
+  const ts=now(),cleanCity=cleanCommunityCityName(city)||BETA_DEFAULT_CITY,cleanWave=clampInt(wave,1,999,1),cleanNote=cleanShortText(note,500);
+  const existing=db.prepare('SELECT status,joined_at FROM beta_memberships WHERE user_id=?').get(userId);
+  if(existing&&existing.status==='active')return {ok:false,reason:'already_active'};
+  db.prepare(`INSERT INTO beta_memberships(user_id,city,wave,status,source,joined_at,updated_at,ended_at,admin_note) VALUES(?,?,?,'active',?,?,?,NULL,?)
+    ON CONFLICT(user_id) DO UPDATE SET city=excluded.city,wave=excluded.wave,status='active',source=excluded.source,joined_at=CASE WHEN beta_memberships.status IN ('removed','completed') THEN excluded.joined_at ELSE beta_memberships.joined_at END,updated_at=excluded.updated_at,ended_at=NULL,admin_note=excluded.admin_note`)
+    .run(userId,cleanCity,cleanWave,cleanShortText(source,40)||'admin',existing?.joined_at||ts,ts,cleanNote);
+  createNotification(userId,'system','🧪 Beta VRMatch',`Formas parte de la beta de VRMatch en ${cleanCity}. Tu uso nos ayuda a detectar qué mejorar antes de crecer más.`,{reason:'beta_program',open:'beta_feedback',city:cleanCity,wave:cleanWave});
+  return {ok:true,state:betaState(userId)};
+}
+
 function maybeRecordProfileReady(userId,profile=getProfile(userId)) {
   if(!profile)return false;
   const ready=Array.isArray(profile.fotos)&&profile.fotos.length>0&&String(profile.bio||'').trim().length>=20&&Array.isArray(profile.intereses)&&profile.intereses.length>=2;
@@ -3162,7 +3276,7 @@ app.post('/api/auth/login', rateLimit({limit:25,windowMs:15*60*1000,key:req=>`${
     if (REQUIRE_EMAIL_VERIFICATION && !row.email_verified) return res.status(403).json({ok:false,error:'Primero verifica tu correo.',verificationRequired:true});
     db.prepare('UPDATE users SET last_seen_at=? WHERE id=?').run(now(),row.id);
     const token = createSession(row.id);
-    res.json({ ok:true, token, user:{id:row.id,email:row.email,emailVerified:Boolean(row.email_verified),admin:isAdmin(row)}, profile:getProfile(row.id), plus:getPlusState(row.id), onboardingCompleted:Boolean(row.onboarding_completed) });
+    res.json({ ok:true, token, user:{id:row.id,email:row.email,emailVerified:Boolean(row.email_verified),admin:isAdmin(row)}, profile:getProfile(row.id), plus:getPlusState(row.id), onboardingCompleted:Boolean(row.onboarding_completed), beta:betaState(row.id) });
   } catch (e) {
     console.error(e); res.status(500).json({ ok:false, error:'No se pudo iniciar sesión.' });
   }
@@ -3185,7 +3299,7 @@ app.post('/api/auth/reset', rateLimit({limit:10,windowMs:60*60*1000,key:req=>req
     const user=db.prepare('SELECT id,email,email_verified FROM users WHERE id=?').get(row.user_id);
     const session=createSession(row.user_id);
     const onboarding=db.prepare('SELECT onboarding_completed FROM users WHERE id=?').get(user.id);
-    res.json({ok:true,token:session,user:{id:user.id,email:user.email,emailVerified:Boolean(user.email_verified),admin:isAdmin(user)},profile:getProfile(user.id),plus:getPlusState(user.id),onboardingCompleted:Boolean(onboarding?.onboarding_completed)});
+    res.json({ok:true,token:session,user:{id:user.id,email:user.email,emailVerified:Boolean(user.email_verified),admin:isAdmin(user)},profile:getProfile(user.id),plus:getPlusState(user.id),onboardingCompleted:Boolean(onboarding?.onboarding_completed),beta:betaState(user.id)});
   } catch(e){console.error(e);res.status(500).json({ok:false,error:'No se pudo restablecer la contraseña.'});}
 });
 
@@ -3210,7 +3324,7 @@ app.post('/api/auth/logout', requireAuth, (req,res) => {
 
 app.get('/api/me', requireAuth, (req,res) => {
   const full=db.prepare('SELECT email_verified,onboarding_completed FROM users WHERE id=?').get(req.user.id);
-  res.json({ ok:true, user:{id:req.user.id,email:req.user.email,emailVerified:Boolean(full?.email_verified),admin:isAdmin(req.user)}, profile:getProfile(req.user.id), communityCity:communityCityForUser(req.user.id), matches:matchesFor(req.user.id), plus:getPlusState(req.user.id), notificationState:notificationState(req.user.id), onboardingCompleted:Boolean(full?.onboarding_completed), activation:activationState(req.user.id) });
+  res.json({ ok:true, user:{id:req.user.id,email:req.user.email,emailVerified:Boolean(full?.email_verified),admin:isAdmin(req.user)}, profile:getProfile(req.user.id), communityCity:communityCityForUser(req.user.id), matches:matchesFor(req.user.id), plus:getPlusState(req.user.id), notificationState:notificationState(req.user.id), onboardingCompleted:Boolean(full?.onboarding_completed), activation:activationState(req.user.id), beta:betaState(req.user.id) });
 });
 
 app.get('/api/activation/me', requireAuth, rateLimit({limit:180,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
@@ -3220,6 +3334,33 @@ app.get('/api/activation/me', requireAuth, rateLimit({limit:180,windowMs:60*60*1
 app.post('/api/account/onboarding-complete', requireAuth, (req,res) => {
   db.prepare('UPDATE users SET onboarding_completed=1 WHERE id=?').run(req.user.id);
   res.json({ok:true,onboardingCompleted:true});
+});
+
+
+app.get('/api/beta/status', requireAuth, (req,res) => {
+  res.json({ok:true,beta:betaState(req.user.id)});
+});
+
+app.post('/api/beta/activity', requireAuth, rateLimit({limit:30,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  const state=betaState(req.user.id);
+  if(!state.active)return res.json({ok:true,beta:state,tracked:false});
+  const activity=touchBetaActivity(req.user.id);
+  res.json({ok:true,beta:betaState(req.user.id),tracked:Boolean(activity)});
+});
+
+app.post('/api/beta/feedback', requireAuth, rateLimit({limit:6,windowMs:24*60*60*1000,key:req=>req.user.id}), (req,res) => {
+  const state=betaState(req.user.id);
+  if(!state.active)return res.status(403).json({ok:false,error:'Este formulario está disponible para participantes activos de la beta.'});
+  const rating=clampInt(req.body?.rating,1,5,0);
+  const category=['general','onboarding','discover','matches','chat','games','mobile','bug','idea'].includes(String(req.body?.category||''))?String(req.body.category):'general';
+  const message=cleanShortText(req.body?.message,1600),page=cleanShortText(req.body?.page,120).split('?')[0];
+  if(!rating)return res.status(400).json({ok:false,error:'Elige una valoración del 1 al 5.'});
+  if(message.length<8)return res.status(400).json({ok:false,error:'Cuéntanos brevemente qué mejorarías o qué te ha gustado.'});
+  const id=safeId('beta_fb'),ts=now();
+  db.prepare("INSERT INTO beta_feedback(id,user_id,rating,category,message,page,status,admin_note,created_at,updated_at) VALUES(?,?,?,?,?,?,'open','',?,NULL)")
+    .run(id,req.user.id,rating,category,message,page,ts);
+  recordGrowthEvent('beta_feedback',{userId:req.user.id,page,metadata:{rating,category}});
+  res.json({ok:true,id,beta:betaState(req.user.id),message:'Gracias. Tu opinión ha quedado guardada para revisar la beta.'});
 });
 
 app.get('/api/notifications', requireAuth, (req,res) => {
@@ -3452,6 +3593,9 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
     const blocks=db.prepare('SELECT blocked,created_at FROM blocks WHERE blocker=? ORDER BY created_at ASC').all(userId);
     const reports=db.prepare('SELECT id,reported,reason,details,created_at,status,updated_at,moderator_note FROM reports WHERE reporter=? ORDER BY created_at ASC').all(userId);
     const feedback=db.prepare('SELECT id,kind,message,page,created_at,status,admin_note,updated_at FROM feedback WHERE user_id=? ORDER BY created_at ASC').all(userId);
+    const beta=betaState(userId);
+    const betaActivity=db.prepare('SELECT day,first_seen_at,last_seen_at,opens FROM beta_activity_days WHERE user_id=? ORDER BY day ASC').all(userId);
+    const betaFeedback=db.prepare('SELECT id,rating,category,message,page,status,admin_note,created_at,updated_at FROM beta_feedback WHERE user_id=? ORDER BY created_at ASC').all(userId);
     const notifications=db.prepare('SELECT id,source_user,type,title,body,data_json,created_at,read_at FROM notifications WHERE user_id=? ORDER BY created_at ASC').all(userId).map(n=>({...n,data:safeJsonObject(n.data_json),data_json:undefined}));
     const retentionEmails=db.prepare('SELECT kind,context_key,sent_at,status FROM retention_email_log WHERE user_id=? ORDER BY sent_at ASC').all(userId);
     const newsletterEmails=db.prepare(`SELECT q.status,q.created_at,q.sent_at,c.subject,c.title,c.audience_city FROM newsletter_queue q JOIN newsletter_campaigns c ON c.id=q.campaign_id WHERE q.user_id=? ORDER BY q.created_at ASC`).all(userId);
@@ -3485,7 +3629,7 @@ app.get('/api/account/export', requireAuth, rateLimit({limit:3,windowMs:24*60*60
       creatorAttribution:creatorAttribution?{code:creatorAttribution.code,attributedAt:creatorAttribution.attributed_at}:null,
       acquisition:growthAcquisition,growthEvents,
       communityCity:communityCityForUser(userId),verification,securityEvents,
-      likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,notifications,retentionEmails,newsletterEmails,pushHistory,pushSubscriptions,gameSessions,gameInvitations,quickChallenges,quickAnswers,matches
+      likesSent:likes,passesSent:passes,blockedUsers:blocks,reportsMade:reports,feedback,beta,betaActivity,betaFeedback,notifications,retentionEmails,newsletterEmails,pushHistory,pushSubscriptions,gameSessions,gameInvitations,quickChallenges,quickAnswers,matches
     };
     res.setHeader('Content-Type','application/json; charset=utf-8');
     res.setHeader('Content-Disposition','attachment; filename="vr-match-mis-datos.json"');
@@ -3922,7 +4066,7 @@ app.post('/api/launch/activate', rateLimit({limit:12,windowMs:60*60*1000,key:req
     const fresh=db.prepare('SELECT id,email,email_verified,onboarding_completed FROM users WHERE id=?').get(user.id);
     const launchRecord=db.prepare('SELECT founder_qualified_at FROM launch_waitlist_users WHERE id=?').get(row.waitlistId);
     res.json({ok:true,token,created,user:{id:fresh.id,email:fresh.email,emailVerified:Boolean(fresh.email_verified),admin:isAdmin(fresh)},
-      profile:getProfile(fresh.id),plus:getPlusState(fresh.id),onboardingCompleted:Boolean(fresh.onboarding_completed),
+      profile:getProfile(fresh.id),plus:getPlusState(fresh.id),onboardingCompleted:Boolean(fresh.onboarding_completed),beta:betaState(fresh.id),
       founderQualified:Boolean(launchRecord?.founder_qualified_at),nextUrl:'/?launch=activated'});
   } catch(e) {
     console.error('Launch activation:',e);
@@ -4290,6 +4434,75 @@ app.post('/api/admin/creator-codes/:code/toggle', requireAuth, requireAdmin, (re
   if(!row)return res.status(404).json({ok:false,error:'Código no encontrado.'});
   const active=req.body?.active===true?1:0;db.prepare('UPDATE creator_codes SET active=?,updated_at=? WHERE code=?').run(active,now(),code);
   res.json({ok:true,creator:creatorCodeRow(code,false)});
+});
+
+
+app.get('/api/admin/beta', requireAuth, requireAdmin, (req,res) => {
+  const city=cleanCommunityCityName(req.query.city||BETA_DEFAULT_CITY)||BETA_DEFAULT_CITY;
+  const status=['all','active','paused','completed','removed'].includes(String(req.query.status||''))?String(req.query.status):'all';
+  const participants=betaAdminRows(city,status);
+  const feedback=db.prepare(`SELECT f.id,f.user_id,f.rating,f.category,f.message,f.page,f.status,f.admin_note,f.created_at,f.updated_at,
+      u.email,p.name,b.city,b.wave
+      FROM beta_feedback f JOIN users u ON u.id=f.user_id LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN beta_memberships b ON b.user_id=f.user_id
+      WHERE LOWER(COALESCE(b.city,''))=LOWER(?) ORDER BY f.created_at DESC LIMIT 80`).all(city);
+  res.json({ok:true,city,defaultCity:BETA_DEFAULT_CITY,bulkLimit:BETA_BULK_LIMIT,summary:betaAdminSummary(city),participants,feedback});
+});
+
+app.post('/api/admin/beta/bulk', requireAuth, requireAdmin, rateLimit({limit:8,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  if(String(req.body?.confirm||'').trim().toUpperCase()!=='BETA')return res.status(400).json({ok:false,error:'Escribe BETA para confirmar.'});
+  const city=cleanCommunityCityName(req.body?.city||BETA_DEFAULT_CITY)||BETA_DEFAULT_CITY;
+  const wave=clampInt(req.body?.wave,1,999,1),limit=clampInt(req.body?.limit,1,BETA_BULK_LIMIT,50),note=cleanShortText(req.body?.note,500);
+  const rows=db.prepare(`SELECT u.id FROM users u LEFT JOIN profiles p ON p.user_id=u.id
+      LEFT JOIN community_city_memberships cm ON cm.user_id=u.id LEFT JOIN community_cities c ON c.slug=cm.city_slug
+      LEFT JOIN beta_memberships b ON b.user_id=u.id
+      WHERE u.status='active' AND LOWER(COALESCE(c.name,p.city,''))=LOWER(?) AND b.user_id IS NULL
+      ORDER BY u.last_seen_at DESC LIMIT ?`).all(city,limit);
+  let added=0;
+  const tx=db.transaction(items=>{for(const row of items){const result=addBetaMember(row.id,{city,wave,source:'admin_bulk',note});if(result.ok)added++;}});
+  tx(rows);
+  logModerationAction(req.user.id,req.user.id,'beta_bulk',`Beta ${city} · ola ${wave} · ${added} usuarios añadidos`,null);
+  res.json({ok:true,added,candidates:rows.length,summary:betaAdminSummary(city)});
+});
+
+app.post('/api/admin/beta/users/:id/action', requireAuth, requireAdmin, rateLimit({limit:120,windowMs:60*60*1000,key:req=>req.user.id}), (req,res) => {
+  const target=String(req.params.id||''),action=String(req.body?.action||''),city=cleanCommunityCityName(req.body?.city||BETA_DEFAULT_CITY)||BETA_DEFAULT_CITY,wave=clampInt(req.body?.wave,1,999,1),note=cleanShortText(req.body?.note,500);
+  const user=db.prepare('SELECT id,status FROM users WHERE id=?').get(target);
+  if(!user)return res.status(404).json({ok:false,error:'Usuario no encontrado.'});
+  if(!['add','pause','resume','complete','remove'].includes(action))return res.status(400).json({ok:false,error:'Acción beta no válida.'});
+  if(action==='add' || action==='resume'){
+    const result=addBetaMember(target,{city,wave,source:action==='add'?'admin':'admin_resume',note});
+    if(!result.ok && result.reason==='inactive_user')return res.status(409).json({ok:false,error:'La cuenta no está activa.'});
+    if(!result.ok && result.reason==='already_active')return res.json({ok:true,beta:betaState(target),alreadyActive:true});
+  } else {
+    const membership=betaMembership(target);
+    if(!membership)return res.status(404).json({ok:false,error:'Ese usuario todavía no pertenece a la beta.'});
+    const nextStatus=action==='pause'?'paused':action==='complete'?'completed':'removed',ts=now();
+    db.prepare('UPDATE beta_memberships SET status=?,updated_at=?,ended_at=?,admin_note=? WHERE user_id=?').run(nextStatus,ts,nextStatus==='paused'?null:ts,note||membership.adminNote||'',target);
+    if(action==='complete')createNotification(target,'system','Gracias por participar en la beta','Tu participación en esta fase de prueba ha quedado completada. Gracias por ayudarnos a mejorar VRMatch.',{reason:'beta_completed'});
+  }
+  logModerationAction(req.user.id,target,`beta_${action}`,note||`Beta ${city} · ola ${wave}`,null);
+  res.json({ok:true,beta:betaState(target),summary:betaAdminSummary(city)});
+});
+
+app.post('/api/admin/beta/feedback/:id/action', requireAuth, requireAdmin, (req,res) => {
+  const id=String(req.params.id||''),action=String(req.body?.action||''),note=cleanShortText(req.body?.note,500);
+  const row=db.prepare('SELECT id,user_id,status FROM beta_feedback WHERE id=?').get(id);
+  if(!row)return res.status(404).json({ok:false,error:'Feedback no encontrado.'});
+  if(!['resolve','dismiss','reopen'].includes(action))return res.status(400).json({ok:false,error:'Acción no válida.'});
+  const status=action==='resolve'?'resolved':action==='dismiss'?'dismissed':'open';
+  db.prepare('UPDATE beta_feedback SET status=?,admin_note=?,updated_at=? WHERE id=?').run(status,note,now(),id);
+  logModerationAction(req.user.id,row.user_id,`beta_feedback_${action}`,note,null);
+  res.json({ok:true,status});
+});
+
+app.get('/api/admin/beta/export.csv', requireAuth, requireAdmin, (req,res) => {
+  const city=cleanCommunityCityName(req.query.city||BETA_DEFAULT_CITY)||BETA_DEFAULT_CITY;
+  const rows=betaAdminRows(city,'all');
+  const headers=['email','name','city','wave','status','joined_at','last_seen_at','activation_percent','profile_ready','first_like','first_match','first_message','first_game','first_invite','d1','d7','feedback_count'];
+  const esc=v=>`"${String(v??'').replaceAll('"','""')}"`;
+  const csvRows=rows.map(r=>({email:r.email,name:r.name||'',city:r.city,wave:r.wave,status:r.status,joined_at:new Date(Number(r.joined_at)).toISOString(),last_seen_at:r.last_seen_at?new Date(Number(r.last_seen_at)).toISOString():'',activation_percent:r.milestones.activationPercent,profile_ready:r.milestones.profileReady?1:0,first_like:r.milestones.firstLike?1:0,first_match:r.milestones.firstMatch?1:0,first_message:r.milestones.firstMessage?1:0,first_game:r.milestones.firstGame?1:0,first_invite:r.milestones.firstInvite?1:0,d1:r.milestones.d1?1:0,d7:r.milestones.d7?1:0,feedback_count:r.feedbackCount}));
+  const csv=[headers.join(','),...csvRows.map(r=>headers.map(h=>esc(r[h])).join(','))].join('\n');
+  res.type('text/csv; charset=utf-8');res.setHeader('Content-Disposition',`attachment; filename="vrmatch-beta-${city.toLowerCase().replace(/[^a-z0-9]+/g,'-')}.csv"`);res.send('\ufeff'+csv);
 });
 
 app.get('/api/admin/stats', requireAuth, requireAdmin, (req,res) => {
@@ -4718,7 +4931,7 @@ app.get('/api/admin/users/:id', requireAuth, requireAdmin, (req,res) => {
   delete resultUser.interests_json;
   delete resultUser.photos_json;
   delete resultUser.location_updated_at;
-  res.json({ok:true,user:resultUser,summary,reports,actions,cityInvites});
+  res.json({ok:true,user:resultUser,summary,reports,actions,cityInvites,beta:betaState(id)});
 });
 
 app.post('/api/admin/users/:id/action', requireAuth, requireAdmin, (req,res) => {

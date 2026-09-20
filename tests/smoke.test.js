@@ -8,7 +8,7 @@ const path = require('node:path');
 const { once } = require('node:events');
 const { io: ioClient } = require('socket.io-client');
 
-const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(),'vrmatch-v1823-test-'));
+const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(),'vrmatch-v1824-test-'));
 process.env.NODE_ENV = 'test';
 process.env.VR_STORAGE_DIR = TEST_DIR;
 process.env.VR_DB_PATH = path.join(TEST_DIR,'data','vrmatch-test.db');
@@ -99,7 +99,7 @@ test('healthz comprueba SQLite, almacenamiento y versión', async()=>{
   assert.equal(res.data.db,true);
   assert.equal(res.data.storage,true);
   assert.equal(res.data.version,APP_VERSION);
-  assert.equal(APP_VERSION,'18.23.0');
+  assert.equal(APP_VERSION,'18.24.0');
   assert.ok(res.headers.get('x-request-id'));
 });
 
@@ -363,5 +363,45 @@ test('V18.23: experiencia movil/PWA incluye dock, red, haptica y sugerencia de i
   assert.match(html,/function actualizarViewportMovil/);
   assert.match(css,/\.mobile-app-dock/);
   assert.match(css,/safe-area-inset-bottom/);
-  assert.match(sw,/vr-match-shell-v18-23-0/);
+  assert.match(sw,/vr-match-shell-v18-24-0/);
+});
+
+test('V18.24: cohorte beta, actividad, feedback y panel admin', async()=>{
+  const adminLogin=await api('/api/auth/login',{method:'POST',body:{email:'admin@test.local',password:'Clave-Segura-1816'}});
+  assert.equal(adminLogin.status,200,adminLogin.data?.error);
+  const beta=await register('beta-valencia@test.local');
+  await setCity(beta.token,'Valencia');
+  await setProfile(beta.token,{name:'Beta Valencia',age:28});
+
+  const add=await api(`/api/admin/beta/users/${beta.user.id}/action`,{method:'POST',token:adminLogin.data.token,body:{action:'add',city:'Valencia',wave:1,note:'Smoke beta'}});
+  assert.equal(add.status,200,add.data?.error);
+  assert.equal(add.data.beta.active,true);
+  assert.equal(add.data.beta.city,'Valencia');
+
+  const status=await api('/api/beta/status',{token:beta.token});
+  assert.equal(status.status,200);
+  assert.equal(status.data.beta.active,true);
+
+  const activity=await api('/api/beta/activity',{method:'POST',token:beta.token,body:{}});
+  assert.equal(activity.status,200);
+  assert.equal(activity.data.tracked,true);
+
+  const feedback=await api('/api/beta/feedback',{method:'POST',token:beta.token,body:{rating:5,category:'mobile',message:'La experiencia móvil de la beta funciona bien.',page:'/'}});
+  assert.equal(feedback.status,200,feedback.data?.error);
+  assert.ok(feedback.data.id);
+
+  const dashboard=await api('/api/admin/beta?city=Valencia&status=active',{token:adminLogin.data.token});
+  assert.equal(dashboard.status,200,dashboard.data?.error);
+  assert.ok(dashboard.data.participants.some(x=>x.user_id===beta.user.id));
+  assert.ok(dashboard.data.feedback.some(x=>x.id===feedback.data.id));
+  assert.ok(Number(dashboard.data.summary.feedback.total)>=1);
+
+  const resolve=await api(`/api/admin/beta/feedback/${feedback.data.id}/action`,{method:'POST',token:adminLogin.data.token,body:{action:'resolve',note:'Revisado en smoke'}});
+  assert.equal(resolve.status,200);
+  assert.equal(resolve.data.status,'resolved');
+
+  const exportRes=await fetch(`${baseUrl}/api/admin/beta/export.csv?city=Valencia`,{headers:{Authorization:`Bearer ${adminLogin.data.token}`}});
+  assert.equal(exportRes.status,200);
+  const csv=await exportRes.text();
+  assert.match(csv,/beta-valencia@test\.local/);
 });

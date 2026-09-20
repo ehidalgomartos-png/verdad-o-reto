@@ -406,6 +406,7 @@
         <button id="adminTabSecurity" type="button" onclick="cambiarAdminTab('security')">🛡 Seguridad</button>
         <button id="adminTabHistory" type="button" onclick="cambiarAdminTab('history')">🕘 Historial</button>
         <button id="adminTabMetrics" type="button" onclick="cambiarAdminTab('metrics')">📈 Métricas</button>
+        <button id="adminTabBeta" type="button" onclick="cambiarAdminTab('beta')">🧪 Beta</button>
         <button id="adminTabFeedback" type="button" onclick="cambiarAdminTab('feedback')">💬 Feedback</button>
         <button id="adminTabNewsletters" type="button" onclick="cambiarAdminTab('newsletters')">✉️ Novedades</button>
         <button id="adminTabMonetization" class="hidden" type="button" tabindex="-1" aria-hidden="true">Funciones internas</button>
@@ -450,6 +451,16 @@
       <div id="adminPaneMetrics" class="admin-pane hidden">
         <div class="admin-history-head"><div><strong>Métricas internas de producto</strong><small>Sin píxeles de terceros ni contenido privado de chats.</small></div><div class="metrics-toolbar"><select id="adminMetricsDays" class="profile-select" aria-label="Periodo de métricas" onchange="cargarAdminMetrics()"><option value="1">24 horas</option><option value="7" selected>7 días</option><option value="30">30 días</option><option value="90">90 días</option></select><button class="btn btn-secondary" type="button" onclick="cargarAdminMetrics()">↻ Actualizar</button><button class="btn btn-secondary" type="button" onclick="exportarGrowthCsv()">↓ CSV</button></div></div>
         <div id="adminMetrics" class="admin-metrics"><div class="empty-state"><span>📈</span><strong>Cargando métricas…</strong></div></div>
+      </div>
+
+      <div id="adminPaneBeta" class="admin-pane hidden">
+        <div class="admin-history-head beta-admin-head"><div><strong>Beta controlada</strong><small>Mide activación y retorno de una cohorte real sin cerrar el registro al resto de España.</small></div><div class="metrics-toolbar"><input id="adminBetaCity" class="profile-input" maxlength="80" value="Valencia" aria-label="Ciudad de la beta"><select id="adminBetaStatus" class="profile-select" onchange="cargarAdminBeta()"><option value="all">Todos</option><option value="active" selected>Activos</option><option value="paused">Pausados</option><option value="completed">Completados</option><option value="removed">Retirados</option></select><button class="btn btn-secondary" type="button" onclick="cargarAdminBeta()">↻ Actualizar</button><button class="btn btn-secondary" type="button" onclick="exportarBetaCsv()">↓ CSV</button></div></div>
+        <div id="adminBetaStats" class="beta-admin-stats"><div class="empty-state"><span>🧪</span><strong>Cargando beta…</strong></div></div>
+        <div class="beta-bulk-card">
+          <div><span>🚀</span><div><strong>Añadir una ola de usuarios</strong><small>Selecciona las cuentas activas más recientes de esa ciudad que todavía no estén en la beta. No limita ni bloquea a otros usuarios.</small></div></div>
+          <label>Ola<input id="adminBetaWave" class="profile-input" type="number" min="1" max="999" value="1"></label><label>Máximo<input id="adminBetaLimit" class="profile-input" type="number" min="1" max="100" value="50"></label><button class="btn btn-primary" type="button" onclick="anadirBetaMasivo()">Añadir a beta</button>
+        </div>
+        <div class="beta-admin-grid"><section><div class="admin-history-head"><div><strong>Participantes</strong><small>Progreso desde la entrada en la beta. D1 y D7 solo se calculan cuando ha pasado tiempo suficiente.</small></div></div><div id="adminBetaUsers" class="beta-user-list"><div class="empty-state"><span>👥</span><strong>Sin cargar</strong></div></div></section><section><div class="admin-history-head"><div><strong>Feedback de la beta</strong><small>Valoración y comentarios enviados voluntariamente por los participantes.</small></div></div><div id="adminBetaFeedback" class="beta-feedback-list"><div class="empty-state"><span>💬</span><strong>Sin cargar</strong></div></div></section></div>
       </div>
 
       <div id="adminPaneFeedback" class="admin-pane hidden">
@@ -817,6 +828,7 @@
       <div class="settings-section"><strong>Cambiar contraseña</strong><div class="field"><input id="currentPassword" type="password" aria-label="Contraseña actual" maxlength="72" autocomplete="current-password" placeholder="Contraseña actual"></div><div class="field"><input id="newPassword" type="password" aria-label="Nueva contraseña" maxlength="72" autocomplete="new-password" placeholder="Nueva contraseña · mínimo 8"></div><button class="btn btn-secondary" type="button" onclick="cambiarPasswordCuenta()">Actualizar contraseña</button></div>
       <div class="settings-section account-control-section"><strong>Control de cuenta y datos</strong><p class="account-legal-copy">Gestiona sesiones abiertas, personas bloqueadas y una copia de la información asociada a tu cuenta.</p><div class="account-control-grid"><button class="account-control-card" type="button" onclick="abrirCentroCuenta('sessions')"><span>🔐</span><b>Sesiones</b><small>Revisa y cierra accesos abiertos.</small></button><button class="account-control-card" type="button" onclick="abrirCentroCuenta('blocked')"><span>⊘</span><b>Bloqueados</b><small>Consulta o desbloquea perfiles.</small></button></div><button id="exportDataButton" class="btn btn-secondary" type="button" onclick="descargarMisDatos()">⇩ Descargar mis datos</button></div>
       <button id="accountPlusButton" class="btn btn-secondary" type="button" onclick="cerrarCuenta();abrirPlus()">✦ Ver V/R+</button>
+      <div id="betaParticipantSection" class="settings-section beta-participant-section hidden"><strong>🧪 Beta VRMatch <span id="betaParticipantCity">Valencia</span></strong><p class="account-legal-copy">Estás dentro de una fase controlada. Medimos pasos de uso y retorno de forma agregada para encontrar puntos de fricción; no usamos el contenido privado de tus chats para estas métricas.</p><div id="betaParticipantMeta" class="beta-participant-meta"></div><button class="btn btn-primary" type="button" onclick="abrirBetaFeedback()">Dar mi opinión sobre la beta</button></div>
       <div class="settings-section"><strong>Soporte</strong><p class="account-legal-copy">¿Encontraste un error o tienes una idea? Envíala desde aquí. No adjuntamos chats ni ubicación a tu comentario.</p><button class="btn btn-secondary" type="button" onclick="abrirFeedback()">💬 Enviar comentario</button></div>
       <div class="settings-section"><strong>Información, legal y seguridad</strong><p class="account-legal-copy">Consulta cómo funciona la plataforma, las funciones disponibles, las condiciones, la privacidad y las normas de comunidad.</p><div class="account-legal-links"><a href="/como-funciona.html" target="_blank" rel="noopener">Cómo funciona</a><a href="/funciones.html" target="_blank" rel="noopener">Funciones V/R+</a><a href="/terms.html" target="_blank" rel="noopener">Condiciones</a><a href="/privacy.html" target="_blank" rel="noopener">Privacidad</a><a href="/community.html" target="_blank" rel="noopener">Normas de comunidad</a></div></div>
       <button id="adminPanelButton" class="btn btn-secondary hidden" type="button" onclick="abrirAdmin()">⚑ Abrir panel de moderación</button>
@@ -856,6 +868,19 @@
       <div class="field"><label for="feedbackKind">Tipo</label><select id="feedbackKind" class="profile-select"><option value="bug">Encontré un error</option><option value="idea">Tengo una idea</option><option value="ux">Experiencia / diseño</option><option value="other">Otro</option></select></div>
       <div class="field"><label for="feedbackMessage">Comentario</label><textarea id="feedbackMessage" class="profile-textarea" maxlength="1200" placeholder="Cuéntanos qué ocurrió o qué mejorarías…"></textarea><small id="feedbackCounter">0 / 1200</small></div>
       <div class="modal-actions"><button class="btn btn-ghost" type="button" onclick="cerrarFeedback()">Cancelar</button><button class="btn btn-primary" type="button" onclick="enviarFeedback()">Enviar comentario</button></div>
+    </div>
+  </div>
+
+  <div id="betaFeedbackModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card account-modal-card beta-feedback-modal-card">
+      <button class="modal-close" type="button" aria-label="Cerrar feedback beta" onclick="cerrarBetaFeedback()">×</button>
+      <span class="eyebrow">🧪 BETA VRMATCH</span><h3>Cuéntanos cómo va</h3>
+      <p>Tu comentario se asocia a tu cuenta de beta para poder entender el contexto. No adjuntamos conversaciones privadas ni ubicación precisa.</p>
+      <div class="beta-rating" id="betaRatingButtons" aria-label="Valoración de la beta"><button type="button" data-rating="1" onclick="seleccionarBetaRating(1)">1</button><button type="button" data-rating="2" onclick="seleccionarBetaRating(2)">2</button><button type="button" data-rating="3" onclick="seleccionarBetaRating(3)">3</button><button type="button" data-rating="4" onclick="seleccionarBetaRating(4)">4</button><button type="button" data-rating="5" onclick="seleccionarBetaRating(5)">5</button></div>
+      <small class="beta-rating-hint">1 = hay mucho que mejorar · 5 = muy buena experiencia</small>
+      <div class="field"><label for="betaFeedbackCategory">Sobre qué</label><select id="betaFeedbackCategory" class="profile-select"><option value="general">Experiencia general</option><option value="onboarding">Registro / primeros pasos</option><option value="discover">Descubrir perfiles</option><option value="matches">Matches</option><option value="chat">Chat</option><option value="games">Juegos</option><option value="mobile">Experiencia móvil</option><option value="bug">He encontrado un error</option><option value="idea">Tengo una idea</option></select></div>
+      <div class="field"><label for="betaFeedbackMessage">Comentario</label><textarea id="betaFeedbackMessage" class="profile-textarea" maxlength="1600" placeholder="¿Qué te ha resultado fácil, confuso o mejorable?"></textarea><small id="betaFeedbackCounter">0 / 1600</small></div>
+      <div class="modal-actions"><button class="btn btn-ghost" type="button" onclick="cerrarBetaFeedback()">Ahora no</button><button class="btn btn-primary" type="button" onclick="enviarBetaFeedback()">Enviar opinión</button></div>
     </div>
   </div>
 
@@ -1038,6 +1063,7 @@
     let datingEmptyMode = 'empty';
     let adminCurrentTab = 'reports';
     let adminSelectedUserId = null;
+    let adminSelectedUserCity = '';
     let notificationItems = [];
     let notificationUnread = 0;
     let notificationPreferences = { newMatch:true, newMessage:true, gameInvite:true, gameTurn:true, retentionEmail:true, newsletterEmail:true, cityActivity:true, recommendations:true, reactivationPush:true, quietHoursEnabled:true, quietStart:'23:00', quietEnd:'08:00', timezone:'Europe/Madrid', pushEnabled:false };
@@ -1056,6 +1082,8 @@
     let communityCityState = null;
     let citySelectorReturn = 'profile';
     let currentActivation = null;
+    let currentBeta = {member:false,active:false};
+    let betaSelectedRating = 0;
     let activationRefreshTimer = null;
     let verificationSelfieData = '';
     let profileVerificationState = null;
@@ -2159,6 +2187,7 @@
         return;
       }
       if(n.data?.open==='city_selector'||n.data?.reason==='complete_city'){abrirSelectorCiudad(Boolean(nombreJugador));return;}
+      if(n.data?.open==='beta_feedback'||n.data?.reason==='beta_program'){abrirBetaFeedback();return;}
       if(['city_activity','recommendation','reactivation'].includes(n.type)) { irADescubrir(); return; }
     }
     async function guardarPreferenciasNotificaciones() {
@@ -2598,6 +2627,7 @@
       if (Array.isArray(result.matches)) datingMatches = result.matches;
       communityCityState=result.communityCity||communityCityState;
       if(result.activation){currentActivation=result.activation;renderActivation(currentActivation);}else cargarActivacion(true).catch(()=>{});
+      aplicarBetaEstado(result.beta||{member:false,active:false});
       conectarSocket();
       cargarNotificaciones().catch(()=>{});
       cargarReferralState(true).catch(()=>{});
@@ -2645,7 +2675,7 @@
       if (callApi && oldToken) await desvincularPushSesion();
       if (callApi && oldToken) await api('/api/auth/logout', { method:'POST', body:{} });
       if (socket.connected) socket.disconnect();
-      authToken=''; currentUserId=''; currentUserEmail=''; currentUserEmailVerified=false; currentUserAdmin=false; currentOnboardingCompleted=true; currentPlus=normalizarPlus({}); referralState=null; communityCityState=null; currentActivation=null; clearTimeout(activationRefreshTimer); citySelectorReturn='profile';
+      authToken=''; currentUserId=''; currentUserEmail=''; currentUserEmailVerified=false; currentUserAdmin=false; currentOnboardingCompleted=true; currentPlus=normalizarPlus({}); referralState=null; communityCityState=null; currentActivation=null; currentBeta={member:false,active:false}; betaSelectedRating=0; clearTimeout(activationRefreshTimer); citySelectorReturn='profile';
       notificationItems=[];notificationUnread=0;notificationPreferences=normalizarPreferenciasNotificacion({});pushSubscriptionActive=false;
       localStorage.removeItem('vr_auth_token'); localStorage.removeItem('vr_profile');
       datingProfiles=[]; datingMatches=[]; datingPassed=new Set(); datingChats.clear();
@@ -2659,13 +2689,26 @@
     function abrirResetPassword() { if(!resetToken)return; $('resetModal').classList.remove('hidden'); $('resetModal').setAttribute('aria-hidden','false'); }
     async function restablecerPassword() { const p1=$('resetPassword').value,p2=$('resetPassword2').value; if(p1.length<8)return mostrarToast('La contraseña debe tener al menos 8 caracteres.','warn'); if(p1!==p2)return mostrarToast('Las contraseñas no coinciden.','warn'); const res=await api('/api/auth/reset',{method:'POST',body:{token:resetToken,password:p1}}); if(!res.ok)return mostrarToast(res.error||'No se pudo restablecer.','error'); resetToken=''; history.replaceState({},document.title,location.pathname); $('resetModal').classList.add('hidden'); await completarAcceso(res); mostrarToast('Contraseña actualizada.','info'); }
 
+    function aplicarBetaEstado(state={}) {
+      currentBeta={member:Boolean(state?.member),active:Boolean(state?.active),city:String(state?.city||''),wave:Number(state?.wave)||1,status:String(state?.status||''),joinedAt:Number(state?.joinedAt)||0,feedbackCount:Number(state?.feedbackCount)||0,lastFeedbackAt:Number(state?.lastFeedbackAt)||0};
+      const box=$('betaParticipantSection');if(!box)return;
+      box.classList.toggle('hidden',!currentBeta.active);
+      if(currentBeta.active){$('betaParticipantCity').textContent=currentBeta.city||'Valencia';$('betaParticipantMeta').innerHTML=`<span>Ola <b>${currentBeta.wave}</b></span><span>Desde <b>${currentBeta.joinedAt?escapeHtml(fechaCuenta(currentBeta.joinedAt)):'—'}</b></span><span><b>${currentBeta.feedbackCount}</b> comentario${currentBeta.feedbackCount===1?'':'s'}</span>`;setTimeout(()=>registrarBetaActividad(),400);}
+    }
+    async function registrarBetaActividad(){if(!authToken||!currentBeta.active)return;const key=`vr_beta_ping_${currentUserId}_${new Date().toISOString().slice(0,10)}`;if(sessionStorage.getItem(key)==='1')return;const res=await api('/api/beta/activity',{method:'POST',body:{}});if(res.ok){sessionStorage.setItem(key,'1');if(res.beta)aplicarBetaEstado(res.beta);}}
+    async function cargarBetaEstado(){if(!authToken)return currentBeta;const res=await api('/api/beta/status');if(res.ok)aplicarBetaEstado(res.beta||{});return currentBeta;}
+    function seleccionarBetaRating(n){betaSelectedRating=Math.max(0,Math.min(5,Number(n)||0));$('betaRatingButtons')?.querySelectorAll('button').forEach(b=>b.classList.toggle('active',betaSelectedRating>0&&Number(b.dataset.rating)<=betaSelectedRating));}
+    function abrirBetaFeedback(){if(!currentBeta.active){mostrarToast('Este formulario está disponible para participantes activos de la beta.','info');return;}betaSelectedRating=0;seleccionarBetaRating(0);$('betaFeedbackCategory').value='general';$('betaFeedbackMessage').value='';$('betaFeedbackCounter').textContent='0 / 1600';$('betaFeedbackModal').classList.remove('hidden');$('betaFeedbackModal').setAttribute('aria-hidden','false');}
+    function cerrarBetaFeedback(){$('betaFeedbackModal').classList.add('hidden');$('betaFeedbackModal').setAttribute('aria-hidden','true');}
+    async function enviarBetaFeedback(){const message=String($('betaFeedbackMessage').value||'').trim();if(!betaSelectedRating)return mostrarToast('Elige una valoración del 1 al 5.','warn');if(message.length<8)return mostrarToast('Cuéntanos un poco más.','warn');const res=await api('/api/beta/feedback',{method:'POST',body:{rating:betaSelectedRating,category:$('betaFeedbackCategory').value,message,page:location.pathname}});if(!res.ok)return mostrarToast(res.error||'No se pudo enviar.','error');if(res.beta)aplicarBetaEstado(res.beta);cerrarBetaFeedback();mostrarToast(res.message||'Gracias por ayudarnos a mejorar la beta.','success');}
+
     function abrirCuenta() {
       actualizarEstadoPWA();
       $('settingsEmail').textContent=currentUserEmail||'—';
       $('emailVerifiedBadge').textContent=currentUserEmailVerified?'Verificado':'Pendiente'; $('emailVerifiedBadge').classList.toggle('verified',currentUserEmailVerified);
       $('resendVerificationButton').classList.toggle('hidden',currentUserEmailVerified);
       $('privacyDiscoverable').checked=currentPrivacy.discoverable!==false; $('privacyShowOnline').checked=currentPrivacy.showOnline!==false; $('privacyGameInvites').checked=currentPrivacy.allowGameInvites!==false; $('privacyCommunityPublic').checked=currentPrivacy.communityPublic===true;
-      $('adminPanelButton').classList.toggle('hidden',!currentUserAdmin); $('accountModal').classList.remove('hidden'); $('accountModal').setAttribute('aria-hidden','false');
+      $('adminPanelButton').classList.toggle('hidden',!currentUserAdmin); aplicarBetaEstado(currentBeta); $('accountModal').classList.remove('hidden'); $('accountModal').setAttribute('aria-hidden','false');
       cargarEstadoVerificacion().catch(()=>{});
     }
     function cerrarCuenta() { $('accountModal').classList.add('hidden'); $('accountModal').setAttribute('aria-hidden','true'); }
@@ -2869,12 +2912,13 @@
       [...$('adminStats').querySelectorAll('strong')].forEach((el,i)=>el.textContent=String(vals[i]??'—'));
     }
     async function cambiarAdminTab(tab='reports') {
-      adminCurrentTab=['reports','users','security','history','metrics','feedback','newsletters','monetization','production','system'].includes(tab)?tab:'reports';
+      adminCurrentTab=['reports','users','security','history','metrics','beta','feedback','newsletters','monetization','production','system'].includes(tab)?tab:'reports';
       $('adminPaneReports').classList.toggle('hidden',adminCurrentTab!=='reports');
       $('adminPaneUsers').classList.toggle('hidden',adminCurrentTab!=='users');
       $('adminPaneSecurity').classList.toggle('hidden',adminCurrentTab!=='security');
       $('adminPaneHistory').classList.toggle('hidden',adminCurrentTab!=='history');
       $('adminPaneMetrics').classList.toggle('hidden',adminCurrentTab!=='metrics');
+      $('adminPaneBeta').classList.toggle('hidden',adminCurrentTab!=='beta');
       $('adminPaneFeedback').classList.toggle('hidden',adminCurrentTab!=='feedback');
       $('adminPaneNewsletters').classList.toggle('hidden',adminCurrentTab!=='newsletters');
       $('adminPaneMonetization').classList.toggle('hidden',adminCurrentTab!=='monetization');
@@ -2885,6 +2929,7 @@
       $('adminTabSecurity').classList.toggle('active',adminCurrentTab==='security');
       $('adminTabHistory').classList.toggle('active',adminCurrentTab==='history');
       $('adminTabMetrics').classList.toggle('active',adminCurrentTab==='metrics');
+      $('adminTabBeta').classList.toggle('active',adminCurrentTab==='beta');
       $('adminTabFeedback').classList.toggle('active',adminCurrentTab==='feedback');
       $('adminTabNewsletters').classList.toggle('active',adminCurrentTab==='newsletters');
       $('adminTabMonetization').classList.toggle('active',adminCurrentTab==='monetization');
@@ -2895,6 +2940,7 @@
       if(adminCurrentTab==='security')await cargarAdminSecurity();
       if(adminCurrentTab==='history')await cargarAdminHistory();
       if(adminCurrentTab==='metrics')await cargarAdminMetrics();
+      if(adminCurrentTab==='beta')await cargarAdminBeta();
       if(adminCurrentTab==='feedback')await cargarAdminFeedback();
       if(adminCurrentTab==='newsletters')await cargarAdminNewsletters();
       if(adminCurrentTab==='monetization')await cargarAdminMonetization();
@@ -2902,7 +2948,7 @@
       if(adminCurrentTab==='system')await cargarAdminSystem();
     }
     const adminReasonLabels={harassment:'Acoso',fake:'Perfil falso',spam:'Spam / estafa',sexual:'Contenido sexual no consentido',underage:'Posible menor de edad',other:'Otro'};
-    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',warning:'Aviso de moderación',suspend:'Cuenta suspendida',suspend_24h:'Suspensión 24 h',suspend_7d:'Suspensión 7 días',suspend_30d:'Suspensión 30 días',auto_reactivate:'Suspensión temporal finalizada',reactivate:'Cuenta reactivada',city_invite:'Petición de ciudad',city_invite_bulk:'Campaña para completar ciudades',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_profile:'Perfil borrado',delete_account:'Cuenta eliminada',newsletter_test:'Prueba de novedad enviada',newsletter_queued:'Novedad encolada',newsletter_cancelled:'Novedad cancelada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado',feedback_resolve:'Feedback resuelto',feedback_dismiss:'Feedback descartado',feedback_reopen:'Feedback reabierto',verify_profile:'Perfil verificado',reject_verification:'Verificación rechazada',revoke_verification:'Verificación retirada',system_cleanup_expired:'Limpieza de sesiones/tokens',system_cleanup_telemetry:'Depuración de telemetría',system_cleanup_orphan_uploads:'Limpieza de fotos huérfanas',system_optimize:'Optimización SQLite',system_backup_download:'Backup manual descargado',system_backup_restore_test:'Prueba de restauración completada',system_smtp_test:'Prueba SMTP enviada',monetization_paid_enabled:'Premium de pago activado',monetization_launch_free_enabled:'Premium gratis activado',launch_city_unlocked:'Ciudad desbloqueada',launch_city_test_reset:'Ciudad de prueba reiniciada'};
+    const adminActionLabels={resolve:'Denuncia resuelta',dismiss:'Denuncia descartada',warning:'Aviso de moderación',suspend:'Cuenta suspendida',suspend_24h:'Suspensión 24 h',suspend_7d:'Suspensión 7 días',suspend_30d:'Suspensión 30 días',auto_reactivate:'Suspensión temporal finalizada',reactivate:'Cuenta reactivada',city_invite:'Petición de ciudad',city_invite_bulk:'Campaña para completar ciudades',hide_profile:'Perfil ocultado',show_profile:'Perfil visible',clear_photos:'Fotos eliminadas',clear_bio:'Biografía eliminada',delete_profile:'Perfil borrado',delete_account:'Cuenta eliminada',newsletter_test:'Prueba de novedad enviada',newsletter_queued:'Novedad encolada',newsletter_cancelled:'Novedad cancelada',delete_message:'Mensaje eliminado',grant_plus_30d:'V/R+ concedido 30 días',revoke_plus:'V/R+ revocado',feedback_resolve:'Feedback resuelto',feedback_dismiss:'Feedback descartado',feedback_reopen:'Feedback reabierto',verify_profile:'Perfil verificado',reject_verification:'Verificación rechazada',revoke_verification:'Verificación retirada',system_cleanup_expired:'Limpieza de sesiones/tokens',system_cleanup_telemetry:'Depuración de telemetría',system_cleanup_orphan_uploads:'Limpieza de fotos huérfanas',system_optimize:'Optimización SQLite',system_backup_download:'Backup manual descargado',system_backup_restore_test:'Prueba de restauración completada',system_smtp_test:'Prueba SMTP enviada',monetization_paid_enabled:'Premium de pago activado',monetization_launch_free_enabled:'Premium gratis activado',launch_city_unlocked:'Ciudad desbloqueada',launch_city_test_reset:'Ciudad de prueba reiniciada',beta_bulk:'Cohorte beta añadida',beta_add:'Añadido a beta',beta_pause:'Beta pausada',beta_resume:'Beta reanudada',beta_complete:'Beta completada',beta_remove:'Retirado de beta',beta_feedback_resolve:'Feedback beta resuelto',beta_feedback_dismiss:'Feedback beta descartado',beta_feedback_reopen:'Feedback beta reabierto'};
     function adminFecha(ts){return ts?new Date(Number(ts)).toLocaleString('es-ES'):'—';}
     function riesgoLabel(level){return level==='high'?'ALTO':level==='medium'?'MEDIO':level==='low'?'BAJO':'SIN SEÑALES';}
     async function cargarAdminSecurity(){if(!currentUserAdmin)return;const vbox=$('adminVerificationList'),rbox=$('adminRiskList');vbox.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Cargando verificaciones…</strong></div>';rbox.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Calculando señales…</strong></div>';const res=await api(`/api/admin/security?status=${encodeURIComponent($('adminVerificationStatus').value)}`);if(!res.ok){vbox.innerHTML=rbox.innerHTML=`<div class="empty-state"><span>⚠️</span><strong>${escapeHtml(res.error||'No se pudo cargar.')}</strong></div>`;return;}const rows=res.verifications||[],risk=res.risk||[];vbox.innerHTML=rows.length?rows.map(v=>`<article class="verification-admin-card"><div class="verification-admin-head"><div><strong>${escapeHtml(v.name||v.email||'Usuario')}</strong><small>${escapeHtml(v.email||'')} · ${escapeHtml(v.city||'Sin ciudad')}</small></div><span class="verification-status ${escapeHtml(v.status)}">${escapeHtml(v.status)}</span></div><div id="verificationProof_${escapeHtml(v.id)}" class="verification-proof-box hidden"></div><div class="verification-admin-actions">${v.status==='pending'?`<button class="btn btn-secondary" type="button" onclick="verPruebaVerificacion('${escapeHtml(v.id)}')">👁 Ver selfie</button><button class="btn btn-secondary" type="button" onclick="verAdminUsuario('${escapeHtml(v.user_id)}')">Ver fotos</button><button class="btn btn-primary" type="button" onclick="accionVerificacion('${escapeHtml(v.id)}','approve')">✓ Aprobar</button><button class="btn btn-secondary danger-soft" type="button" onclick="accionVerificacion('${escapeHtml(v.id)}','reject')">Rechazar</button>`:`<button class="btn btn-secondary" type="button" onclick="verAdminUsuario('${escapeHtml(v.user_id)}')">Ver cuenta</button>`}</div><small class="verification-date">Solicitud: ${escapeHtml(adminFecha(v.created_at))}${v.reviewed_at?` · Revisada: ${escapeHtml(adminFecha(v.reviewed_at))}`:''}</small></article>`).join(''):'<div class="empty-state"><span>✓</span><strong>No hay solicitudes con este estado</strong></div>';rbox.innerHTML=risk.length?risk.map(u=>`<button class="risk-admin-card ${escapeHtml(u.risk?.level||'none')}" type="button" onclick="verAdminUsuario('${escapeHtml(u.id)}')"><span class="risk-score">${Number(u.risk?.score)||0}</span><span><b>${escapeHtml(u.name||u.email||'Usuario')}</b><small>${escapeHtml(u.city||'Sin ciudad')} · ${u.profile_verified?'✓ perfil verificado':'sin verificación'}</small><small>${Number(u.risk?.openReports)||0} abiertas · ${Number(u.risk?.blocksReceived)||0} bloqueos recibidos · ${Number(u.risk?.signals)||0} señales</small></span><i>${escapeHtml(riesgoLabel(u.risk?.level))}</i></button>`).join(''):'<div class="empty-state"><span>✓</span><strong>No hay señales de riesgo registradas</strong><small>La ausencia de señales no equivale a una garantía de seguridad.</small></div>';}
@@ -2992,7 +3038,8 @@
     function adminGenderLabel(v){return ({man:'Hombre',woman:'Mujer',nonbinary:'No binario',other:'Otro'})[String(v||'')]||'No indicado';}
     function adminLookingLabel(v){return ({all:'Todos',men:'Hombres',women:'Mujeres',nonbinary:'No binario'})[String(v||'')]||'Todos';}
     function renderAdminUserDetail(data) {
-      const u=data.user||{},s=data.summary||{},reports=data.reports||[],actions=data.actions||[],cityInvites=data.cityInvites||[];
+      const u=data.user||{},s=data.summary||{},reports=data.reports||[],actions=data.actions||[],cityInvites=data.cityInvites||[],beta=data.beta||{member:false,active:false};
+      adminSelectedUserCity=String(u.city||'').trim();
       const photos=Array.isArray(u.photos)?u.photos.filter(Boolean):[];
       const allPhotos=[u.avatar,...photos].filter((x,i,a)=>x&&a.indexOf(x)===i);
       const plusActive=u.plus_status==='active' && (!u.plus_expires_at || Number(u.plus_expires_at)>Date.now());
@@ -3012,7 +3059,9 @@
         <div class="admin-user-mini-history"><strong>Últimas denuncias</strong>${reports.length?reports.slice(0,8).map(r=>`<div><span>${escapeHtml(adminReasonLabels[r.reason]||r.reason)} · ${escapeHtml(r.status)}</span><small>${escapeHtml(adminFecha(r.created_at))}</small></div>`).join(''):'<small>No tiene denuncias recibidas.</small>'}</div>
         <div class="admin-user-mini-history"><strong>Últimas acciones</strong>${actions.length?actions.slice(0,10).map(a=>`<div><span>${escapeHtml(adminActionLabels[a.action]||a.action)}</span><small>${escapeHtml(adminFecha(a.created_at))}</small></div>`).join(''):'<small>Sin acciones previas.</small>'}</div>`;
       const actionsBox=$('adminUserActions');actionsBox.innerHTML='';
+      if(beta.member){const chip=document.createElement('div');chip.className='admin-beta-user-chip';chip.innerHTML=`🧪 Beta ${escapeHtml(beta.city||'')} · ola ${Number(beta.wave)||1} · <b>${escapeHtml(beta.status||'')}</b>`;actionsBox.appendChild(chip);}
       const defs=[];
+      if(!beta.active)defs.push(['beta_add',beta.member?'🧪 Reactivar beta':'🧪 Añadir a beta','success']);
       if(!u.city)defs.push(['invite_city','📍 Pedir ciudad','success']);
       if(u.status==='suspended') defs.push(['reactivate','Reactivar cuenta','success']);
       else defs.push(['warning','Enviar aviso',''],['suspend_24h','Suspender 24 h','danger-soft'],['suspend_7d','Suspender 7 días','danger-soft'],['suspend_30d','Suspender 30 días','danger-soft'],['suspend','Suspender indefinidamente','danger']);
@@ -3021,9 +3070,9 @@
       defs.push(['clear_photos','Eliminar fotos','danger-soft'],['clear_bio','Limpiar biografía','danger-soft']);
       defs.push(['delete_profile','Borrar perfil completo','danger-soft'],['delete_account','Eliminar cuenta definitivamente','danger']);
       defs.push([plusActive?'revoke_plus':'grant_plus_30d',plusActive?'Revocar V/R+':'Conceder V/R+ 30 días',plusActive?'danger-soft':'success']);
-      defs.forEach(([action,label,cls])=>{const b=document.createElement('button');b.type='button';b.className=`btn btn-secondary ${cls||''}`;b.textContent=label;b.onclick=()=>action==='invite_city'?invitarCiudadUsuario():accionAdminUsuario(action);actionsBox.appendChild(b);});
+      defs.forEach(([action,label,cls])=>{const b=document.createElement('button');b.type='button';b.className=`btn btn-secondary ${cls||''}`;b.textContent=label;b.onclick=()=>action==='invite_city'?invitarCiudadUsuario():action==='beta_add'?anadirUsuarioActualBeta():accionAdminUsuario(action);actionsBox.appendChild(b);});
     }
-    function cerrarAdminUsuario(){adminSelectedUserId=null;$('adminUserModal')?.classList.add('hidden');$('adminUserModal')?.setAttribute('aria-hidden','true');}
+    function cerrarAdminUsuario(){adminSelectedUserId=null;adminSelectedUserCity='';$('adminUserModal')?.classList.add('hidden');$('adminUserModal')?.setAttribute('aria-hidden','true');}
     async function invitarCiudadUsuario(){
       if(!adminSelectedUserId)return;const email=$('adminCityInviteEmail')?.checked!==false;
       const res=await api(`/api/admin/users/${encodeURIComponent(adminSelectedUserId)}/invite-city`,{method:'POST',body:{email}});
@@ -3031,6 +3080,7 @@
       mostrarToast(res.emailQueued?'Aviso enviado y email añadido a la cola.':'Aviso enviado dentro de VRMatch.','info');
       const id=adminSelectedUserId;await cargarAdminCityInvites();await verAdminUsuario(id);
     }
+    async function anadirUsuarioActualBeta(){if(!adminSelectedUserId)return;const city=adminSelectedUserCity||String($('adminBetaCity')?.value||'Valencia').trim()||'Valencia',wave=Math.max(1,Number($('adminBetaWave')?.value)||1);const res=await api(`/api/admin/beta/users/${encodeURIComponent(adminSelectedUserId)}/action`,{method:'POST',body:{action:'add',city,wave,note:String($('adminUserNote')?.value||'').trim()}});if(!res.ok)return mostrarToast(res.error||'No se pudo añadir a la beta.','error');mostrarToast('Usuario añadido a la beta.','success');const id=adminSelectedUserId;await verAdminUsuario(id);}
     async function accionAdminUsuario(action) {
       if(!adminSelectedUserId)return;
       const destructive=['suspend','suspend_24h','suspend_7d','suspend_30d','clear_photos','clear_bio','delete_profile','delete_account','revoke_plus'].includes(action);
@@ -3134,6 +3184,20 @@
       fetch(`/api/admin/growth/export.csv?days=${encodeURIComponent(days)}`,{headers:{Authorization:`Bearer ${authToken}`}}).then(async r=>{if(!r.ok)throw new Error('No se pudo exportar.');const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`vrmatch-growth-${days}d.csv`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}).catch(e=>mostrarToast(e.message||'No se pudo exportar.','error'));
     }
     const feedbackKindLabels={bug:'Error',idea:'Idea',ux:'Experiencia',other:'Otro'};
+    function betaPct(n,d){return Number(d)>0?Math.round(Number(n||0)*100/Number(d)):0;}
+    async function cargarAdminBeta(){
+      if(!currentUserAdmin)return;const city=String($('adminBetaCity')?.value||'Valencia').trim()||'Valencia',status=$('adminBetaStatus')?.value||'active';
+      const res=await api(`/api/admin/beta?city=${encodeURIComponent(city)}&status=${encodeURIComponent(status)}`);if(!res.ok)return mostrarToast(res.error||'No se pudo cargar la beta.','error');
+      const s=res.summary||{},d1=s.d1||{},d7=s.d7||{},fb=s.feedback||{};
+      $('adminBetaStats').innerHTML=`<div><b>${Number(s.active)||0}</b><span>activos</span></div><div><b>${Number(s.active7d)||0}</b><span>activos 7d</span></div><div><b>${Number(s.profileReady)||0}</b><span>perfil listo</span></div><div><b>${Number(s.firstLike)||0}</b><span>primer like</span></div><div><b>${Number(s.firstMatch)||0}</b><span>match</span></div><div><b>${Number(s.firstMessage)||0}</b><span>conversación</span></div><div><b>${Number(s.firstGame)||0}</b><span>juego</span></div><div><b>${betaPct(d1.returned,d1.eligible)}%</b><span>D1 · ${Number(d1.returned)||0}/${Number(d1.eligible)||0}</span></div><div><b>${betaPct(d7.returned,d7.eligible)}%</b><span>D7 · ${Number(d7.returned)||0}/${Number(d7.eligible)||0}</span></div><div><b>${Number(fb.averageRating||0).toFixed(1)}</b><span>nota · ${Number(fb.total)||0} feedback</span></div>`;
+      const users=res.participants||[];$('adminBetaUsers').innerHTML=users.length?users.map(u=>{const m=u.milestones||{};return `<article class="beta-user-card"><div class="beta-user-head"><div><strong>${escapeHtml(u.name||u.email||'Usuario')}</strong><small>${escapeHtml(u.email||'')} · ${escapeHtml(u.city||'')} · ola ${Number(u.wave)||1}</small></div><span class="beta-status ${escapeHtml(u.status)}">${escapeHtml(u.status)}</span></div><div class="beta-progress-line"><i style="width:${Math.max(0,Math.min(100,Number(m.activationPercent)||0))}%"></i></div><div class="beta-milestones"><span class="${m.profileReady?'done':''}">Perfil</span><span class="${m.firstLike?'done':''}">Like</span><span class="${m.firstMatch?'done':''}">Match</span><span class="${m.firstMessage?'done':''}">Chat</span><span class="${m.firstGame?'done':''}">Juego</span><span class="${m.firstInvite?'done':''}">Invita</span><span class="${m.d1?'done':''}">D1</span><span class="${m.d7?'done':''}">D7</span></div><div class="beta-user-meta"><small>Entrada: ${escapeHtml(adminFecha(u.joined_at))} · última actividad: ${escapeHtml(adminFecha(u.last_seen_at))} · ${Number(u.feedbackCount)||0} feedback</small></div><div class="beta-user-actions"><button type="button" onclick="verAdminUsuario('${escapeHtml(u.user_id)}')">Ver perfil</button>${u.status==='active'?`<button type="button" onclick="accionBetaUsuario('${escapeHtml(u.user_id)}','pause')">Pausar</button><button type="button" onclick="accionBetaUsuario('${escapeHtml(u.user_id)}','complete')">Completar</button>`:u.status==='paused'?`<button type="button" onclick="accionBetaUsuario('${escapeHtml(u.user_id)}','resume')">Reanudar</button>`:`<button type="button" onclick="accionBetaUsuario('${escapeHtml(u.user_id)}','resume')">Reactivar</button>`}<button class="danger-soft" type="button" onclick="accionBetaUsuario('${escapeHtml(u.user_id)}','remove')">Retirar</button></div></article>`;}).join(''):'<div class="empty-state"><span>🧪</span><strong>No hay participantes con este filtro</strong></div>';
+      const feedback=res.feedback||[];$('adminBetaFeedback').innerHTML=feedback.length?feedback.map(f=>`<article class="beta-feedback-card"><div><span>${'★'.repeat(Math.max(1,Math.min(5,Number(f.rating)||1)))}</span><b>${escapeHtml(f.name||f.email||'Usuario')}</b><small>${escapeHtml(f.category||'general')} · ${escapeHtml(adminFecha(f.created_at))}</small></div><p>${escapeHtml(f.message||'')}</p>${f.admin_note?`<small>Nota: ${escapeHtml(f.admin_note)}</small>`:''}<div class="beta-feedback-actions"><button type="button" onclick="verAdminUsuario('${escapeHtml(f.user_id)}')">Ver usuario</button>${f.status==='open'?`<button type="button" onclick="accionBetaFeedback('${escapeHtml(f.id)}','dismiss')">Descartar</button><button class="success" type="button" onclick="accionBetaFeedback('${escapeHtml(f.id)}','resolve')">Resolver</button>`:`<button type="button" onclick="accionBetaFeedback('${escapeHtml(f.id)}','reopen')">Reabrir</button>`}</div></article>`).join(''):'<div class="empty-state"><span>💬</span><strong>Aún no hay feedback de esta beta</strong></div>';
+    }
+    async function anadirBetaMasivo(){const city=String($('adminBetaCity')?.value||'Valencia').trim()||'Valencia',wave=Math.max(1,Number($('adminBetaWave')?.value)||1),limit=Math.max(1,Math.min(100,Number($('adminBetaLimit')?.value)||50));const typed=prompt(`Se añadirán hasta ${limit} cuentas activas de ${city} que todavía no estén en la beta. Escribe BETA para confirmar.`);if(String(typed||'').trim().toUpperCase()!=='BETA')return;const res=await api('/api/admin/beta/bulk',{method:'POST',body:{confirm:'BETA',city,wave,limit}});if(!res.ok)return mostrarToast(res.error||'No se pudo crear la ola.','error');mostrarToast(`${Number(res.added)||0} usuarios añadidos a la beta.`,Number(res.added)?'success':'info');await cargarAdminBeta();await cargarAdminHistory();}
+    async function accionBetaUsuario(userId,action){const city=String($('adminBetaCity')?.value||'Valencia').trim()||'Valencia',wave=Math.max(1,Number($('adminBetaWave')?.value)||1);if(action==='remove'&&!confirm('¿Retirar a esta persona de la beta? Su cuenta seguirá funcionando normalmente.'))return;const note=String(prompt('Nota interna opcional:','')||'').slice(0,500);const res=await api(`/api/admin/beta/users/${encodeURIComponent(userId)}/action`,{method:'POST',body:{action,city,wave,note}});if(!res.ok)return mostrarToast(res.error||'No se pudo actualizar la beta.','error');mostrarToast('Estado de beta actualizado.','info');await cargarAdminBeta();}
+    async function accionBetaFeedback(id,action){const note=String(prompt('Nota interna opcional:','')||'').slice(0,500);const res=await api(`/api/admin/beta/feedback/${encodeURIComponent(id)}/action`,{method:'POST',body:{action,note}});if(!res.ok)return mostrarToast(res.error||'No se pudo actualizar el feedback.','error');await cargarAdminBeta();}
+    function exportarBetaCsv(){if(!currentUserAdmin||!authToken)return;const city=String($('adminBetaCity')?.value||'Valencia').trim()||'Valencia';fetch(`/api/admin/beta/export.csv?city=${encodeURIComponent(city)}`,{headers:{Authorization:`Bearer ${authToken}`}}).then(async r=>{if(!r.ok)throw new Error('No se pudo exportar la beta.');const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`vrmatch-beta-${city.toLowerCase().replace(/[^a-z0-9]+/g,'-')}.csv`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}).catch(e=>mostrarToast(e.message||'No se pudo exportar.','error'));}
+
     async function cargarAdminFeedback(){
       if(!currentUserAdmin)return;
       const list=$('adminFeedbackList');list.innerHTML='<div class="empty-state"><span class="spinner"></span><strong>Cargando feedback…</strong></div>';
@@ -5050,6 +5114,7 @@ Pulsa de nuevo para intentarlo.`, 'ERROR DE ENVÍO');
     $('bioUsuario').addEventListener('input', () => { $('bioCounter').textContent = String($('bioUsuario').value.length); actualizarActivacionLocal(); });
     $('interesesUsuario').addEventListener('input', actualizarActivacionLocal);
     $('feedbackMessage').addEventListener('input',()=>{$('feedbackCounter').textContent=`${$('feedbackMessage').value.length} / 1200`;});
+    $('betaFeedbackMessage')?.addEventListener('input',()=>{$('betaFeedbackCounter').textContent=`${$('betaFeedbackMessage').value.length} / 1600`;});
     $('inputAvatar').addEventListener('change', async (e) => { await procesarFotosPerfil(e.target.files); e.target.value = ''; });
     $('chatForm').addEventListener('submit', (e) => { e.preventDefault(); const input=$('chatInput'); enviarChat(input.value); input.value=''; });
     if('serviceWorker' in navigator) {

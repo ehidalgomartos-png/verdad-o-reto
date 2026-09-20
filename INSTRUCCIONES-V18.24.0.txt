@@ -1,0 +1,20 @@
+V/R MATCH V18.24.0 — BETA VALENCIA
+
+DESPLIEGUE
+1. Haz copia de seguridad de data/ y uploads/.
+2. Sustituye el código por esta versión.
+3. NO borres data/, uploads/ ni verification/.
+4. Reinicia el servicio en Render.
+5. Abre https://vrmatch.es/healthz y comprueba version 18.24.0.
+
+NO HAY VARIABLES NUEVAS OBLIGATORIAS.
+Opcionales:
+VR_BETA_CITY=Valencia
+VR_BETA_BULK_LIMIT=100
+
+PRIMER USO
+Administración > 🧪 Beta
+- Mantén Valencia como ciudad.
+- Usa una ola pequeña inicialmente (por ejemplo, 1).
+- Empieza con pocos usuarios reales y observa activación, D1/D7 y feedback.
+- La beta no bloquea el registro del resto de España.

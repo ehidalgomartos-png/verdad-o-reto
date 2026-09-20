@@ -323,3 +323,40 @@ CREATE TABLE IF NOT EXISTS profile_city_invites (
 );
 CREATE INDEX IF NOT EXISTS idx_city_invites_user_created ON profile_city_invites(user_id,created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_city_invites_email_queue ON profile_city_invites(email_status,created_at ASC);
+
+-- V18.24 · Beta controlada / primeros usuarios
+CREATE TABLE IF NOT EXISTS beta_memberships (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  city TEXT NOT NULL DEFAULT 'Valencia',
+  wave INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'active',
+  source TEXT NOT NULL DEFAULT 'admin',
+  joined_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  ended_at INTEGER,
+  admin_note TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_beta_memberships_status_city ON beta_memberships(status,city,joined_at DESC);
+CREATE TABLE IF NOT EXISTS beta_activity_days (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  day TEXT NOT NULL,
+  first_seen_at INTEGER NOT NULL,
+  last_seen_at INTEGER NOT NULL,
+  opens INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY(user_id,day)
+);
+CREATE INDEX IF NOT EXISTS idx_beta_activity_last_seen ON beta_activity_days(last_seen_at DESC);
+CREATE TABLE IF NOT EXISTS beta_feedback (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  rating INTEGER NOT NULL DEFAULT 0,
+  category TEXT NOT NULL DEFAULT 'general',
+  message TEXT NOT NULL,
+  page TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'open',
+  admin_note TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_beta_feedback_status_created ON beta_feedback(status,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_beta_feedback_user_created ON beta_feedback(user_id,created_at DESC);
