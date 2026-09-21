@@ -30,7 +30,7 @@ const io = new Server(server, {
   }
 });
 
-const APP_VERSION = '18.24.3';
+const APP_VERSION = '18.24.4';
 const LEGAL_VERSION = '2026-09-20';
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -5330,17 +5330,28 @@ app.get(['/como-funciona','/como-funciona.html'], (req,res) => res.sendFile(path
 app.get(['/funciones','/funciones.html'], (req,res) => res.sendFile(path.join(ROOT,'funciones.html')));
 app.get(['/descubrir','/descubrir.html'], (req,res) => res.sendFile(path.join(ROOT,'descubrir.html')));
 
-// SEO V/R Match: 30 landings + recursos compartidos. Se añaden sin tocar
+// SEO V/R Match: 50 landings + recursos compartidos. Se añaden sin tocar
 // /espera, /activar, /admin/launch ni las APIs del lanzamiento por ciudades.
+// Las URLs canónicas SEO terminan en .html. Si alguien entra sin extensión,
+// redirigimos a la URL canónica para evitar contenido duplicado.
+function redirectSeoCanonical(section) {
+  return (req,res,next) => {
+    const slug=String(req.params.slug||'').toLowerCase();
+    if (!/^[a-z0-9-]+$/.test(slug)) return next();
+    const file=path.join(ROOT,section,`${slug}.html`);
+    if (!fs.existsSync(file)) return next();
+    return res.redirect(301,`/${section}/${slug}.html`);
+  };
+}
+app.get('/ciudades/:slug', redirectSeoCanonical('ciudades'));
+app.get('/guias/:slug', redirectSeoCanonical('guias'));
 app.use('/ciudades', express.static(path.join(ROOT,'ciudades'), {
   dotfiles: 'deny',
-  extensions: ['html'],
   index: false,
   maxAge: '5m'
 }));
 app.use('/guias', express.static(path.join(ROOT,'guias'), {
   dotfiles: 'deny',
-  extensions: ['html'],
   index: false,
   maxAge: '5m'
 }));
@@ -5353,8 +5364,14 @@ app.get('/robots.txt', (req,res) => {
   res.type('text/plain');
   res.sendFile(path.join(ROOT,'robots.txt'));
 });
+app.get('/sitemap.xml', (req,res) => {
+  res.type('application/xml');
+  res.setHeader('Cache-Control','public, max-age=3600');
+  res.sendFile(path.join(ROOT,'sitemap.xml'));
+});
 app.get('/sitemap-landings.xml', (req,res) => {
   res.type('application/xml');
+  res.setHeader('Cache-Control','public, max-age=3600');
   res.sendFile(path.join(ROOT,'sitemap-landings.xml'));
 });
 app.get(['/premium','/premium.html'], (req,res) => res.redirect(302,'/funciones.html'));

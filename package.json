@@ -1,8 +1,8 @@
 {
   "name": "vr-match",
-  "version": "18.24.3",
+  "version": "18.24.4",
   "private": true,
-  "description": "V/R Match - Hotfix panel Beta Valencia y compatibilidad de base persistente",
+  "description": "V/R Match - SEO: 50 landings, sitemap principal, robots y rutas canónicas",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

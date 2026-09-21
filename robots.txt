@@ -1,5 +1,8 @@
 User-agent: *
 Allow: /
 Disallow: /api/
+Disallow: /admin/
+Disallow: /activar
+Disallow: /uploads/
 
-Sitemap: https://vrmatch.es/sitemap-landings.xml
+Sitemap: https://vrmatch.es/sitemap.xml
